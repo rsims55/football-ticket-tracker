@@ -1,0 +1,33 @@
+# TODO Steps
+
+## Use API to track current ticket prices
+1. Pull match-ups, match home and away teams - DONE!
+2. Pull rankings - Done!
+3. Pull venue information (region, size) - Done!
+4. Pull match-up times - Done!
+5. 
+
+## Input Data
+1. Home team - Done!
+2. Away team - Done!
+3. Home team rank - Done!
+4. Away team rank - Done!
+5. Rivalry game (yes/no) - Done!
+6. Game week - Done!
+7. Season type (regular/postseason) - Done!
+8. Stadium capacity - Done!
+9. Day of week - Done!
+10. Kickoff time - Done!
+11. Home team conference - Done!
+12. Away team conference - Done!
+13. Top-10 match-up (yes/no) - Done!
+14. Location region - Done!
+15. Ticket resale platform fees - WILL DO
+
+## Pull into one script
+1. Pull all commands into one script  - Done!
+2. Use Classes and OOP for this - Done!
+3. Only use JSON data (no CSV)
+
+## Create a model to predict ticket prices
+1. Set up data collection structure
