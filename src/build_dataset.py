@@ -1,9 +1,9 @@
 import pandas as pd
-from schedule_fetcher import ScheduleFetcher
-from rankings_fetcher import RankingsFetcher
-from stadium_scraper import StadiumScraper
-from rivalry_scraper import RivalryScraper
-from ticket_pricer import TicketPricer
+from fetchers.schedule_fetcher import ScheduleFetcher
+from fetchers.rankings_fetcher import RankingsFetcher
+from scrapers.stadium_scraper import StadiumScraper
+from scrapers.rivalry_scraper import RivalryScraper
+from fetchers.ticket_pricer import TicketPricer
 from datetime import datetime
 
 class DatasetBuilder:
