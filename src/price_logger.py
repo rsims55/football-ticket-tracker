@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime
-from src.build_dataset import DatasetBuilder
+from build_dataset import DatasetBuilder
 import os
 
 # Set up logging details
