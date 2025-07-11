@@ -35,13 +35,17 @@
 3. Test the model - Done!
 
 ## Automate the data collection in GitHub 
-1. Twice a week for rankings (Monday and Wednesday), four times a day for prices
-2. Continuously build this structure
-3. STOP collecting prices once the game starts
+1. Twice a week for rankings (Monday and Wednesday), four times a day for prices - Done!
+2. Continuously build this structure - Done!
+3. STOP collecting prices once the game starts - Done!
 
 ## Refine the model 
-1. Use the actual minimum ticket price to help refine the model
+1. Use the actual minimum ticket price to help refine the model - Done!
 
 ## Extract most important data
-1. Use model.feature_importances to determine how important each factor is
-2. 
+1. Use model.feature_importances to determine how important each factor is - Done!
+
+## Send report
+1. Build a weekly report
+2. Create an action to send emails to me automatically
+3. Save the report in the reports folder

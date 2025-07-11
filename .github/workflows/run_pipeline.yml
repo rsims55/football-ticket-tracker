@@ -46,3 +46,22 @@ jobs:
         github.event.schedule == '0 6 * * 1' ||
         github.event.schedule == '0 6 * * 3'
       run: python src/fetchers/rankings_fetcher.py
+
+    - name: Retrain Model Daily
+      if: github.event.schedule == '0 0 * * *'
+      run: python src/train_price_model.py
+
+    - name: Evaluate Weekly Predictions and Refine
+      if: github.event.schedule == '0 6 * * 1'
+      run: python src/evaluate_predictions.py
+
+    - name: Generate Weekly Report
+      if: github.event.schedule == '0 6 * * 1'
+      run: python src/reports/generate_weekly_report.py
+
+    - name: Send Weekly Report Email
+      if: github.event.schedule == '0 6 * * 1'
+      env:
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      run: python src/reports/send_email.py
+

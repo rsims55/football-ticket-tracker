@@ -32,8 +32,9 @@ def simulate_predictions(df, model):
             sim_date = game_date - timedelta(days=delta)
             days_until_game = delta
 
-            for time in COLLECTION_TIMES:
-                # Prevent accidental infinite structure or recursion by only copying feature-relevant data
+            for time_str in COLLECTION_TIMES:
+                sim_time = datetime.strptime(time_str, "%H:%M").time()
+
                 input_row = pd.DataFrame([{f: row.get(f, -1) for f in FEATURES}])
                 input_row["days_until_game"] = days_until_game
                 input_row = input_row.fillna(-1)
@@ -43,15 +44,16 @@ def simulate_predictions(df, model):
                 if price_pred < best_price:
                     best_price = price_pred
                     best_date = sim_date
-                    best_time = time
+                    best_time = sim_time
 
         results.append({
             "homeTeam": row.get("homeTeam"),
             "awayTeam": row.get("awayTeam"),
             "startDateEastern": row.get("startDateEastern"),
+            "week": row.get("week"),
             "predicted_lowest_price": round(best_price, 2),
             "optimal_purchase_date": best_date,
-            "optimal_purchase_time": best_time
+            "optimal_purchase_time": best_time.strftime("%H:%M") if best_time else None
         })
 
     return pd.DataFrame(results)
