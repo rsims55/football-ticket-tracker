@@ -1,0 +1,28 @@
+src/
+├── fetchers
+│   ├── __init__.py
+│   ├── rankings_fetcher.py
+│   ├── schedule_fetcher.py
+│   └── ticket_pricer.py
+├── gui
+│   └── ticket_predictor_gui.py
+├── loggers
+│   ├── __init__.py
+│   └── price_logger.py
+├── modeling
+│   ├── evaluate_predictions.py
+│   ├── __init__ .py
+│   ├── predict_price.py
+│   └── train_price_model.py
+├── preparation
+│   ├── build_dataset.py
+│   └── __init__ .py
+├── reports
+│   ├── generate_weekly_report.py
+│   └── send_email.py
+└── scrapers
+    ├── __init__.py
+    ├── rivalry_scraper.py
+    └── stadium_scraper.py
+
+7 directories, 18 files

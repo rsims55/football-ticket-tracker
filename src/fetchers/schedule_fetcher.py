@@ -32,15 +32,18 @@ class ScheduleFetcher:
             print("⚠️ No startDate field found")
             return None
 
-        df["startDate"] = pd.to_datetime(df["startDate"])
+        df["startDate"] = pd.to_datetime(df["startDate"], errors='coerce')
         df = df[(df["startDate"] > pd.Timestamp.now(tz="UTC")) & (df["homeClassification"] == "fbs")]
 
+        df = df[df["startDate"].notnull()]
         df["startDateEastern"] = df["startDate"].dt.tz_convert("US/Eastern")
-        df["dayOfWeek"] = df["startDateEastern"].dt.day_name()
+        df["startDateEastern"] = df["startDateEastern"].dt.date
+
+        df["dayOfWeek"] = pd.to_datetime(df["startDate"], errors='coerce').dt.tz_convert("US/Eastern").dt.day_name()
         df["kickoffTimeStr"] = np.where(
             df["startTimeTBD"],
             "",
-            df["startDateEastern"].dt.strftime("%-I:%M %p")
+            pd.to_datetime(df["startDate"], errors='coerce').dt.tz_convert("US/Eastern").dt.strftime("%-I:%M %p")
         )
 
         self.schedule = df

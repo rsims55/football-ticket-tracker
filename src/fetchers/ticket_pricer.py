@@ -5,38 +5,59 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv()
-SEATGEEK_CLIENT_ID = os.getenv("SEATGEEK_CLIENT_ID")
+CLIENT_ID = os.getenv("SEATGEEK_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SEATGEEK_CLIENT_SECRET")
 
 class TicketPricer:
     def __init__(self, use_mock=False):
         self.use_mock = use_mock
+        self.auth = self._build_auth()
 
-    def get_summary(self, team, game_date):
-        """
-        Return ticket price summary for a given team and game date.
-        Uses real API if available, otherwise returns mock data.
-        """
-        if self.use_mock or not SEATGEEK_CLIENT_ID:
-            return self._mock_data(team)
+    def _build_auth(self):
+        if CLIENT_ID and CLIENT_SECRET:
+            return (CLIENT_ID, CLIENT_SECRET)
+        return None
 
-        url = "https://api.seatgeek.com/2/events"
+    def get_summary(self, home_team, game_date, away_team=None):
+        if self.use_mock or not CLIENT_ID:
+            print("⚠️ Using mock data (client ID missing or mock mode enabled).")
+            return self._mock_data(home_team)
+
+        # 🧠 Build more precise search query
+        query = f"{home_team} {away_team}".strip()
+
         params = {
-            "q": team,
+            "q": query,
             "datetime_utc.gte": game_date.strftime("%Y-%m-%dT00:00:00"),
             "datetime_utc.lte": game_date.strftime("%Y-%m-%dT23:59:59"),
-            "client_id": SEATGEEK_CLIENT_ID
+            "taxonomies.name": "ncaa_football",
         }
 
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            return self._mock_data(team)
+        if not self.auth:
+            params["client_id"] = CLIENT_ID
+
+        try:
+            response = requests.get(
+                "https://api.seatgeek.com/2/events",
+                params=params,
+                auth=self.auth
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"⚠️ API request failed: {e}")
+            return self._mock_data(home_team)
 
         events = response.json().get("events", [])
         if not events:
-            return self._mock_data(team)
+            print("⚠️ No matching events found.")
+            return self._mock_data(home_team)
 
         event = events[0]
         stats = event.get("stats", {})
+
+        # Show message if stats are all None
+        if not any(stats.values()):
+            print("ℹ️  Event found but no pricing data is available yet.")
 
         return {
             "event_title": event.get("title", ""),
@@ -61,7 +82,24 @@ class TicketPricer:
             "lowest_price_lower": random.randint(80, 200),
         }
 
-# 🔍 Test run
+# 🔬 Run test cases if script is executed directly
 if __name__ == "__main__":
-    tp = TicketPricer(use_mock=True)
-    summary = tp.get_summary("Ohio State", datetime(2025, 11, 29))
+    USE_MOCK = False  # Use real SeatGeek API
+
+    # Each tuple: (home_team, date, away_team)
+    games_to_test = [
+        ("Michigan", datetime(2025, 10, 4), "Wisconsin"),
+        ("Texas", datetime(2025, 9, 27), "South Alabama"),
+        ("Clemson", datetime(2025, 11, 1), "Duke"),
+        ("Alabama", datetime(2025, 9, 13), "Wisconsin"),
+        ("Georgia", datetime(2025, 11, 22), "Old Dominion"),
+    ]
+
+    random.shuffle(games_to_test)
+    tp = TicketPricer(use_mock=USE_MOCK)
+
+    for home, date, away in games_to_test:
+        print(f"\n🎟️  Fetching prices for {away} at {home} on {date.strftime('%Y-%m-%d')}")
+        summary = tp.get_summary(home, date, away)
+        for key, val in summary.items():
+            print(f"   {key}: {val}")
