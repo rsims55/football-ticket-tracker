@@ -1,0 +1,231 @@
+schedule_team,matched_event_team,match_score
+TCU,TCU Horned Frogs,0.3636
+SMU,SMU Mustangs,0.4
+BYU,BYU Cougars,0.4286
+UAB,UAB Blazers,0.4286
+UCF,UCF Knights,0.4286
+USC,USC Trojans,0.4286
+VMI,VMI Keydets,0.4286
+Army,Army Black Knights,0.4444
+Tulsa,Tulsa Golden Hurricane,0.4444
+Hawai'i,Hawaii Rainbow Warriors,0.4615
+LSU,LSU Tigers,0.4615
+Miami,Miami Hurricanes,0.4762
+Purdue,Purdue Boilermakers,0.48
+Campbell,Campbell Fighting Camels,0.5
+Duke,Duke Blue Devils,0.5
+Elon,Elon Phoenix,0.5
+Maine,Maine Black Bears,0.5
+Marshall,Marshall Thundering Herd,0.5
+Navy,Navy Midshipmen,0.5
+Ohio,Ohio Bobcats,0.5
+Troy,Troy Trojans,0.5
+UTSA,UTSA Roadrunners,0.5
+Tulane,Tulane Green Wave,0.5217
+McNeese,McNeese State Cowboys,0.5263
+UCLA,UCLA Bruins,0.5333
+Illinois,Illinois Fighting Illini,0.5385
+UAlbany,UAlbany Great Danes,0.5385
+Minnesota,Minnesota Golden Gophers,0.5455
+Nevada,Nevada Wolf Pack,0.5455
+Idaho,Idaho Vandals,0.5556
+UConn,UConn Huskies,0.5556
+UL Monroe,Louisiana Monroe Warhawks,0.5556
+Bryant,Bryant Bulldogs,0.5714
+Furman,Furman Paladins,0.5714
+Kansas,Kansas Jayhawks,0.5714
+Massachusetts,UMass Minutemen,0.5714
+Nebraska,Nebraska Cornhuskers,0.5714
+Notre Dame,Notre Dame Fighting Irish,0.5714
+Wagner,Wagner Seahawks,0.5714
+Gardner-Webb,Gardner-Webb Runnin' Bulldogs,0.5854
+Nicholls,Nicholls State Colonels,0.5882
+Arkansas,Arkansas Razorbacks,0.5926
+Michigan,Michigan Wolverines,0.5926
+Iowa,Iowa Hawkeyes,0.6
+SE Louisiana,Southeastern Louisiana Lions,0.6
+Toledo,Toledo Rockets,0.6
+California,California Golden Bears,0.6061
+Arizona,Arizona Wildcats,0.6087
+Indiana,Indiana Hoosiers,0.6087
+Samford,Samford Bulldogs,0.6087
+Wofford,Wofford Terriers,0.6087
+Wake Forest,Wake Forest Demon Deacons,0.6111
+Maryland,Maryland Terrapins,0.6154
+Rice,Rice Owls,0.6154
+Utah,Utah Utes,0.6154
+Louisiana,Louisville Cardinals,0.6207
+Auburn,Auburn Tigers,0.6316
+Towson,Towson Tigers,0.6316
+Colgate,Colgate Raiders,0.6364
+Houston,Houston Cougars,0.6364
+Wyoming,Wyoming Cowboys,0.6364
+Cal Poly,Cal Poly Mustangs,0.64
+Long Island University,Sam Houston State University,0.64
+Stanford,Stanford Cardinal,0.64
+Vanderbilt,Vanderbilt Commodores,0.6452
+Bowling Green,Bowling Green State Falcons,0.65
+Akron,Akron Zips,0.6667
+Baylor,Baylor Bears,0.6667
+Clemson,Clemson Tigers,0.6667
+Holy Cross,Holy Cross Crusaders,0.6667
+Lafayette,Lafayette Leopards,0.6667
+Louisville,Louisville Cardinals,0.6667
+Memphis,Memphis Tigers,0.6667
+Mercer,Mercer Bears,0.6667
+Merrimack,Merrimack Warriors,0.6667
+North Dakota,North Dakota State Bison,0.6667
+North Texas,North Texas Mean Green,0.6667
+Oregon,Oregon Ducks,0.6667
+Richmond,Richmond Spiders,0.6667
+Texas Tech,Texas Tech Red Raiders,0.6667
+UT Martin,UT Martin Skyhawks,0.6667
+Villanova,Villanova Wildcats,0.6667
+West Virginia,West Virginia Mountaineers,0.6667
+Central Connecticut,Central Connecticut State Blue Devils,0.6786
+St. Francis (PA),Saint Francis (PA) Red Flash,0.6818
+Austin Peay,Austin Peay Governors,0.6875
+Stony Brook,Stony Brook Seawolves,0.6875
+Cincinnati,Cincinnati Bearcats,0.6897
+Miami (OH),Miami (OH) RedHawks,0.6897
+Ohio State,Ohio State Buckeyes,0.6897
+Pittsburgh,Pittsburgh Panthers,0.6897
+Air Force,Air Force Falcons,0.6923
+Wisconsin,Wisconsin Badgers,0.6923
+Missouri,Missouri Tigers,0.6957
+Ole Miss,Ole Miss Rebels,0.6957
+Penn State,Central State,0.6957
+UC Davis,UC Davis Aggies,0.6957
+Buffalo,Buffalo Bulls,0.7
+San José State,San Jose State Spartans,0.7027
+Rutgers,Rutgers Scarlet Knights,0.7059
+Temple,Temple Owls,0.7059
+The Citadel,The Citadel Bulldogs,0.7097
+Weber State,Weber State Wildcats,0.7097
+Washington,Washington Huskies,0.7143
+Arkansas State,Arkansas State Red Wolves,0.7179
+Arizona State,Arizona State Sun Devils,0.72
+Middle Tennessee,Middle Tennessee Blue Raiders,0.72
+Texas A&M,Texas A&M Aggies,0.72
+Indiana State,Indiana State Sycamores,0.7222
+Robert Morris,Robert Morris Colonials,0.7222
+Bucknell,Bucknell Bison,0.7273
+Colorado,Colorado State,0.7273
+Duquesne,Duquesne Dukes,0.7273
+Fresno State,Fresno State Bulldogs,0.7273
+Kansas State,Kansas State Wildcats,0.7273
+Kentucky,Kentucky State,0.7273
+Monmouth,Monmouth Hawks,0.7273
+NC State,NC State Wolfpack,0.7273
+Northern Arizona,Northern Arizona Lumberjacks,0.7273
+Northwestern,Northwestern Wildcats,0.7273
+Old Dominion,Old Dominion Monarchs,0.7273
+Western Illinois,Western Illinois Leathernecks,0.7317
+Western Kentucky,Western Kentucky Hilltoppers,0.7317
+Boise State,Boise State Broncos,0.7333
+Coastal Carolina,Coastal Carolina Chanticleers,0.7333
+Idaho State,Idaho State Bengals,0.7333
+Texas State,Texas State Bobcats,0.7333
+Ball State,Ball State Cardinals,0.7368
+Fordham,Fordham Rams,0.7368
+Incarnate Word,Incarnate Word Cardinals,0.7368
+Iowa State,Iowa State Cyclones,0.7368
+Stephen F. Austin,Stephen F. Austin Lumberjacks,0.7391
+Utah State,Utah State Aggies,0.7407
+New Hampshire,New Hampshire Wildcats,0.7429
+Norfolk State,Norfolk State Spartans,0.7429
+Northern Iowa,Northern Iowa Panthers,0.7429
+Western Carolina,Western Carolina Catamounts,0.7442
+Florida State,Florida State Seminoles,0.75
+Grambling,Grambling State,0.75
+South Dakota,South Dakota Coyotes,0.75
+Illinois State,Illinois State Redbirds,0.7568
+Louisiana Tech,Louisiana Tech Bulldogs,0.7568
+Central Michigan,Central Michigan Chippewas,0.7619
+Southern Miss,Southern Miss Golden Eagles,0.7619
+Virginia,Virginia Cavaliers,0.7619
+Alabama State,Alabama State Hornets,0.7647
+South Alabama,South Alabama Jaguars,0.7647
+Bethune-Cookman,Bethune-Cookman Wildcats,0.7692
+Lindenwood,Lindenwood Lions,0.7692
+Michigan State,Michigan State Spartans,0.7692
+New Mexico,New Mexico Lobos,0.7692
+Murray State,Murray State Racers,0.7742
+Charleston Southern,Charleston Southern Buccaneers,0.7755
+Alabama,Alabama Crimson Tide,0.7778
+App State,Appalachian State Mountaineers,0.7778
+Delaware State,Delaware State Hornets,0.7778
+Florida,Florida Gators,0.7778
+Oklahoma State,Oklahoma State Cowboys,0.7778
+Portland State,Portland State Vikings,0.7778
+Eastern Illinois,Eastern Illinois Panthers,0.7805
+Eastern Kentucky,Eastern Kentucky Colonels,0.7805
+Youngstown State,Youngstown State Penguins,0.7805
+Tennessee Tech,Tennessee Tech Golden Eagles,0.7826
+East Tennessee State,East Tennessee State Buccaneers,0.7843
+Sam Houston,Sam Houston State,0.7857
+Abilene Christian,Abilene Christian Wildcats,0.7907
+Mississippi State,Mississippi State Bulldogs,0.7907
+Boston College,Boston College Eagles,0.8
+Georgia State,Georgia State Panthers,0.8
+Montana State,Morgan State,0.8
+Sacramento State,Sacramento State Hornets,0.8
+Tarleton State,Tarleton State Texans,0.8
+Washington State,Washington State Cougars,0.8
+Western Michigan,Western Michigan Broncos,0.8
+Houston Christian,Houston Christian Huskies,0.8095
+Northern Illinois,Northern Illinois Huskies,0.8095
+Southern Illinois,Southern Illinois Salukis,0.8095
+San Diego State,San Diego State Aztecs,0.8108
+James Madison,James Madison Dukes,0.8125
+North Alabama,North Alabama Lions,0.8125
+South Florida,South Florida Bulls,0.8125
+Chattanooga,Chattanooga Mocs,0.8148
+East Carolina,East Carolina Pirates,0.8148
+Eastern Michigan,Eastern Michigan Eagles,0.8205
+Georgia Southern,Georgia Southern Eagles,0.8205
+New Mexico State,New Mexico State Aggies,0.8205
+East Texas A&M,East Texas A&M Lions,0.8235
+Florida International,Florida International Panthers,0.8235
+Missouri State,Missouri State Bears,0.8235
+South Carolina State,South Carolina State Bulldogs,0.8235
+William & Mary,William & Mary Tribe,0.8235
+Rhode Island,Rhode Island Rams,0.8276
+Kent State,Kent State Golden Flashes,0.8333
+Oregon State,Oregon State Beavers,0.8333
+Eastern Washington,Eastern Washington Eagles,0.8372
+North Carolina A&T,North Carolina A&T Aggies,0.8372
+Northwestern State,Northwestern State Demons,0.8372
+Jacksonville State,Jacksonville State Gamecocks,0.8387
+Central Arkansas,Central Arkansas Bears,0.8421
+Southeast Missouri State,Southeast Missouri State Redhawks,0.8421
+Kennesaw State,Kennesaw State Owls,0.8485
+Northern Colorado,Northern Colorado Bears,0.85
+North Carolina,North Carolina Tar Heels,0.8571
+Florida Atlantic,Florida Atlantic Owls,0.8649
+Alabama A&M,Alabama A&M,1
+Alcorn State,Alcorn State,1
+Arkansas-Pine Bluff,Arkansas-Pine Bluff,1
+Charlotte,Charlotte,1
+Colorado State,Colorado State,1
+Delaware,Delaware,1
+Florida A&M,Florida A&M,1
+Georgia,Georgia Bulldogs,1
+Georgia Tech,Georgia Tech Yellow Jackets,1
+Howard,Howard,1
+Jackson State,Jackson State,1
+Lamar,Lamar,1
+Liberty,Liberty,1
+Morgan State,Morgan State,1
+North Carolina Central,North Carolina Central,1
+Oklahoma,Oklahoma,1
+Prairie View A&M,Prairie View A&M,1
+South Carolina,South Carolina Gamecocks,1
+Southern,Southern,1
+Syracuse,Syracuse Orange,1
+Tennessee,Tennessee Volunteers,1
+Texas,Texas Longhorns,1
+Texas Southern,Texas Southern,1
+UNLV,UNLV,1
+UTEP,UTEP,1
+Virginia Tech,Virginia Tech Hokies,1
