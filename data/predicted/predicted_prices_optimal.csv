@@ -1,0 +1,35 @@
+event_id,homeTeam,awayTeam,startDateEastern,week,predicted_lowest_price,optimal_purchase_date,optimal_purchase_time
+6886433,Boston College Eagles,Fordham Rams,2025-08-30T14:00:00,,8.42,2025-08-09,06:00
+6849938,Clemson Tigers,LSU Tigers,2025-08-30T19:00:00,,202.1,2025-08-12,06:00
+6861914,Oregon State Beavers,California Golden Bears,2025-08-30T19:00:00,,21.3,2025-08-09,06:00
+6886445,Clemson Tigers,Troy Trojans,2025-09-06T15:00:00,,43.09,2025-08-16,06:00
+6886440,California Golden Bears,Texas Southern Tigers,2025-09-06T15:00:00,,28.57,2025-08-19,06:00
+6863438,Michigan State Spartans,Boston College Eagles,2025-09-06T19:00:00,,35.86,2025-08-16,06:00
+6953542,Georgia Tech Yellow Jackets,Clemson Tigers,2025-09-13T12:00:00,,57.86,2025-08-26,06:00
+6953540,Stanford Cardinal,Boston College Eagles,2025-09-13T19:00:00,,12.51,2025-08-23,06:00
+6863540,California Golden Bears,Minnesota Golden Gophers,2025-09-13T19:00:00,,28.57,2025-08-26,06:00
+6953573,Clemson Tigers,Syracuse Orange,2025-09-20T03:00:00,,47.53,2025-08-30,06:00
+6867564,San Diego State Aztecs,California Golden Bears,2025-09-20T19:00:00,,21.3,2025-08-30,06:00
+6953523,Boston College Eagles,California Golden Bears,2025-09-27T03:00:00,,9.88,2025-09-06,06:00
+6953561,North Carolina Tar Heels,Clemson Tigers,2025-10-04T03:00:00,,26.41,2025-09-13,06:00
+6956866,California Golden Bears,Duke Blue Devils,2025-10-04T03:00:00,,37.46,2025-09-16,06:00
+6957001,Pittsburgh Panthers,Boston College Eagles,2025-10-04T03:00:00,,24.55,2025-09-13,06:00
+6956859,Boston College Eagles,Clemson Tigers,2025-10-11T03:00:00,,41.7,2025-09-23,06:00
+6956867,California Golden Bears,North Carolina Tar Heels,2025-10-17T19:00:00,,37.46,2025-09-29,06:00
+6956888,Clemson Tigers,Southern Methodist (SMU) Mustangs,2025-10-18T03:00:00,,141.97,2025-09-30,06:00
+6958500,Boston College Eagles,UConn Huskies,2025-10-18T03:00:00,,8.42,2025-09-27,06:00
+6957155,Virginia Tech Hokies,California Golden Bears,2025-10-24T19:00:00,,30.37,2025-10-06,06:00
+6956914,Louisville Cardinals,Boston College Eagles,2025-10-25T03:00:00,,12.79,2025-10-04,06:00
+6956862,Boston College Eagles,Notre Dame Fighting Irish,2025-11-01T03:00:00,,41.96,2025-10-14,06:00
+6956869,California Golden Bears,Virginia Cavaliers,2025-11-01T03:00:00,,37.46,2025-10-14,06:00
+6956882,Clemson Tigers,Duke Blue Devils,2025-11-01T03:00:00,,47.53,2025-10-11,06:00
+6956861,Boston College Eagles,Southern Methodist (SMU) Mustangs,2025-11-08T03:00:00,,19.84,2025-10-18,06:00
+6956915,Louisville Cardinals,California Golden Bears,2025-11-08T03:00:00,,12.79,2025-10-18,06:00
+6956884,Clemson Tigers,Florida State Seminoles,2025-11-08T03:00:00,,70.62,2025-10-18,06:00
+6956916,Louisville Cardinals,Clemson Tigers,2025-11-14T20:00:00,,29.89,2025-10-24,06:00
+6956860,Boston College Eagles,Georgia Tech Yellow Jackets,2025-11-15T03:00:00,,9.88,2025-10-25,06:00
+6957147,Stanford Cardinal,California Golden Bears,2025-11-22T03:00:00,,42.41,2025-11-01,06:00
+6886449,Clemson Tigers,Furman Paladins,2025-11-22T03:00:00,,43.09,2025-11-01,06:00
+6956868,California Golden Bears,Southern Methodist (SMU) Mustangs,2025-11-29T03:00:00,,39.55,2025-11-11,06:00
+6957150,Syracuse Orange,Boston College Eagles,2025-11-29T03:00:00,,10.36,2025-11-08,06:00
+6868687,South Carolina Gamecocks,Clemson Tigers,2025-11-29T12:00:00,,210.28,2025-11-11,06:00
