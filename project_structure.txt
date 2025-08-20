@@ -1,28 +1,87 @@
-src/
-├── fetchers
-│   ├── __init__.py
-│   ├── rankings_fetcher.py
-│   ├── schedule_fetcher.py
-│   └── ticket_pricer.py
-├── gui
-│   └── ticket_predictor_gui.py
-├── loggers
-│   ├── __init__.py
-│   └── price_logger.py
-├── modeling
-│   ├── evaluate_predictions.py
-│   ├── __init__ .py
-│   ├── predict_price.py
-│   └── train_price_model.py
-├── preparation
-│   ├── build_dataset.py
-│   └── __init__ .py
+.
+├── data
+│   ├── full_2025_schedule.csv
+│   ├── ncaa_football_events_2025.csv
+│   ├── rivalries_2025.csv
+│   ├── stadiums_2025.csv
+│   ├── tickpick_prices_20250818_172859.csv
+│   ├── tickpick_prices_20250818_172859.json
+│   ├── tickpick_prices_20250818_182956.csv
+│   ├── tickpick_prices_20250818_182956.json
+│   ├── tickpick_teams.txt
+│   └── wiki_ap_top_25_2024.csv
+├── models
+├── project_structure.txt
+├── __pycache__
+│   ├── build_dataset.cpython-312.pyc
+│   ├── get_ticket_summary.cpython-312.pyc
+│   ├── rankings_fetcher.cpython-312.pyc
+│   ├── rivalry_scraper.cpython-312.pyc
+│   ├── schedule_fetcher.cpython-312.pyc
+│   ├── stadium_scraper.cpython-312.pyc
+│   └── ticket_pricer.cpython-312.pyc
+├── README.md
 ├── reports
-│   ├── generate_weekly_report.py
-│   └── send_email.py
-└── scrapers
-    ├── __init__.py
-    ├── rivalry_scraper.py
-    └── stadium_scraper.py
-
-7 directories, 18 files
+├── src
+│   ├── builders
+│   │   ├── annual_setup.py
+│   │   ├── build_dataset.py
+│   │   ├── daily_snapshot.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   └── weekly_update.py
+│   ├── fetchers
+│   │   ├── fetch_ncaa_events.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── rankings_fetcher.py
+│   │   └── schedule_fetcher.py
+│   ├── gui
+│   │   └── ticket_predictor_gui.py
+│   ├── __init__.py
+│   ├── loggers
+│   │   ├── __init__.py
+│   │   └── price_logger.py
+│   ├── modeling
+│   │   ├── evaluate_predictions.py
+│   │   ├── __init__.py
+│   │   ├── predict_price.py
+│   │   └── train_price_model.py
+│   ├── __pycache__
+│   │   ├── build_dataset.cpython-312.pyc
+│   │   ├── __init__.cpython-39.pyc
+│   │   └── test_tickpick_scrape.cpython-39.pyc
+│   ├── reports
+│   │   ├── generate_weekly_report.py
+│   │   └── send_email.py
+│   └── scrapers
+│       ├── __init__.py
+│       ├── __pycache__
+│       ├── rivalry_scraper.py
+│       ├── stadium_scraper.py
+│       ├── test_tickpick_scrape.py
+│       ├── tickpick_pricer.py
+│       └── tickpick_team_scraper.py
+├── tickpick_dump.html
+├── # TODO Steps.txt
+└── venv
+    ├── bin
+    │   ├── activate
+    │   ├── activate.csh
+    │   ├── activate.fish
+    │   ├── Activate.ps1
+    │   ├── dotenv
+    │   ├── f2py
+    │   ├── normalizer
+    │   ├── numpy-config
+    │   ├── pip
+    │   ├── pip3
+    │   ├── pip3.9
+    │   ├── python -> /home/randisims/Enter/envs/py3-TF2.0/bin/python
+    │   ├── python3 -> python
+    │   └── python3.9 -> python
+    ├── include
+    ├── lib
+    │   └── python3.9
+    ├── lib64 -> lib
+    └── pyvenv.cfg

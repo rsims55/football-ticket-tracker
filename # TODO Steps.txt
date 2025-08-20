@@ -1,49 +1,20 @@
 # TODO Steps
 
-## Use API to track current ticket prices
-1. Pull match-ups, match home and away teams - DONE!
-2. Pull rankings - Done!
-3. Pull venue information (region, size) - Done!
-4. Pull match-up times - Done!
-5. 
+## Scrape for low, average, high ticket prices 
+1. Build the scraper - Done!
+2. Test with three teams, pulling low, average, and high prices and ticket number. - Done!
+3. In the tickpick_pricer - ensure that the IP address changes every 50 scrapes 
+*touchup* - Have it print the name of the football team instead of the URL (remove the - Cheap and No Hidden Fees part ) - Done!
 
-## Input Data
-1. Home team - Done!
-2. Away team - Done!
-3. Home team rank - Done!
-4. Away team rank - Done!
-5. Rivalry game (yes/no) - Done!
-6. Game week - Done!
-7. Season type (regular/postseason) - Done!
-8. Stadium capacity - Done!
-9. Day of week - Done!
-10. Kickoff time - Done!
-11. Home team conference - Done!
-12. Away team conference - Done!
-13. Top-10 match-up (yes/no) - Done!
-14. Location region - Done!
-15. Ticket resale platform fees - WILL DO
+## Create system to run major things annually
 
-## Pull into one script
-1. Pull all commands into one script  - Done!
-2. Use Classes and OOP for this - Done!
-3. Only use JSON data (no CSV)
-
-## Create a model to predict ticket prices
-1. Set up data collection structure - Done!
-2. Create the model - Done!
-3. Test the model - Done!
-
-## Automate the data collection in GitHub 
-1. Twice a week for rankings (Monday and Wednesday), four times a day for prices - Done!
-2. Continuously build this structure - Done!
-3. STOP collecting prices once the game starts - Done!
-
-## Refine the model 
-1. Use the actual minimum ticket price to help refine the model - Done!
-
-## Extract most important data
-1. Use model.feature_importances to determine how important each factor is - Done!
+## Create system to run price scraper daily (4x a day)
+1. Have it record the current time and date
+2. IF there is a .csv file already available, add the prices to the file systematically
+IF not .csv file already available, make one 
+3. IF the event already exists in the .csv file, add the prices, time stamp, and date systematically
+IF not, then create a new event
+4. Delete whatever .csv file the tickpick_pricer created
 
 ## Send report
 1. Build a weekly report
