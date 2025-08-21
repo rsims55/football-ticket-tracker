@@ -1,0 +1,1197 @@
+[
+    {
+        "slug": "boston-college-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"
+    },
+    {
+        "slug": "california-golden-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/california-golden-bears-football-tickets/"
+    },
+    {
+        "slug": "clemson-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/clemson-tigers-football-tickets/"
+    },
+    {
+        "slug": "duke-blue-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/duke-blue-devils-football-tickets/"
+    },
+    {
+        "slug": "florida-state-seminoles-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-state-seminoles-football-tickets/"
+    },
+    {
+        "slug": "georgia-tech-yellow-jackets-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-tech-yellow-jackets-football-tickets/"
+    },
+    {
+        "slug": "louisville-cardinals-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisville-cardinals-football-tickets/"
+    },
+    {
+        "slug": "miami-hurricanes-football",
+        "url": "https://www.tickpick.com/ncaa-football/miami-hurricanes-football-tickets/"
+    },
+    {
+        "slug": "north-carolina-state-wolfpack-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-state-wolfpack-football-tickets/"
+    },
+    {
+        "slug": "north-carolina-tar-heels-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-tar-heels-football-tickets/"
+    },
+    {
+        "slug": "pittsburgh-panthers-football",
+        "url": "https://www.tickpick.com/ncaa-football/pittsburgh-panthers-football-tickets/"
+    },
+    {
+        "slug": "smu-mustangs-football",
+        "url": "https://www.tickpick.com/ncaa-football/smu-mustangs-football-tickets/"
+    },
+    {
+        "slug": "stanford-cardinal-football",
+        "url": "https://www.tickpick.com/ncaa-football/stanford-cardinal-football-tickets/"
+    },
+    {
+        "slug": "syracuse-orange-football",
+        "url": "https://www.tickpick.com/ncaa-football/syracuse-orange-football-tickets/"
+    },
+    {
+        "slug": "virginia-cavaliers-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-cavaliers-football-tickets/"
+    },
+    {
+        "slug": "virginia-tech-hokies-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-tech-hokies-football-tickets/"
+    },
+    {
+        "slug": "wake-forest-demon-deacons-football",
+        "url": "https://www.tickpick.com/ncaa-football/wake-forest-demon-deacons-football-tickets/"
+    },
+    {
+        "slug": "illinois-fighting-illini-football",
+        "url": "https://www.tickpick.com/ncaa-football/illinois-fighting-illini-football-tickets/"
+    },
+    {
+        "slug": "indiana-hoosiers-football",
+        "url": "https://www.tickpick.com/ncaa-football/indiana-hoosiers-football-tickets/"
+    },
+    {
+        "slug": "iowa-hawkeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-hawkeyes-football-tickets/"
+    },
+    {
+        "slug": "maryland-terrapins-football",
+        "url": "https://www.tickpick.com/ncaa-football/maryland-terrapins-football-tickets/"
+    },
+    {
+        "slug": "michigan-state-spartans-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-state-spartans-football-tickets/"
+    },
+    {
+        "slug": "michigan-wolverines-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-wolverines-football-tickets/"
+    },
+    {
+        "slug": "minnesota-golden-gophers-football",
+        "url": "https://www.tickpick.com/ncaa-football/minnesota-golden-gophers-football-tickets/"
+    },
+    {
+        "slug": "nebraska-cornhuskers-football",
+        "url": "https://www.tickpick.com/ncaa-football/nebraska-cornhuskers-football-tickets/"
+    },
+    {
+        "slug": "northwestern-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/northwestern-wildcats-football-tickets/"
+    },
+    {
+        "slug": "ohio-state-buckeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/ohio-state-buckeyes-football-tickets/"
+    },
+    {
+        "slug": "oregon-ducks-football",
+        "url": "https://www.tickpick.com/ncaa-football/oregon-ducks-football-tickets/"
+    },
+    {
+        "slug": "penn-state-nittany-lions-football",
+        "url": "https://www.tickpick.com/ncaa-football/penn-state-nittany-lions-football-tickets/"
+    },
+    {
+        "slug": "purdue-boilermakers-football",
+        "url": "https://www.tickpick.com/ncaa-football/purdue-boilermakers-football-tickets/"
+    },
+    {
+        "slug": "rutgers-scarlet-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/rutgers-scarlet-knights-football-tickets/"
+    },
+    {
+        "slug": "ucla-bruins-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucla-bruins-football-tickets/"
+    },
+    {
+        "slug": "usc-trojans-football",
+        "url": "https://www.tickpick.com/ncaa-football/usc-trojans-football-tickets/"
+    },
+    {
+        "slug": "washington-huskies-football",
+        "url": "https://www.tickpick.com/ncaa-football/washington-huskies-football-tickets/"
+    },
+    {
+        "slug": "wisconsin-badgers-football",
+        "url": "https://www.tickpick.com/ncaa-football/wisconsin-badgers-football-tickets/"
+    },
+    {
+        "slug": "alabama-crimson-tide-football",
+        "url": "https://www.tickpick.com/ncaa-football/alabama-crimson-tide-football-tickets/"
+    },
+    {
+        "slug": "arkansas-razorbacks-football",
+        "url": "https://www.tickpick.com/ncaa-football/arkansas-razorbacks-football-tickets/"
+    },
+    {
+        "slug": "auburn-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/auburn-tigers-football-tickets/"
+    },
+    {
+        "slug": "florida-gators-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-gators-football-tickets/"
+    },
+    {
+        "slug": "georgia-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-bulldogs-football-tickets/"
+    },
+    {
+        "slug": "kentucky-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kentucky-wildcats-football-tickets/"
+    },
+    {
+        "slug": "lsu-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/lsu-tigers-football-tickets/"
+    },
+    {
+        "slug": "mississippi-rebels-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-rebels-football-tickets/"
+    },
+    {
+        "slug": "mississippi-state-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-state-bulldogs-football-tickets/"
+    },
+    {
+        "slug": "missouri-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/missouri-tigers-football-tickets/"
+    },
+    {
+        "slug": "oklahoma-sooners-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-sooners-football-tickets/"
+    },
+    {
+        "slug": "south-carolina-gamecocks-football",
+        "url": "https://www.tickpick.com/ncaa-football/south-carolina-gamecocks-football-tickets/"
+    },
+    {
+        "slug": "tennessee-volunteers-football",
+        "url": "https://www.tickpick.com/ncaa-football/tennessee-volunteers-football-tickets/"
+    },
+    {
+        "slug": "texas-am-aggies-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-am-aggies-football-tickets/"
+    },
+    {
+        "slug": "texas-longhorns-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-longhorns-football-tickets/"
+    },
+    {
+        "slug": "vanderbilt-commodores-football",
+        "url": "https://www.tickpick.com/ncaa-football/vanderbilt-commodores-football-tickets/"
+    },
+    {
+        "slug": "arizona-state-sun-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-state-sun-devils-football-tickets/"
+    },
+    {
+        "slug": "arizona-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-wildcats-football-tickets/"
+    },
+    {
+        "slug": "baylor-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/baylor-bears-football-tickets/"
+    },
+    {
+        "slug": "byu-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/byu-cougars-football-tickets/"
+    },
+    {
+        "slug": "cincinnati-bearcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/cincinnati-bearcats-football-tickets/"
+    },
+    {
+        "slug": "colorado-buffaloes-football",
+        "url": "https://www.tickpick.com/ncaa-football/colorado-buffaloes-football-tickets/"
+    },
+    {
+        "slug": "houston-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/houston-cougars-football-tickets/"
+    },
+    {
+        "slug": "iowa-state-cyclones-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-state-cyclones-football-tickets/"
+    },
+    {
+        "slug": "kansas-jayhawks-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-jayhawks-football-tickets/"
+    },
+    {
+        "slug": "kansas-state-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-state-wildcats-football-tickets/"
+    },
+    {
+        "slug": "oklahoma-state-cowboys-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-state-cowboys-football-tickets/"
+    },
+    {
+        "slug": "tcu-horned-frogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/tcu-horned-frogs-football-tickets/"
+    },
+    {
+        "slug": "texas-tech-red-raiders-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-tech-red-raiders-football-tickets/"
+    },
+    {
+        "slug": "ucf-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucf-knights-football-tickets/"
+    },
+    {
+        "slug": "utah-utes-football",
+        "url": "https://www.tickpick.com/ncaa-football/utah-utes-football-tickets/"
+    },
+    {
+        "slug": "west-virginia-mountaineers-football",
+        "url": "https://www.tickpick.com/ncaa-football/west-virginia-mountaineers-football-tickets/"
+    },
+    {
+        "slug": "boston-college-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"
+    },
+    {
+        "slug": "california-golden-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/california-golden-bears-football-tickets/"
+    },
+    {
+        "slug": "clemson-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/clemson-tigers-football-tickets/"
+    },
+    {
+        "slug": "duke-blue-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/duke-blue-devils-football-tickets/"
+    },
+    {
+        "slug": "florida-state-seminoles-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-state-seminoles-football-tickets/"
+    },
+    {
+        "slug": "georgia-tech-yellow-jackets-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-tech-yellow-jackets-football-tickets/"
+    },
+    {
+        "slug": "louisville-cardinals-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisville-cardinals-football-tickets/"
+    },
+    {
+        "slug": "miami-hurricanes-football",
+        "url": "https://www.tickpick.com/ncaa-football/miami-hurricanes-football-tickets/"
+    },
+    {
+        "slug": "north-carolina-state-wolfpack-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-state-wolfpack-football-tickets/"
+    },
+    {
+        "slug": "north-carolina-tar-heels-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-tar-heels-football-tickets/"
+    },
+    {
+        "slug": "pittsburgh-panthers-football",
+        "url": "https://www.tickpick.com/ncaa-football/pittsburgh-panthers-football-tickets/"
+    },
+    {
+        "slug": "smu-mustangs-football",
+        "url": "https://www.tickpick.com/ncaa-football/smu-mustangs-football-tickets/"
+    },
+    {
+        "slug": "stanford-cardinal-football",
+        "url": "https://www.tickpick.com/ncaa-football/stanford-cardinal-football-tickets/"
+    },
+    {
+        "slug": "syracuse-orange-football",
+        "url": "https://www.tickpick.com/ncaa-football/syracuse-orange-football-tickets/"
+    },
+    {
+        "slug": "virginia-cavaliers-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-cavaliers-football-tickets/"
+    },
+    {
+        "slug": "virginia-tech-hokies-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-tech-hokies-football-tickets/"
+    },
+    {
+        "slug": "wake-forest-demon-deacons-football",
+        "url": "https://www.tickpick.com/ncaa-football/wake-forest-demon-deacons-football-tickets/"
+    },
+    {
+        "slug": "illinois-fighting-illini-football",
+        "url": "https://www.tickpick.com/ncaa-football/illinois-fighting-illini-football-tickets/"
+    },
+    {
+        "slug": "indiana-hoosiers-football",
+        "url": "https://www.tickpick.com/ncaa-football/indiana-hoosiers-football-tickets/"
+    },
+    {
+        "slug": "iowa-hawkeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-hawkeyes-football-tickets/"
+    },
+    {
+        "slug": "maryland-terrapins-football",
+        "url": "https://www.tickpick.com/ncaa-football/maryland-terrapins-football-tickets/"
+    },
+    {
+        "slug": "michigan-state-spartans-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-state-spartans-football-tickets/"
+    },
+    {
+        "slug": "michigan-wolverines-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-wolverines-football-tickets/"
+    },
+    {
+        "slug": "minnesota-golden-gophers-football",
+        "url": "https://www.tickpick.com/ncaa-football/minnesota-golden-gophers-football-tickets/"
+    },
+    {
+        "slug": "nebraska-cornhuskers-football",
+        "url": "https://www.tickpick.com/ncaa-football/nebraska-cornhuskers-football-tickets/"
+    },
+    {
+        "slug": "northwestern-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/northwestern-wildcats-football-tickets/"
+    },
+    {
+        "slug": "ohio-state-buckeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/ohio-state-buckeyes-football-tickets/"
+    },
+    {
+        "slug": "oregon-ducks-football",
+        "url": "https://www.tickpick.com/ncaa-football/oregon-ducks-football-tickets/"
+    },
+    {
+        "slug": "penn-state-nittany-lions-football",
+        "url": "https://www.tickpick.com/ncaa-football/penn-state-nittany-lions-football-tickets/"
+    },
+    {
+        "slug": "purdue-boilermakers-football",
+        "url": "https://www.tickpick.com/ncaa-football/purdue-boilermakers-football-tickets/"
+    },
+    {
+        "slug": "rutgers-scarlet-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/rutgers-scarlet-knights-football-tickets/"
+    },
+    {
+        "slug": "ucla-bruins-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucla-bruins-football-tickets/"
+    },
+    {
+        "slug": "usc-trojans-football",
+        "url": "https://www.tickpick.com/ncaa-football/usc-trojans-football-tickets/"
+    },
+    {
+        "slug": "washington-huskies-football",
+        "url": "https://www.tickpick.com/ncaa-football/washington-huskies-football-tickets/"
+    },
+    {
+        "slug": "wisconsin-badgers-football",
+        "url": "https://www.tickpick.com/ncaa-football/wisconsin-badgers-football-tickets/"
+    },
+    {
+        "slug": "alabama-crimson-tide-football",
+        "url": "https://www.tickpick.com/ncaa-football/alabama-crimson-tide-football-tickets/"
+    },
+    {
+        "slug": "arkansas-razorbacks-football",
+        "url": "https://www.tickpick.com/ncaa-football/arkansas-razorbacks-football-tickets/"
+    },
+    {
+        "slug": "auburn-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/auburn-tigers-football-tickets/"
+    },
+    {
+        "slug": "florida-gators-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-gators-football-tickets/"
+    },
+    {
+        "slug": "georgia-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-bulldogs-football-tickets/"
+    },
+    {
+        "slug": "kentucky-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kentucky-wildcats-football-tickets/"
+    },
+    {
+        "slug": "lsu-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/lsu-tigers-football-tickets/"
+    },
+    {
+        "slug": "mississippi-rebels-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-rebels-football-tickets/"
+    },
+    {
+        "slug": "mississippi-state-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-state-bulldogs-football-tickets/"
+    },
+    {
+        "slug": "missouri-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/missouri-tigers-football-tickets/"
+    },
+    {
+        "slug": "oklahoma-sooners-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-sooners-football-tickets/"
+    },
+    {
+        "slug": "south-carolina-gamecocks-football",
+        "url": "https://www.tickpick.com/ncaa-football/south-carolina-gamecocks-football-tickets/"
+    },
+    {
+        "slug": "tennessee-volunteers-football",
+        "url": "https://www.tickpick.com/ncaa-football/tennessee-volunteers-football-tickets/"
+    },
+    {
+        "slug": "texas-am-aggies-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-am-aggies-football-tickets/"
+    },
+    {
+        "slug": "texas-longhorns-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-longhorns-football-tickets/"
+    },
+    {
+        "slug": "vanderbilt-commodores-football",
+        "url": "https://www.tickpick.com/ncaa-football/vanderbilt-commodores-football-tickets/"
+    },
+    {
+        "slug": "arizona-state-sun-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-state-sun-devils-football-tickets/"
+    },
+    {
+        "slug": "arizona-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-wildcats-football-tickets/"
+    },
+    {
+        "slug": "baylor-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/baylor-bears-football-tickets/"
+    },
+    {
+        "slug": "byu-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/byu-cougars-football-tickets/"
+    },
+    {
+        "slug": "cincinnati-bearcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/cincinnati-bearcats-football-tickets/"
+    },
+    {
+        "slug": "colorado-buffaloes-football",
+        "url": "https://www.tickpick.com/ncaa-football/colorado-buffaloes-football-tickets/"
+    },
+    {
+        "slug": "houston-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/houston-cougars-football-tickets/"
+    },
+    {
+        "slug": "iowa-state-cyclones-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-state-cyclones-football-tickets/"
+    },
+    {
+        "slug": "kansas-jayhawks-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-jayhawks-football-tickets/"
+    },
+    {
+        "slug": "kansas-state-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-state-wildcats-football-tickets/"
+    },
+    {
+        "slug": "oklahoma-state-cowboys-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-state-cowboys-football-tickets/"
+    },
+    {
+        "slug": "tcu-horned-frogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/tcu-horned-frogs-football-tickets/"
+    },
+    {
+        "slug": "texas-tech-red-raiders-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-tech-red-raiders-football-tickets/"
+    },
+    {
+        "slug": "ucf-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucf-knights-football-tickets/"
+    },
+    {
+        "slug": "utah-utes-football",
+        "url": "https://www.tickpick.com/ncaa-football/utah-utes-football-tickets/"
+    },
+    {
+        "slug": "west-virginia-mountaineers-football",
+        "url": "https://www.tickpick.com/ncaa-football/west-virginia-mountaineers-football-tickets/"
+    },
+    {
+        "name": "Boston College Eagles",
+        "slug": "boston-college-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"
+    },
+    {
+        "name": "California Golden Bears",
+        "slug": "california-golden-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/california-golden-bears-football-tickets/"
+    },
+    {
+        "name": "Clemson Tigers",
+        "slug": "clemson-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/clemson-tigers-football-tickets/"
+    },
+    {
+        "name": "Duke Blue Devils",
+        "slug": "duke-blue-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/duke-blue-devils-football-tickets/"
+    },
+    {
+        "name": "Florida State Seminoles",
+        "slug": "florida-state-seminoles-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-state-seminoles-football-tickets/"
+    },
+    {
+        "name": "Georgia Tech Yellow Jackets",
+        "slug": "georgia-tech-yellow-jackets-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-tech-yellow-jackets-football-tickets/"
+    },
+    {
+        "name": "Louisville Cardinals",
+        "slug": "louisville-cardinals-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisville-cardinals-football-tickets/"
+    },
+    {
+        "name": "Miami Hurricanes",
+        "slug": "miami-hurricanes-football",
+        "url": "https://www.tickpick.com/ncaa-football/miami-hurricanes-football-tickets/"
+    },
+    {
+        "name": "North Carolina State Wolfpack",
+        "slug": "north-carolina-state-wolfpack-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-state-wolfpack-football-tickets/"
+    },
+    {
+        "name": "North Carolina Tar Heels",
+        "slug": "north-carolina-tar-heels-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-tar-heels-football-tickets/"
+    },
+    {
+        "name": "Pittsburgh Panthers",
+        "slug": "pittsburgh-panthers-football",
+        "url": "https://www.tickpick.com/ncaa-football/pittsburgh-panthers-football-tickets/"
+    },
+    {
+        "name": "SMU Mustangs",
+        "slug": "smu-mustangs-football",
+        "url": "https://www.tickpick.com/ncaa-football/smu-mustangs-football-tickets/"
+    },
+    {
+        "name": "Stanford Cardinal",
+        "slug": "stanford-cardinal-football",
+        "url": "https://www.tickpick.com/ncaa-football/stanford-cardinal-football-tickets/"
+    },
+    {
+        "name": "Syracuse Orange",
+        "slug": "syracuse-orange-football",
+        "url": "https://www.tickpick.com/ncaa-football/syracuse-orange-football-tickets/"
+    },
+    {
+        "name": "Virginia Cavaliers",
+        "slug": "virginia-cavaliers-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-cavaliers-football-tickets/"
+    },
+    {
+        "name": "Virginia Tech Hokies",
+        "slug": "virginia-tech-hokies-football",
+        "url": "https://www.tickpick.com/ncaa-football/virginia-tech-hokies-football-tickets/"
+    },
+    {
+        "name": "Wake Forest Demon Deacons",
+        "slug": "wake-forest-demon-deacons-football",
+        "url": "https://www.tickpick.com/ncaa-football/wake-forest-demon-deacons-football-tickets/"
+    },
+    {
+        "name": "Illinois Fighting Illini",
+        "slug": "illinois-fighting-illini-football",
+        "url": "https://www.tickpick.com/ncaa-football/illinois-fighting-illini-football-tickets/"
+    },
+    {
+        "name": "Indiana Hoosiers",
+        "slug": "indiana-hoosiers-football",
+        "url": "https://www.tickpick.com/ncaa-football/indiana-hoosiers-football-tickets/"
+    },
+    {
+        "name": "Iowa Hawkeyes",
+        "slug": "iowa-hawkeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-hawkeyes-football-tickets/"
+    },
+    {
+        "name": "Maryland Terrapins",
+        "slug": "maryland-terrapins-football",
+        "url": "https://www.tickpick.com/ncaa-football/maryland-terrapins-football-tickets/"
+    },
+    {
+        "name": "Michigan State Spartans",
+        "slug": "michigan-state-spartans-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-state-spartans-football-tickets/"
+    },
+    {
+        "name": "Michigan Wolverines",
+        "slug": "michigan-wolverines-football",
+        "url": "https://www.tickpick.com/ncaa-football/michigan-wolverines-football-tickets/"
+    },
+    {
+        "name": "Minnesota Golden Gophers",
+        "slug": "minnesota-golden-gophers-football",
+        "url": "https://www.tickpick.com/ncaa-football/minnesota-golden-gophers-football-tickets/"
+    },
+    {
+        "name": "Nebraska Cornhuskers",
+        "slug": "nebraska-cornhuskers-football",
+        "url": "https://www.tickpick.com/ncaa-football/nebraska-cornhuskers-football-tickets/"
+    },
+    {
+        "name": "Northwestern Wildcats",
+        "slug": "northwestern-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/northwestern-wildcats-football-tickets/"
+    },
+    {
+        "name": "Ohio State Buckeyes",
+        "slug": "ohio-state-buckeyes-football",
+        "url": "https://www.tickpick.com/ncaa-football/ohio-state-buckeyes-football-tickets/"
+    },
+    {
+        "name": "Oregon Ducks",
+        "slug": "oregon-ducks-football",
+        "url": "https://www.tickpick.com/ncaa-football/oregon-ducks-football-tickets/"
+    },
+    {
+        "name": "Penn State Nittany Lions",
+        "slug": "penn-state-nittany-lions-football",
+        "url": "https://www.tickpick.com/ncaa-football/penn-state-nittany-lions-football-tickets/"
+    },
+    {
+        "name": "Purdue Boilermakers",
+        "slug": "purdue-boilermakers-football",
+        "url": "https://www.tickpick.com/ncaa-football/purdue-boilermakers-football-tickets/"
+    },
+    {
+        "name": "Rutgers Scarlet Knights",
+        "slug": "rutgers-scarlet-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/rutgers-scarlet-knights-football-tickets/"
+    },
+    {
+        "name": "UCLA Bruins",
+        "slug": "ucla-bruins-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucla-bruins-football-tickets/"
+    },
+    {
+        "name": "USC Trojans",
+        "slug": "usc-trojans-football",
+        "url": "https://www.tickpick.com/ncaa-football/usc-trojans-football-tickets/"
+    },
+    {
+        "name": "Washington Huskies",
+        "slug": "washington-huskies-football",
+        "url": "https://www.tickpick.com/ncaa-football/washington-huskies-football-tickets/"
+    },
+    {
+        "name": "Wisconsin Badgers",
+        "slug": "wisconsin-badgers-football",
+        "url": "https://www.tickpick.com/ncaa-football/wisconsin-badgers-football-tickets/"
+    },
+    {
+        "name": "Alabama Crimson Tide",
+        "slug": "alabama-crimson-tide-football",
+        "url": "https://www.tickpick.com/ncaa-football/alabama-crimson-tide-football-tickets/"
+    },
+    {
+        "name": "Arkansas Razorbacks",
+        "slug": "arkansas-razorbacks-football",
+        "url": "https://www.tickpick.com/ncaa-football/arkansas-razorbacks-football-tickets/"
+    },
+    {
+        "name": "Auburn Tigers",
+        "slug": "auburn-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/auburn-tigers-football-tickets/"
+    },
+    {
+        "name": "Florida Gators",
+        "slug": "florida-gators-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-gators-football-tickets/"
+    },
+    {
+        "name": "Georgia Bulldogs",
+        "slug": "georgia-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-bulldogs-football-tickets/"
+    },
+    {
+        "name": "Kentucky Wildcats",
+        "slug": "kentucky-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kentucky-wildcats-football-tickets/"
+    },
+    {
+        "name": "LSU Tigers",
+        "slug": "lsu-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/lsu-tigers-football-tickets/"
+    },
+    {
+        "name": "Mississippi Rebels",
+        "slug": "mississippi-rebels-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-rebels-football-tickets/"
+    },
+    {
+        "name": "Mississippi State Bulldogs",
+        "slug": "mississippi-state-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/mississippi-state-bulldogs-football-tickets/"
+    },
+    {
+        "name": "Missouri Tigers",
+        "slug": "missouri-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/missouri-tigers-football-tickets/"
+    },
+    {
+        "name": "Oklahoma Sooners",
+        "slug": "oklahoma-sooners-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-sooners-football-tickets/"
+    },
+    {
+        "name": "South Carolina Gamecocks",
+        "slug": "south-carolina-gamecocks-football",
+        "url": "https://www.tickpick.com/ncaa-football/south-carolina-gamecocks-football-tickets/"
+    },
+    {
+        "name": "Tennessee Volunteers",
+        "slug": "tennessee-volunteers-football",
+        "url": "https://www.tickpick.com/ncaa-football/tennessee-volunteers-football-tickets/"
+    },
+    {
+        "name": "Texas A&M Aggies",
+        "slug": "texas-am-aggies-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-am-aggies-football-tickets/"
+    },
+    {
+        "name": "Texas Longhorns",
+        "slug": "texas-longhorns-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-longhorns-football-tickets/"
+    },
+    {
+        "name": "Vanderbilt Commodores",
+        "slug": "vanderbilt-commodores-football",
+        "url": "https://www.tickpick.com/ncaa-football/vanderbilt-commodores-football-tickets/"
+    },
+    {
+        "name": "Arizona State Sun Devils",
+        "slug": "arizona-state-sun-devils-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-state-sun-devils-football-tickets/"
+    },
+    {
+        "name": "Arizona Wildcats",
+        "slug": "arizona-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/arizona-wildcats-football-tickets/"
+    },
+    {
+        "name": "Baylor Bears",
+        "slug": "baylor-bears-football",
+        "url": "https://www.tickpick.com/ncaa-football/baylor-bears-football-tickets/"
+    },
+    {
+        "name": "BYU Cougars",
+        "slug": "byu-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/byu-cougars-football-tickets/"
+    },
+    {
+        "name": "Cincinnati Bearcats",
+        "slug": "cincinnati-bearcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/cincinnati-bearcats-football-tickets/"
+    },
+    {
+        "name": "Colorado Buffaloes",
+        "slug": "colorado-buffaloes-football",
+        "url": "https://www.tickpick.com/ncaa-football/colorado-buffaloes-football-tickets/"
+    },
+    {
+        "name": "Houston Cougars",
+        "slug": "houston-cougars-football",
+        "url": "https://www.tickpick.com/ncaa-football/houston-cougars-football-tickets/"
+    },
+    {
+        "name": "Iowa State Cyclones",
+        "slug": "iowa-state-cyclones-football",
+        "url": "https://www.tickpick.com/ncaa-football/iowa-state-cyclones-football-tickets/"
+    },
+    {
+        "name": "Kansas Jayhawks",
+        "slug": "kansas-jayhawks-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-jayhawks-football-tickets/"
+    },
+    {
+        "name": "Kansas State Wildcats",
+        "slug": "kansas-state-wildcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/kansas-state-wildcats-football-tickets/"
+    },
+    {
+        "name": "Oklahoma State Cowboys",
+        "slug": "oklahoma-state-cowboys-football",
+        "url": "https://www.tickpick.com/ncaa-football/oklahoma-state-cowboys-football-tickets/"
+    },
+    {
+        "name": "TCU Horned Frogs",
+        "slug": "tcu-horned-frogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/tcu-horned-frogs-football-tickets/"
+    },
+    {
+        "name": "Texas Tech Red Raiders",
+        "slug": "texas-tech-red-raiders-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-tech-red-raiders-football-tickets/"
+    },
+    {
+        "name": "UCF Knights",
+        "slug": "ucf-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/ucf-knights-football-tickets/"
+    },
+    {
+        "name": "Utah Utes",
+        "slug": "utah-utes-football",
+        "url": "https://www.tickpick.com/ncaa-football/utah-utes-football-tickets/"
+    },
+    {
+        "name": "West Virginia Mountaineers",
+        "slug": "west-virginia-mountaineers-football",
+        "url": "https://www.tickpick.com/ncaa-football/west-virginia-mountaineers-football-tickets/"
+    },
+    {
+        "name": "Akron Zips",
+        "slug": "akron-zips-football",
+        "url": "https://www.tickpick.com/ncaa-football/akron-zips-football-tickets/"
+    },
+    {
+        "name": "Ball State Cardinals",
+        "slug": "ball-state-cardinals-football",
+        "url": "https://www.tickpick.com/ncaa-football/ball-state-cardinals-football-tickets/"
+    },
+    {
+        "name": "Bowling Green Falcons Football",
+        "url": "https://www.tickpick.com/college/bowling-green-falcons-football-tickets/"
+    },
+    {
+        "name": "Buffalo Bulls",
+        "slug": "buffalo-bulls-football",
+        "url": "https://www.tickpick.com/ncaa-football/buffalo-bulls-football-tickets/"
+    },
+    {
+        "name": "Central Michigan Chippewas",
+        "slug": "central-michigan-chippewas-football",
+        "url": "https://www.tickpick.com/ncaa-football/central-michigan-chippewas-football-tickets/"
+    },
+    {
+        "name": "Eastern Michigan Eagles",
+        "slug": "eastern-michigan-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/eastern-michigan-eagles-football-tickets/"
+    },
+    {
+        "name": "Kent State Golden Flashes",
+        "slug": "kent-state-golden-flashes-football",
+        "url": "https://www.tickpick.com/ncaa-football/kent-state-golden-flashes-football-tickets/"
+    },
+    {
+        "name": "Miami Redhawks",
+        "slug": "miami-redhawks-football",
+        "url": "https://www.tickpick.com/ncaa-football/miami-redhawks-football-tickets/"
+    },
+    {
+        "name": "Northern Illinois Huskies",
+        "slug": "northern-illinois-huskies-football",
+        "url": "https://www.tickpick.com/ncaa-football/northern-illinois-huskies-football-tickets/"
+    },
+    {
+        "name": "Ohio Bobcats",
+        "slug": "ohio-bobcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/ohio-bobcats-football-tickets/"
+    },
+    {
+        "name": "Toledo Rockets",
+        "slug": "toledo-rockets-football",
+        "url": "https://www.tickpick.com/ncaa-football/toledo-rockets-football-tickets/"
+    },
+    {
+        "name": "Western Michigan Broncos",
+        "slug": "western-michigan-broncos-football",
+        "url": "https://www.tickpick.com/ncaa-football/western-michigan-broncos-football-tickets/"
+    },
+    {
+        "name": "Air Force Falcons",
+        "slug": "air-force-falcons-football",
+        "url": "https://www.tickpick.com/ncaa-football/air-force-falcons-football-tickets/"
+    },
+    {
+        "name": "Boise State Broncos",
+        "slug": "boise-state-broncos-football",
+        "url": "https://www.tickpick.com/ncaa-football/boise-state-broncos-football-tickets/"
+    },
+    {
+        "name": "Colorado State Rams",
+        "slug": "colorado-state-rams-football",
+        "url": "https://www.tickpick.com/ncaa-football/colorado-state-rams-football-tickets/"
+    },
+    {
+        "name": "Fresno State Bulldogs",
+        "slug": "fresno-state-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/fresno-state-bulldogs-football-tickets/"
+    },
+    {
+        "name": "Hawaii Warriors",
+        "slug": "hawaii-warriors-football",
+        "url": "https://www.tickpick.com/ncaa-football/hawaii-warriors-football-tickets/"
+    },
+    {
+        "name": "Nevada Wolf Pack",
+        "slug": "nevada-wolf-pack-football",
+        "url": "https://www.tickpick.com/ncaa-football/nevada-wolf-pack-football-tickets/"
+    },
+    {
+        "name": "New Mexico Lobos",
+        "slug": "new-mexico-lobos-football",
+        "url": "https://www.tickpick.com/ncaa-football/new-mexico-lobos-football-tickets/"
+    },
+    {
+        "name": "San Diego State Aztecs",
+        "slug": "san-diego-state-aztecs-football",
+        "url": "https://www.tickpick.com/ncaa-football/san-diego-state-aztecs-football-tickets/"
+    },
+    {
+        "name": "San Jose State Spartans",
+        "slug": "san-jose-state-spartans-football",
+        "url": "https://www.tickpick.com/ncaa-football/san-jose-state-spartans-football-tickets/"
+    },
+    {
+        "name": "UNLV Rebels",
+        "slug": "unlv-rebels-football",
+        "url": "https://www.tickpick.com/ncaa-football/unlv-rebels-football-tickets/"
+    },
+    {
+        "name": "Utah State Aggies",
+        "slug": "utah-state-aggies-football",
+        "url": "https://www.tickpick.com/ncaa-football/utah-state-aggies-football-tickets/"
+    },
+    {
+        "name": "Wyoming Cowboys",
+        "slug": "wyoming-cowboys-football",
+        "url": "https://www.tickpick.com/ncaa-football/wyoming-cowboys-football-tickets/"
+    },
+    {
+        "name": "Army West Point Black Knights",
+        "slug": "army-west-point-black-knights-football",
+        "url": "https://www.tickpick.com/ncaa-football/army-west-point-black-knights-football-tickets/"
+    },
+    {
+        "name": "East Carolina Pirates",
+        "slug": "east-carolina-pirates-football",
+        "url": "https://www.tickpick.com/ncaa-football/east-carolina-pirates-football-tickets/"
+    },
+    {
+        "name": "Florida Atlantic Owls",
+        "slug": "florida-atlantic-owls-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-atlantic-owls-football-tickets/"
+    },
+    {
+        "name": "Memphis Tigers",
+        "slug": "memphis-tigers-football",
+        "url": "https://www.tickpick.com/ncaa-football/memphis-tigers-football-tickets/"
+    },
+    {
+        "name": "Navy Midshipmen",
+        "slug": "navy-midshipmen-football",
+        "url": "https://www.tickpick.com/ncaa-football/navy-midshipmen-football-tickets/"
+    },
+    {
+        "name": "North Carolina Charlotte 49ers",
+        "slug": "north-carolina-charlotte-49ers-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-carolina-charlotte-49ers-football-tickets/"
+    },
+    {
+        "name": "North Texas Mean Green",
+        "slug": "north-texas-mean-green-football",
+        "url": "https://www.tickpick.com/ncaa-football/north-texas-mean-green-football-tickets/"
+    },
+    {
+        "name": "Rice Owls",
+        "slug": "rice-owls-football",
+        "url": "https://www.tickpick.com/ncaa-football/rice-owls-football-tickets/"
+    },
+    {
+        "name": "South Florida Bulls",
+        "slug": "south-florida-bulls-football",
+        "url": "https://www.tickpick.com/ncaa-football/south-florida-bulls-football-tickets/"
+    },
+    {
+        "name": "Temple Owls",
+        "slug": "temple-owls-football",
+        "url": "https://www.tickpick.com/ncaa-football/temple-owls-football-tickets/"
+    },
+    {
+        "name": "Tulane Green Wave",
+        "slug": "tulane-green-wave-football",
+        "url": "https://www.tickpick.com/ncaa-football/tulane-green-wave-football-tickets/"
+    },
+    {
+        "name": "Tulsa Golden Hurricane",
+        "slug": "tulsa-golden-hurricane-football",
+        "url": "https://www.tickpick.com/ncaa-football/tulsa-golden-hurricane-football-tickets/"
+    },
+    {
+        "name": "UAB Blazers",
+        "slug": "uab-blazers-football",
+        "url": "https://www.tickpick.com/ncaa-football/uab-blazers-football-tickets/"
+    },
+    {
+        "name": "UTSA Roadrunners",
+        "slug": "utsa-roadrunners-football",
+        "url": "https://www.tickpick.com/ncaa-football/utsa-roadrunners-football-tickets/"
+    },
+    {
+        "name": "Appalachian State Mountaineers",
+        "slug": "appalachian-state-mountaineers-football",
+        "url": "https://www.tickpick.com/ncaa-football/appalachian-state-mountaineers-football-tickets/"
+    },
+    {
+        "name": "Arkansas State Red Wolves",
+        "slug": "arkansas-state-red-wolves-football",
+        "url": "https://www.tickpick.com/ncaa-football/arkansas-state-red-wolves-football-tickets/"
+    },
+    {
+        "name": "Coastal Carolina Chanticleers",
+        "slug": "coastal-carolina-chanticleers-football",
+        "url": "https://www.tickpick.com/ncaa-football/coastal-carolina-chanticleers-football-tickets/"
+    },
+    {
+        "name": "Georgia Southern Eagles",
+        "slug": "georgia-southern-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-southern-eagles-football-tickets/"
+    },
+    {
+        "name": "Georgia State Panthers",
+        "slug": "georgia-state-panthers-football",
+        "url": "https://www.tickpick.com/ncaa-football/georgia-state-panthers-football-tickets/"
+    },
+    {
+        "name": "James Madison Dukes",
+        "slug": "james-madison-dukes-football",
+        "url": "https://www.tickpick.com/ncaa-football/james-madison-dukes-football-tickets/"
+    },
+    {
+        "name": "Louisiana-Lafayette Ragin' Cajuns",
+        "slug": "louisiana-lafayette-ragin-cajuns-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisiana-lafayette-ragin-cajuns-football-tickets/"
+    },
+    {
+        "name": "Louisiana-Monroe Warhawks",
+        "slug": "louisiana-monroe-warhawks-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisiana-monroe-warhawks-football-tickets/"
+    },
+    {
+        "name": "Marshall Thundering Herd",
+        "slug": "marshall-thundering-herd-football",
+        "url": "https://www.tickpick.com/ncaa-football/marshall-thundering-herd-football-tickets/"
+    },
+    {
+        "name": "Old Dominion Monarchs",
+        "slug": "old-dominion-monarchs-football",
+        "url": "https://www.tickpick.com/ncaa-football/old-dominion-monarchs-football-tickets/"
+    },
+    {
+        "name": "South Alabama Jaguars",
+        "slug": "south-alabama-jaguars-football",
+        "url": "https://www.tickpick.com/ncaa-football/south-alabama-jaguars-football-tickets/"
+    },
+    {
+        "name": "Southern Miss Golden Eagles",
+        "slug": "southern-miss-golden-eagles-football",
+        "url": "https://www.tickpick.com/ncaa-football/southern-miss-golden-eagles-football-tickets/"
+    },
+    {
+        "name": "Texas State Bobcats",
+        "slug": "texas-state-bobcats-football",
+        "url": "https://www.tickpick.com/ncaa-football/texas-state-bobcats-football-tickets/"
+    },
+    {
+        "name": "Troy Trojans",
+        "slug": "troy-trojans-football",
+        "url": "https://www.tickpick.com/ncaa-football/troy-trojans-football-tickets/"
+    },
+    {
+        "name": "Florida International Panthers",
+        "slug": "florida-international-panthers-football",
+        "url": "https://www.tickpick.com/ncaa-football/florida-international-panthers-football-tickets/"
+    },
+    {
+        "name": "Jacksonville State Gamecocks",
+        "slug": "jacksonville-state-gamecocks-football",
+        "url": "https://www.tickpick.com/ncaa-football/jacksonville-state-gamecocks-football-tickets/"
+    },
+    {
+        "name": "Kennesaw State Owls",
+        "slug": "kennesaw-state-owls-football",
+        "url": "https://www.tickpick.com/ncaa-football/kennesaw-state-owls-football-tickets/"
+    },
+    {
+        "name": "Liberty Flames",
+        "slug": "liberty-flames-football",
+        "url": "https://www.tickpick.com/ncaa-football/liberty-flames-football-tickets/"
+    },
+    {
+        "name": "Louisiana Tech Bulldogs",
+        "slug": "louisiana-tech-bulldogs-football",
+        "url": "https://www.tickpick.com/ncaa-football/louisiana-tech-bulldogs-football-tickets/"
+    },
+    {
+        "name": "Middle Tennessee State Blue Raiders",
+        "slug": "middle-tennessee-state-blue-raiders-football",
+        "url": "https://www.tickpick.com/ncaa-football/middle-tennessee-state-blue-raiders-football-tickets/"
+    },
+    {
+        "name": "New Mexico State Aggies",
+        "slug": "new-mexico-state-aggies-football",
+        "url": "https://www.tickpick.com/ncaa-football/new-mexico-state-aggies-football-tickets/"
+    },
+    {
+        "name": "Sam Houston State Bearkats",
+        "slug": "sam-houston-state-bearkats-football",
+        "url": "https://www.tickpick.com/ncaa-football/sam-houston-state-bearkats-football-tickets/"
+    },
+    {
+        "name": "UTEP Miners",
+        "slug": "utep-miners-football",
+        "url": "https://www.tickpick.com/ncaa-football/utep-miners-football-tickets/"
+    },
+    {
+        "name": "Western Kentucky Hilltoppers",
+        "slug": "western-kentucky-hilltoppers-football",
+        "url": "https://www.tickpick.com/ncaa-football/western-kentucky-hilltoppers-football-tickets/"
+    },
+    {
+        "name": "Notre Dame Fighting Irish",
+        "slug": "notre-dame-fighting-irish-football",
+        "url": "https://www.tickpick.com/ncaa-football/notre-dame-fighting-irish-football-tickets/"
+    },
+    {
+        "name": "UConn Huskies",
+        "slug": "uconn-huskies-football",
+        "url": "https://www.tickpick.com/ncaa-football/uconn-huskies-football-tickets/"
+    },
+    {
+        "name": "UMass Minutemen",
+        "slug": "umass-minutemen-football",
+        "url": "https://www.tickpick.com/ncaa-football/umass-minutemen-football-tickets/"
+    }
+]

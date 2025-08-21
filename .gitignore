@@ -12,3 +12,9 @@ __pycache__/
 
 # Ignore macOS metadata
 .DS_Store
+
+# Installers & build outputs
+dist/
+build/
+packaging/windows/Output/
+*.egg-info/
