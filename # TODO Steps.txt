@@ -1,22 +1,12 @@
 # TODO Steps
 
-## Scrape for low, average, high ticket prices 
-1. Build the scraper - Done!
-2. Test with three teams, pulling low, average, and high prices and ticket number. - Done!
-3. In the tickpick_pricer - ensure that the IP address changes every 50 scrapes 
-*touchup* - Have it print the name of the football team instead of the URL (remove the - Cheap and No Hidden Fees part ) - Done!
-
-## Create system to run major things annually
-
-## Create system to run price scraper daily (4x a day)
-1. Have it record the current time and date
-2. IF there is a .csv file already available, add the prices to the file systematically
-IF not .csv file already available, make one 
-3. IF the event already exists in the .csv file, add the prices, time stamp, and date systematically
-IF not, then create a new event
-4. Delete whatever .csv file the tickpick_pricer created
+## Need to systematically update the modeler (maybe with the weekly_update.py?)
 
 ## Send report
 1. Build a weekly report
 2. Create an action to send emails to me automatically
 3. Save the report in the reports folder
+
+## Make this compatible with Windows and Raspberry Pi 
+
+## Optional - Create a graph that tracks current ticket prices
