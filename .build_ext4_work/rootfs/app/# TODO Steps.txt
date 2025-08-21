@@ -1,0 +1,12 @@
+# TODO Steps
+
+## Need to systematically update the modeler (maybe with the weekly_update.py?)
+
+## Send report
+1. Build a weekly report
+2. Create an action to send emails to me automatically
+3. Save the report in the reports folder
+
+## Make this compatible with Windows and Raspberry Pi 
+
+## Optional - Create a graph that tracks current ticket prices

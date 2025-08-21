@@ -1,0 +1,67 @@
+name: Build Installers (tag)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write  # needed to create/upload release assets
+
+jobs:
+  linux-ext4:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install deps (rsync, e2fsprogs, imagemagick)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync e2fsprogs imagemagick
+
+      - name: Build ext4 image
+        run: |
+          bash packaging/build_ext4.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfb-tix-ext4
+          path: dist/cfb-tix.ext4
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/cfb-tix.ext4
+          tag_name: ${{ github.ref_name }}
+
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $env:Path += ";C:\Program Files (x86)\Inno Setup 6"
+          iscc "packaging/windows/installer.iss" /DAppVersion="${{ github.ref_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfb-tix-setup
+          path: packaging/windows/Output/cfb-tix-setup.exe
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packaging/windows/Output/cfb-tix-setup.exe
+          tag_name: ${{ github.ref_name }}

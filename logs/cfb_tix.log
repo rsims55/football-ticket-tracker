@@ -1,0 +1,62 @@
+2025-08-21 18:18:50,881 [INFO] Daily snapshot
+2025-08-21 18:18:50,881 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m builders.daily_snapshot
+2025-08-21 18:19:23,815 [INFO] Daily model update: train -> predict
+2025-08-21 18:19:23,815 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.train_price_model
+2025-08-21 18:19:24,731 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.predict_price
+2025-08-21 18:19:26,729 [INFO] Launching GUI…
+2025-08-21 18:19:26,742 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:19:26,743 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:19:26,743 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:19:26,743 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:19:26,744 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:19:26,745 [INFO] Added job "check_and_build_annual" to job store "default"
+2025-08-21 18:19:26,745 [INFO] Added job "weekly_refresh" to job store "default"
+2025-08-21 18:19:26,746 [INFO] Added job "run_daily_snapshot" to job store "default"
+2025-08-21 18:19:26,746 [INFO] Added job "daily_model_update" to job store "default"
+2025-08-21 18:19:26,746 [INFO] Added job "sunday_report" to job store "default"
+2025-08-21 18:19:26,746 [INFO] Scheduler started
+2025-08-21 18:19:26,746 [INFO] Scheduler has been shut down
+2025-08-21 18:21:32,986 [INFO] Daily snapshot
+2025-08-21 18:21:32,986 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m builders.daily_snapshot
+2025-08-21 18:21:39,201 [INFO] Daily model update: train -> predict
+2025-08-21 18:21:39,201 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.train_price_model
+2025-08-21 18:21:40,405 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.predict_price
+2025-08-21 18:21:42,841 [INFO] Launching GUI…
+2025-08-21 18:21:42,845 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:21:42,845 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:21:42,845 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:21:42,846 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:21:42,846 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:21:42,846 [INFO] Added job "check_and_build_annual" to job store "default"
+2025-08-21 18:21:42,847 [INFO] Added job "weekly_refresh" to job store "default"
+2025-08-21 18:21:42,847 [INFO] Added job "run_daily_snapshot" to job store "default"
+2025-08-21 18:21:42,847 [INFO] Added job "daily_model_update" to job store "default"
+2025-08-21 18:21:42,847 [INFO] Added job "sunday_report" to job store "default"
+2025-08-21 18:21:42,847 [INFO] Scheduler started
+2025-08-21 18:21:42,848 [INFO] JOB daily_snapshot       Next run: 2025-08-22 00:00:00-04:00
+2025-08-21 18:21:42,848 [INFO] JOB annual_check         Next run: 2025-08-22 00:30:00-04:00
+2025-08-21 18:21:42,848 [INFO] JOB daily_model_update   Next run: 2025-08-22 06:00:00-04:00
+2025-08-21 18:21:42,848 [INFO] JOB sunday_report        Next run: 2025-08-24 06:30:00-04:00
+2025-08-21 18:21:42,848 [INFO] JOB weekly_refresh       Next run: 2025-08-27 06:00:00-04:00
+2025-08-21 18:21:42,848 [INFO] Scheduler has been shut down
+2025-08-21 18:26:17,468 [INFO] Daily snapshot
+2025-08-21 18:26:17,468 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m builders.daily_snapshot
+2025-08-21 18:26:25,783 [INFO] Daily model update: train -> predict
+2025-08-21 18:26:25,784 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.train_price_model
+2025-08-21 18:26:26,928 [INFO] Running: /home/randisims/Enter/envs/py3-TF2.0/bin/python -m modeling.predict_price
+2025-08-21 18:26:29,251 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:26:29,252 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:26:29,252 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:26:29,252 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:26:29,252 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-08-21 18:26:29,253 [INFO] Added job "check_and_build_annual" to job store "default"
+2025-08-21 18:26:29,254 [INFO] Added job "weekly_refresh" to job store "default"
+2025-08-21 18:26:29,254 [INFO] Added job "run_daily_snapshot" to job store "default"
+2025-08-21 18:26:29,254 [INFO] Added job "daily_model_update" to job store "default"
+2025-08-21 18:26:29,254 [INFO] Added job "sunday_report" to job store "default"
+2025-08-21 18:26:29,254 [INFO] Scheduler started
+2025-08-21 18:26:29,255 [INFO] JOB daily_snapshot       Next run: 2025-08-22 00:00:00-04:00
+2025-08-21 18:26:29,255 [INFO] JOB annual_check         Next run: 2025-08-22 00:30:00-04:00
+2025-08-21 18:26:29,255 [INFO] JOB daily_model_update   Next run: 2025-08-22 06:00:00-04:00
+2025-08-21 18:26:29,255 [INFO] JOB sunday_report        Next run: 2025-08-24 06:30:00-04:00
+2025-08-21 18:26:29,255 [INFO] JOB weekly_refresh       Next run: 2025-08-27 06:00:00-04:00

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cfb-tix"
+version = "0.1.0"
+description = "College football ticket price daemon + GUI"
+requires-python = ">=3.9"
+dependencies = [
+  "APScheduler>=3.10",
+  "PyQt5>=5.15",
+  "pandas>=2.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cfb_tix", "builders", "fetchers", "gui", "modeling", "reports", "scrapers"]
+
+[project.scripts]
+cfb-tix = "cfb_tix.daemon:main"
+cfb-tix-gui = "cfb_tix.daemon:gui"
