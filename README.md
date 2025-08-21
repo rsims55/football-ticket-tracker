@@ -1,242 +1,182 @@
 # 🏈 College Football Ticket Price Forecasting
 
-This project forecasts college football ticket prices and identifies the **optimal time and date to purchase tickets** for any given game. It combines scraped game data, rankings, stadium info, rivalries, and pricing snapshots, and will evolve into a fully supervised machine learning pipeline.
+Forecasts college football ticket prices and identifies the **optimal date & time to buy**. The app merges schedules, rankings, stadium capacity, rivalry flags, and live price snapshots, then trains a model to predict price trajectories and surface the best purchase window.
 
 ---
 
 ## 🔧 Features
 
-- ✅ **Enriched dataset builder**: pulls and merges game schedule, team rankings, venue size, rivalries, and pricing data  
-- ⏱ **Scheduled price snapshots**: collects pricing data 4× daily  
-- 📊 **Ranking fetcher**: fetches AP/Playoff rankings (with fallback to Wikipedia)  
-- 🧠 **ML model**: predicts lowest ticket price using RandomForest  
-- 🔍 **Optimal purchase time estimator**: simulates price predictions at all (date, time) combinations pre-game  
-- 📈 **Feature importance visualization**  
-- 🔁 **Postseason retraining plan**: build supervised models on true pricing outcomes  
+- ✅ **Data builders**: schedules, rankings (CFD + Wikipedia fallback), stadiums, rivalries  
+- ⏱ **Snapshots 4× daily**: logs lowest & average prices + listings from TickPick  
+- 🧠 **Daily modeling**: trains & predicts price trajectories; writes optimal purchase rows  
+- 📨 **Weekly report**: accuracy summary emailed Sundays  
+- 🖥️ **GUI (PyQt5)**: pick a matchup, see predictions, countdown to the optimal time  
+- 🏃 **Daemon**: background scheduler keeps running even if the GUI is closed
 
 ---
 
-## 📁 Project Structure
+## 📁 Project Structure (repo)
 
-```
-cfb-ticket-model/
-├── data/                        # Pricing snapshots, enriched schedule
-├── models/                      # Trained model artifacts
+```text
+cfb-ticket-tracker/
+├── assets/
+│   └── icons/                         # cfb-tix.svg, cfb-tix.ico
+├── data/
+│   ├── annual/                        # stadiums_YYYY.csv, rivalries_YYYY.csv
+│   ├── weekly/                        # full_YYYY_schedule.csv, wiki_rankings_YYYY.csv
+│   ├── daily/                         # price_snapshots.csv
+│   ├── predicted/                     # predicted_prices_optimal.csv
+│   └── permanent/                     # team_aliases.json, tickpick_teams.txt
+├── logs/                              # local logs (dev runs)
+├── models/                            # trained model(s) (dev runs)
+├── packaging/
+│   ├── build_ext4.sh                  # Linux ext4 image builder
+│   └── windows/
+│       ├── install_win.ps1
+│       └── installer.iss
+├── reports/
+│   └── weekly/
+├── scripts/
+│   └── reset_linux.sh
 ├── src/
+│   ├── builders/                      # annual + weekly setup & daily snapshot
+│   │   ├── annual_setup.py
+│   │   ├── daily_snapshot.py
+│   │   └── weekly_update.py
+│   ├── cfb_tix/                       # daemon + entry points
+│   │   ├── daemon.py                  # `cfb-tix` (daemon) / `cfb-tix-gui` (GUI only)
+│   │   ├── __init__.py
+│   │   └── __main__.py
 │   ├── fetchers/
-│   │   ├── rankings_fetcher.py      # Ranking puller (CFD + Wikipedia)
-│   │   ├── schedule_fetcher.py      # Game schedule puller
-│   │   └── ticket_pricer.py         # Live/mock pricing logic
-│   ├── scrapers/
-│   │   ├── rivalry_scraper.py       # Known rivalries
-│   │   └── stadium_scraper.py       # Venue capacity info
-│   ├── preparation/
-│   │   └── build_dataset.py         # Build enriched schedule
-│   ├── loggers/
-│   │   └── price_logger.py          # Collect ticket prices 4× daily
-│   ├── modeling/
-│   │   ├── train_price_model.py     # Train ML model
-│   │   ├── predict_price.py         # Predict prices for all games
-│   │   └── evaluate_predictions.py  # Compare predicted vs actual prices
-│   ├── reports/
-│   │   ├── generate_weekly_report.py  # Summarize model accuracy + insights
-│   │   └── send_email.py              # Email the report to stakeholders
+│   │   ├── fetch_ncaa_events.py
+│   │   ├── rankings_fetcher.py
+│   │   └── schedule_fetcher.py
 │   ├── gui/
-│   │   └── ticket_predictor_gui.py    # GUI to select teams and view predictions
-│   └── __init__.py
-├── .env                        # API keys and environment settings
-├── requirements.txt            # Python dependencies
-└── README.md                   # You are here
+│   │   └── ticket_predictor_gui.py
+│   ├── modeling/
+│   │   ├── train_price_model.py
+│   │   ├── predict_price.py
+│   │   └── evaluate_predictions.py
+│   ├── reports/
+│   │   ├── generate_weekly_report.py
+│   │   └── send_email.py
+│   └── scrapers/
+│       ├── rivalry_scraper.py
+│       ├── stadium_scraper.py
+│       └── tickpick_pricer.py
+├── .env (optional)
+├── pyproject.toml
+└── README.md
 ```
 
----
-
-## 🔄 Project Flow
-
-### Flow
-Build_Dataset <
-1. Schedule_fetcher  
-2. Rankings_fetcher  
-3. Rivalry_scraper  
-4. Stadium_scraper  
-5. Ticket_pricer <
-   5a. Fetch_ncaa_events (dependent on schedule_fetcher)
-
-<details>
-<summary>Click to view Mermaid diagram</summary>
-
-```mermaid
-graph TD
-
-  %% === Data Fetching & Scraping ===
-  A1[fetchers/schedule_fetcher.py]
-  A2[fetchers/rankings_fetcher.py]
-  A3[scrapers/stadium_scraper.py]
-  A4[scrapers/rivalry_scraper.py]
-  A5[fetchers/ticket_pricer.py]
-
-  %% === Dataset Building ===
-  B1[preparation/build_dataset.py]
-
-  %% === Daily Logging ===
-  L1[loggers/price_logger.py]
-  L2[data/price_snapshots.csv]
-
-  %% === Modeling ===
-  M1[modeling/train_price_model.py]
-  M2[models/ticket_price_model.pkl]
-  M3[modeling/predict_price.py]
-  M4[data/predicted_prices_optimal.csv]
-  M5[modeling/evaluate_predictions.py]
-
-  %% === Reports ===
-  R1[reports/generate_weekly_report.py]
-  R2[reports/send_email.py]
-  R3[weekly_report.pdf]
-
-  %% === GUI ===
-  G1[gui/ticket_predictor_gui.py]
-
-  %% === Flow Arrows ===
-  A1 --> B1
-  A2 --> B1
-  A3 --> B1
-  A4 --> B1
-  A5 --> B1
-
-  B1 --> L1
-  L1 --> L2
-
-  B1 --> M3
-  B1 --> G1
-
-  M1 --> M2
-  M2 --> M3
-  M3 --> M4
-  M4 --> G1
-  M4 --> M5
-
-  M5 --> R1
-  R1 --> R2
-  R1 --> R3
-```
-
-</details>
-
----
-
-## ⚙️ Setup
-
-1. Clone the repo:
-
-```bash
-git clone https://github.com/YOUR_USERNAME/cfb-ticket-model.git
-cd cfb-ticket-model
-```
-
-2. Create your `.env` file:
-
-```
-CFD_API_KEY=your_cfd_api_key
-SEATGEEK_CLIENT_ID=your_seatgeek_id
-SEATGEEK_CLIENT_SECRET=your_seatgeek_secret
-```
-
-3. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. Run the pipeline (in order):
-
-```bash
-python src/preparation/build_dataset.py
-python src/loggers/price_logger.py
-python src/modeling/train_price_model.py
-python src/modeling/predict_price.py
-```
-
----
-
-## 📆 Cron Schedule (Recommended)
-
-```cron
-# Rankings - Mon/Wed at 7am
-0 7 * * 1,3 /usr/bin/python3 /full/path/to/src/fetchers/rankings_fetcher.py
-
-# Prices - 4× daily
-0 6,12,18,0 * * * /usr/bin/python3 /full/path/to/src/loggers/price_logger.py
-```
+> **Installed app (Linux)** lives under `~/.local/share/cfb-tix/app/` with **data** in `~/.local/share/cfb-tix/app/data/` and **logs** in `~/.local/share/cfb-tix/app/logs/`.
 
 ---
 
 ## 💾 Downloading & Installing
 
 ### Linux (ext4 image)
-1. Download **`cfb-tix.ext4`** from the latest GitHub Release.
-2. Mount it:
-   ```bash
-   mkdir -p ~/mnt/cfb-tix
-   sudo mount -o loop,ro cfb-tix.ext4 ~/mnt/cfb-tix
-   ```
-3. Run the installer:
-   ```bash
-   bash ~/mnt/cfb-tix/install_linux.sh
-   ```
-4. Unmount:
-   ```bash
-   sudo umount ~/mnt/cfb-tix
-   rmdir ~/mnt/cfb-tix
-   ```
 
-**What you get**
-- Background service:  
-  `~/.config/systemd/user/cfb-tix.service` → `<venv>/bin/python -m cfb_tix --no-gui`
-- GUI launcher: Applications menu → **“CFB Tickets (GUI)”**
+1) Download **`cfb-tix.ext4`** from the latest GitHub Release.  
+2) Mount and run the installer (autostart enabled by default):
+```bash
+mkdir -p ~/mnt/cfb-tix
+sudo mount -o loop,ro cfb-tix.ext4 ~/mnt/cfb-tix
+bash ~/mnt/cfb-tix/install_linux.sh
+# or opt out of autostart:
+bash ~/mnt/cfb-tix/install_linux.sh --no-autostart
+sudo umount ~/mnt/cfb-tix && rmdir ~/mnt/cfb-tix
+```
+
+If the GUI needs Qt/XCB libs on your distro:
+```bash
+sudo apt-get update && sudo apt-get install -y \
+  libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-shm0
+```
+
+**What you get (Linux):**
+- **Daemon service (user)**: `~/.config/systemd/user/cfb-tix.service` → runs `cfb-tix --no-gui`  
+- **GUI launcher**: Applications menu → **“CFB Tickets (GUI)”**  
+- **Autostart toggle**: `cfb-tix autostart --enable|--disable|--status`
 
 ### Windows (.exe)
-1. Download **`cfb-tix-setup.exe`** from the latest GitHub Release.
-2. Run it (no admin needed). The installer will:
-   - Copy app to `%LocalAppData%\cfb-tix\app`
-   - Create a venv in `%LocalAppData%\cfb-tix\venv`
-   - Install package in editable mode
-   - Register Task Scheduler job **“CFB Tickets”** (headless daemon on logon)
-   - Add Start Menu shortcut **“CFB Tickets (GUI)”**
 
-Uninstalling removes both the task and the shortcut.
+1) Download **`cfb-tix-setup.exe`** from the latest GitHub Release and run it.  
+2) The installer places the app in `%LocalAppData%\cfb-tix\app`, creates `%LocalAppData%\cfb-tix\venv`, registers a **Task Scheduler** job (daemon on logon), and adds a **Start Menu** shortcut “CFB Tickets (GUI)”.
 
 ---
 
-## 📦 Package Contents
+## ▶️ Running
 
-- **Packages included**: `cfb_tix`, `builders`, `fetchers`, `gui`, `modeling`, `reports`, `scrapers`  
-- **Entry points**
-  - `cfb-tix` → background scheduler/daemon (headless)  
-  - `cfb-tix --no-gui` → headless only  
-  - `cfb-tix-gui` → GUI only  
+**Entry points**
+- `cfb-tix` — run daemon (scheduler). Launches GUI unless `--no-gui`  
+- `cfb-tix --no-gui` — headless scheduler service  
+- `cfb-tix-gui` — GUI only (no scheduler)
 
-**Schedules (America/New_York)**:  
-- Annual check: May 1 @ 00:30  
-- Weekly refresh: Wed @ 06:00  
-- Daily snapshots: 00:00, 06:00, 12:00, 18:00  
-- Daily model update: 06:00  
-- Sunday report: 06:30  
+**Quick checks (Linux):**
+```bash
+pgrep -fa 'cfb[-_]tix'                           # confirm the process is running
+tail -n 200 ~/.local/share/cfb-tix/app/logs/cfb_tix.log
+```
 
----
-
-## 🧠 Future Plans
-
-- Retrain model after each game using true outcomes  
-
----
-
-## 🤝 Contributing
-
-If you're passionate about sports analytics or modeling dynamic prices, feel free to submit PRs or ideas!
+**Autostart (Linux/systemd user service):**
+```bash
+cfb-tix autostart --enable
+cfb-tix autostart --disable
+cfb-tix autostart --status
+```
 
 ---
 
-## 📄 License
+## ⏰ Built-in Schedules (America/New_York)
 
-@RandiSims2025
+- **Annual check**: daily @ **00:30** (ensure current-year files; drop prior-year after May 1)  
+- **Weekly refresh**: **Wed 06:00** (schedule + rankings)  
+- **Daily snapshots**: **00:00, 06:00, 12:00, 18:00** (prices)  
+- **Daily modeling**: **06:00** (train → predict)  
+- **Sunday report**: **Sun 06:30** (evaluate + weekly report + email)
+
+---
+
+## 🧪 Dev Quickstart
+
+```bash
+# From repo root
+python3 -m venv .venv && source .venv/bin/activate
+pip install -U pip wheel setuptools
+pip install -e .  # installs `cfb-tix` & deps via pyproject
+
+# Optional .env for external APIs
+# CFD_API_KEY=...
+# SEATGEEK_CLIENT_ID=...
+# SEATGEEK_CLIENT_SECRET=...
+
+# Manual run (dev)
+python -m cfb_tix --no-gui
+```
+
+**Key runtime deps** (packaged): `joblib`, `scikit-learn` (plus transitive `scipy`, `threadpoolctl`).
+
+---
+
+## 🔍 Troubleshooting
+
+```bash
+# Process alive?
+pgrep -fa 'cfb[-_]tix' || echo "cfb-tix not running"
+
+# Tail the daemon log
+tail -f ~/.local/share/cfb-tix/app/logs/cfb_tix.log
+
+# Re-run model steps from the installed app
+APP=~/.local/share/cfb-tix/app
+PY=~/.local/share/cfb-tix/venv/bin/python
+cd "$APP" && "$PY" -m modeling.train_price_model && "$PY" -m modeling.predict_price
+```
+
+---
+
+## 📜 License
+
+© 2025 Randi Sims. All rights reserved.

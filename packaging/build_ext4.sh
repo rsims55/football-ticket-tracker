@@ -3,7 +3,7 @@
 # Build a self-contained ext4 image with:
 #  - /app         → your repo (clean copy, excludes junk)
 #  - /assets/...  → linux icon
-#  - /install_linux.sh → idempotent installer (venv + systemd user service + desktop launcher)
+#  - /install_linux.sh → idempotent installer (venv + autostart toggle + desktop launcher)
 #
 # Output: dist/cfb-tix.ext4
 set -euo pipefail
@@ -56,17 +56,38 @@ VENV_DIR="${INSTALL_BASE}/venv"
 APP_DIR="${INSTALL_BASE}/app"
 ICON_DEST_BASE="${HOME}/.local/share/icons/hicolor/scalable/apps"
 DESKTOP_DIR="${HOME}/.local/share/applications"
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
-SERVICE_NAME="${PKG_NAME}.service"
 
-# --- IMPORTANT: copy from the mounted image's own dir ---
+# --- source locations inside mounted image ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_SRC="${SCRIPT_DIR}/app"
 ICON_SRC="${SCRIPT_DIR}/assets/icons/cfb-tix.svg"
 
-mkdir -p "${INSTALL_BASE}" "${ICON_DEST_BASE}" "${DESKTOP_DIR}" "${SYSTEMD_USER_DIR}"
+# --- flags ---
+AUTOSTART=1
+usage() {
+  cat <<EOF
+${APP_NAME} — Linux installer
 
-# Copy/refresh app to user space (no root needed)
+Usage:
+  ./install_linux.sh [--no-autostart]
+
+Options:
+  --no-autostart   Install without enabling login autostart (systemd --user)
+EOF
+}
+
+for arg in "${@:-}"; do
+  case "$arg" in
+    --no-autostart) AUTOSTART=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $arg"; usage; exit 2 ;;
+  esac
+done
+
+# --- ensure dirs ---
+mkdir -p "${INSTALL_BASE}" "${DESKTOP_DIR}" "${ICON_DEST_BASE}"
+
+# --- copy app payload ---
 if [[ -d "${APP_SRC}" ]]; then
   rsync -a --delete "${APP_SRC}/" "${APP_DIR}/" \
     --exclude ".git" --exclude "dist" --exclude "build" \
@@ -75,14 +96,13 @@ else
   echo "⚠️  Source app directory not found at ${APP_SRC} — continuing (maybe already installed)."
 fi
 
-# venv
+# --- venv ---
 if [[ ! -d "${VENV_DIR}" ]]; then
   python3 -m venv "${VENV_DIR}"
 fi
-# upgrade pip, wheel, setuptools (quiet)
 "${VENV_DIR}/bin/python" -m pip install --upgrade --disable-pip-version-check pip setuptools wheel
 
-# editable install (works for src-layout if pyproject.toml present)
+# --- editable install of the app ---
 if [[ -f "${APP_DIR}/pyproject.toml" || -f "${APP_DIR}/setup.py" ]]; then
   pushd "${APP_DIR}" >/dev/null
   "${VENV_DIR}/bin/pip" install -e .
@@ -93,30 +113,19 @@ else
   exit 1
 fi
 
-# systemd user service for headless daemon
-UNIT_PATH="${SYSTEMD_USER_DIR}/${SERVICE_NAME}"
-cat > "${UNIT_PATH}" <<EOF
-[Unit]
-Description=${APP_NAME} background scheduler (user)
-After=default.target
+# --- autostart (systemd --user) via app CLI; default ON, opt-out with --no-autostart ---
+if (( AUTOSTART == 1 )); then
+  if "${VENV_DIR}/bin/cfb-tix" autostart --enable; then
+    echo "✅ Autostart enabled (systemd --user)."
+  else
+    echo "⚠️ Autostart not enabled (systemd --user unavailable?). You can run:"
+    echo "   ${VENV_DIR}/bin/cfb-tix autostart --enable"
+  fi
+else
+  echo "ℹ️ Skipped autostart (use later: ${VENV_DIR}/bin/cfb-tix autostart --enable)"
+fi
 
-[Service]
-Type=simple
-Restart=always
-RestartSec=5
-ExecStart=${VENV_DIR}/bin/python -m cfb_tix --no-gui
-WorkingDirectory=${INSTALL_BASE}
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=default.target
-EOF
-
-systemctl --user daemon-reload || true
-systemctl --user enable "${SERVICE_NAME}" || true
-systemctl --user start "${SERVICE_NAME}" || true
-
-# Desktop launcher for GUI
+# --- desktop launcher for GUI ---
 if [[ -f "${ICON_SRC}" ]]; then
   install -m 0644 "${ICON_SRC}" "${ICON_DEST_BASE}/cfb-tix.svg"
 fi
@@ -141,9 +150,10 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 echo "✅ ${APP_NAME} installed."
-echo "• Background service: ${SERVICE_NAME} (systemd --user)"
-echo "• GUI launcher: Applications menu → 'CFB Tickets (GUI)'"
-echo "• Venv: ${VENV_DIR}"
+echo "• App dir: ${APP_DIR}"
+echo "• Venv:    ${VENV_DIR}"
+echo "• GUI:     Applications → 'CFB Tickets (GUI)'"
+echo "• Autostart: $( ((AUTOSTART==1)) && echo Enabled || echo Skipped )"
 EOSH
 chmod +x "${STAGE}/install_linux.sh"
 

@@ -8,6 +8,7 @@ import logging
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from typing import List, Optional
 
 try:
     # Python 3.9+
@@ -37,7 +38,95 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_module(mod: str, args: list[str] | None = None, cwd: Path | None = None) -> None:
+# ===== Startup status announcer ==================================================
+class StatusAnnouncer:
+    """
+    Prints/Logs a clear pre-GUI step-by-step status.
+    Best-effort desktop notifications:
+      • Linux: notify-send (if available)
+      • Windows: PowerShell toast (if available)
+    All failures are swallowed to avoid breaking startup.
+    """
+    def __init__(self, channel: str = "startup"):
+        self.channel = channel
+
+    def _fmt(self, msg: str) -> str:
+        return f"[{self.channel}] {msg}"
+
+    def _notify_linux(self, title: str, body: str) -> None:
+        try:
+            # Use notify-send if available
+            if _which("notify-send"):
+                subprocess.run(["notify-send", "--app-name=CFB Tickets", title, body],
+                               check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+    def _notify_windows(self, title: str, body: str) -> None:
+        try:
+            # Try PowerShell toast (Windows 10+). Non-fatal if it fails.
+            ps = r"""
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
+            $xml = @"
+            <toast>
+              <visual>
+                <binding template="ToastGeneric">
+                  <text>{0}</text>
+                  <text>{1}</text>
+                </binding>
+              </visual>
+            </toast>
+"@
+            $xml = [string]::Format($xml, $args[0], $args[1])
+            $doc = New-Object Windows.Data.Xml.Dom.XmlDocument
+            $doc.LoadXml($xml)
+            $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
+            $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("CFB Tickets")
+            $notifier.Show($toast)
+            """
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps, title, body],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+    def _notify(self, title: str, body: str) -> None:
+        if sys.platform.startswith("linux"):
+            self._notify_linux(title, body)
+        elif os.name == "nt":
+            self._notify_windows(title, body)
+        # macOS not implemented — console/logs are sufficient
+
+    def step(self, msg: str) -> None:
+        text = self._fmt(f"▶ {msg}")
+        print(text, flush=True)
+        logger.info(text)
+        self._notify("CFB Tickets: Starting…", msg)
+
+    def ok(self, msg: str = "Done") -> None:
+        text = self._fmt(f"✓ {msg}")
+        print(text, flush=True)
+        logger.info(text)
+
+    def fail(self, msg: str) -> None:
+        text = self._fmt(f"✗ {msg}")
+        print(text, flush=True)
+        logger.error(text)
+        self._notify("CFB Tickets: Error", msg)
+
+    def info(self, msg: str) -> None:
+        text = self._fmt(msg)
+        print(text, flush=True)
+        logger.info(text)
+# ================================================================================
+def _which(name: str) -> Optional[str]:
+    from shutil import which
+    return which(name)
+
+
+def run_module(mod: str, args: List[str] | None = None, cwd: Path | None = None) -> None:
     """
     Run a package module as: python -m <mod> [args...] with cwd defaulting to project root.
     Keeps the daemon alive on failure; logs exceptions.
@@ -152,13 +241,43 @@ def main(no_gui: bool = False) -> None:
     except Exception:
         logger.exception("Failed to chdir to project root: %s", ROOT)
 
+    # ---- Pre-GUI status announcer ----
+    say = StatusAnnouncer()
+
     # ---- Startup actions (run immediately on program open) ----
-    check_and_build_annual()
-    ensure_weekly_files_exist()
-    run_daily_snapshot()
-    daily_model_update()
+    try:
+        say.step("Annual data check/build")
+        check_and_build_annual()
+        say.ok("Annual data ready")
+    except Exception:
+        say.fail("Annual data check failed (continuing; see logs)")
+
+    try:
+        say.step("Ensure weekly files")
+        ensure_weekly_files_exist()
+        say.ok("Weekly files ready")
+    except Exception:
+        say.fail("Weekly ensure failed (continuing; see logs)")
+
+    try:
+        say.step("Daily snapshot")
+        run_daily_snapshot()
+        say.ok("Daily snapshot done")
+    except Exception:
+        say.fail("Daily snapshot failed (continuing; see logs)")
+
+    try:
+        say.step("Daily model update (train → predict)")
+        daily_model_update()
+        say.ok("Model updated")
+    except Exception:
+        say.fail("Model update failed (continuing; see logs)")
+
+    # ---- Launch GUI (if requested) AFTER all steps announce ----
     if not no_gui:
+        say.step("Launching GUI")
         launch_gui()
+        say.ok("GUI launched")
 
     # ---- Scheduler wiring ----
     sched = BackgroundScheduler(
@@ -198,9 +317,11 @@ def main(no_gui: bool = False) -> None:
         except KeyboardInterrupt:
             pass
 
+
 def gui():
     """GUI-only launcher: no scheduler, no startup jobs."""
     subprocess.call([sys.executable, "-m", "gui.ticket_predictor_gui"], cwd=str(ROOT))
+
 
 if __name__ == "__main__":
     main(no_gui=("--no-gui" in sys.argv))
