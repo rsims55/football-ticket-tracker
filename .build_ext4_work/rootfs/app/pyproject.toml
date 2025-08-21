@@ -1,25 +1,50 @@
 [build-system]
-requires = ["setuptools>=70", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cfb-tix"
 version = "0.1.0"
-description = "College football ticket price daemon + GUI"
+description = "College Football Ticket Price Tracker"
+readme = "README.md"
 requires-python = ">=3.9"
+authors = [{ name = "Randi Sims" }]
+# Use a proper SPDX identifier if you want to publish; otherwise keep as text.
+license = { text = "Proprietary" }
+
+# Core + GUI/runtime deps (pin Qt a bit for stability)
 dependencies = [
-  "APScheduler>=3.10",
-  "PyQt5>=5.15",
-  "pandas>=2.0",
+  "pandas>=1.5",
+  "numpy>=1.23",
+  "PyQt5>=5.15,<6",
+  "matplotlib>=3.6",
+  "apscheduler>=3.10",
+  "requests>=2.31",
+  "beautifulsoup4>=4.12",
+  "joblib>=1.3",
+  "scikit-learn>=1.5"
 ]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["cfb_tix", "builders", "fetchers", "gui", "modeling", "reports", "scrapers"]
 
 [project.scripts]
 cfb-tix = "cfb_tix.daemon:main"
 cfb-tix-gui = "cfb_tix.daemon:gui"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = [
+  "cfb_tix",
+  "builders",
+  "fetchers",
+  "gui",
+  "modeling",
+  "reports",
+  "scrapers"
+]
+
+# If you ship non-.py files (icons/templates) inside packages:
+[tool.setuptools.package-data]
+cfb_tix = ["**/*.*"]
+gui = ["**/*.*"]
