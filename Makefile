@@ -1,17 +1,51 @@
 # Makefile for CFB Ticket Price Tracker
 
-.PHONY: all ext4 install-linux mount umount clean reset smoke \
-        sync-install sync-now sync-status sync-logs sync-uninstall \
-        data-pull data-push windows-sync-install windows-sync-now
+# ========= OS detection & common vars =========
+ifeq ($(OS),Windows_NT)
+  IS_WINDOWS := 1
+  PYTHON ?= python
+  PS      := powershell -NoProfile -ExecutionPolicy Bypass -Command
+  PSFILE  := powershell -NoProfile -ExecutionPolicy Bypass -File
+else
+  IS_WINDOWS := 0
+  PYTHON ?= python3
+endif
 
+# ========= Default =========
+ifeq ($(IS_WINDOWS),1)
+  .PHONY: all
+  all: win-zip
+else
+  .PHONY: all
+  all: ext4
+endif
+
+.PHONY: help \
+        ext4 install-linux mount umount clean reset smoke \
+        sync-install sync-now sync-status sync-logs sync-uninstall \
+        data-pull data-push \
+        win-zip win-install win-reset win-smoke \
+        win-sync-install win-sync-now win-sync-status win-sync-uninstall
+
+# ========= Common paths =========
 REPO_DIR   ?= $(shell pwd)
 IMG        ?= packaging/dist/cfb-tix.ext4
 MOUNTPOINT ?= $(HOME)/mnt/cfb-tix
 SYNC_TIME  ?= 07:10
-PYTHON     ?= python3
 
-all: ext4
+# Windows artifact path
+WIN_ZIP    ?= packaging/dist/cfb-tix-win.zip
 
+help:
+	@echo "Targets:"
+	@echo "  Default 'all': builds OS-specific artifact (ext4 on Linux/macOS, zip on Windows)"
+	@echo "  Linux:  ext4 install-linux mount umount smoke reset clean"
+	@echo "          sync-install sync-now sync-status sync-logs sync-uninstall"
+	@echo "  Both:   data-pull data-push"
+	@echo "  Win:    win-zip win-install win-reset win-smoke"
+	@echo "          win-sync-install win-sync-now win-sync-status win-sync-uninstall"
+
+# ========= Linux packaging flow =========
 ext4:
 	chmod +x packaging/linux/build_ext4.sh
 	bash packaging/linux/build_ext4.sh
@@ -39,12 +73,12 @@ smoke:
 	@echo "→ Recent logs:"
 	journalctl --user -u cfb-tix.service -n 25 --no-pager || true
 
-clean:
-	rm -rf dist/ .build_ext4_work/ packaging/windows/Output/ packaging/dist/
-
 reset:
 	chmod +x scripts/reset_linux.sh
 	bash scripts/reset_linux.sh
+
+clean:
+	rm -rf dist/ .build_ext4_work/ .build_win_work/ packaging/windows/Output/ packaging/dist/
 
 # ===== CSV sync helpers (Linux) =====
 sync-install:
@@ -70,16 +104,44 @@ sync-uninstall:
 	- systemctl --user daemon-reload
 	@echo "🧹 Removed cfb-tix-sync user timer."
 
-# ===== cross-OS local sync =====
+# ===== Cross-OS local sync (runs in current repo/venv) =====
 data-pull:
 	$(PYTHON) scripts/sync_snapshots.py pull
 
 data-push:
 	$(PYTHON) scripts/sync_snapshots.py pull_push
 
-# ===== Windows helpers =====
-windows-sync-install:
-	powershell -ExecutionPolicy Bypass -File .\packaging\windows\register_sync.ps1 -Repo "$(REPO_DIR)" -At "$(SYNC_TIME)"
+# ========= Windows helpers =========
+# Build distributable zip (Windows analog of ext4 image)
+win-zip:
+	$(PSFILE) .\packaging\windows\build_zip.ps1
 
-windows-sync-now:
-	powershell Start-ScheduledTask -TaskName "CFB-Tix Snapshot Sync"
+# Install into %LOCALAPPDATA%\cfb-tix using your canonical installer
+win-install:
+	$(PSFILE) .\packaging\windows\install_win.ps1 -AppDir "$(REPO_DIR)"
+
+# Uninstall/reset Windows install (kills tasks, removes payload & shortcuts)
+win-reset:
+	$(PSFILE) .\scripts\reset_windows.ps1
+
+# Quick status checks on Windows
+win-smoke:
+	@echo "→ Checking Scheduled Tasks (cfb-tix & sync)…"
+	- $(PS) "Get-ScheduledTask -TaskName 'CFB Tickets','cfb-tix-sync' | Format-Table -AutoSize" || true
+	@echo "→ Checking GUI/daemon stubs exist…"
+	- $(PS) "Get-ChildItem -Path $$env:LOCALAPPDATA\cfb-tix\venv\Scripts\ -Filter 'cfb-tix*' | Select-Object Name,Length" || true
+
+# Windows: register daily sync via scripts/register_sync.ps1
+win-sync-install:
+	$(PSFILE) .\scripts\register_sync.ps1 -At "$(SYNC_TIME)"
+
+win-sync-now:
+	$(PS) "Start-ScheduledTask -TaskName 'cfb-tix-sync'" || true
+
+win-sync-status:
+	$(PS) "Get-ScheduledTask -TaskName 'cfb-tix-sync' | Format-List *" || true
+	$(PS) "Get-ScheduledTaskInfo -TaskName 'cfb-tix-sync'" || true
+
+win-sync-uninstall:
+	- $(PSFILE) .\scripts\register_sync.ps1 -Unregister || true
+	@echo "🧹 Removed cfb-tix-sync scheduled task."

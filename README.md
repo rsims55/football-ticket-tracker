@@ -30,52 +30,39 @@ cfb-ticket-tracker/
 ├── logs/                              # local logs (dev runs)
 ├── models/                            # trained model(s) (dev runs)
 ├── packaging/
-│   ├── build_ext4.sh                  # Linux ext4 image builder
+│   ├── linux/
+│   │   └── build_ext4.sh              # Linux ext4 image builder
 │   └── windows/
-│       ├── install_win.ps1
-│       └── installer.iss
+│       ├── build_zip.ps1              # Windows zip builder
+│       ├── install_win.ps1            # Windows installer (per-user venv + autostart)
+│       └── installer.iss              # Inno Setup script
 ├── reports/
 │   └── weekly/
 ├── scripts/
-│   └── reset_linux.sh
+│   ├── reset_linux.sh
+│   ├── reset_windows.ps1
+│   └── register_sync.ps1
 ├── src/
 │   ├── builders/                      # annual + weekly setup & daily snapshot
-│   │   ├── annual_setup.py
-│   │   ├── daily_snapshot.py
-│   │   └── weekly_update.py
 │   ├── cfb_tix/                       # daemon + entry points
-│   │   ├── daemon.py                  # `cfb-tix` (daemon) / `cfb-tix-gui` (GUI only)
-│   │   ├── __init__.py
-│   │   └── __main__.py
-│   ├── fetchers/
-│   │   ├── fetch_ncaa_events.py
-│   │   ├── rankings_fetcher.py
-│   │   └── schedule_fetcher.py
-│   ├── gui/
-│   │   └── ticket_predictor_gui.py
-│   ├── modeling/
-│   │   ├── train_price_model.py
-│   │   ├── predict_price.py
-│   │   └── evaluate_predictions.py
-│   ├── reports/
-│   │   ├── generate_weekly_report.py
-│   │   └── send_email.py
-│   └── scrapers/
-│       ├── rivalry_scraper.py
-│       ├── stadium_scraper.py
-│       └── tickpick_pricer.py
+│   ├── fetchers/                      # API fetchers
+│   ├── gui/                           # PyQt5 GUI
+│   ├── modeling/                      # ML model training & prediction
+│   ├── reports/                       # report generation & email
+│   └── scrapers/                      # web scrapers (stadiums, rivalries, TickPick)
 ├── .env (optional)
 ├── pyproject.toml
 └── README.md
 ```
 
-> **Installed app (Linux)** lives under `~/.local/share/cfb-tix/app/` with **data** in `~/.local/share/cfb-tix/app/data/` and **logs** in `~/.local/share/cfb-tix/app/logs/`.
+> **Installed app (Linux)** lives under `~/.local/share/cfb-tix/app/` with **data** in `~/.local/share/cfb-tix/app/data/` and **logs** in `~/.local/share/cfb-tix/app/logs/`.  
+> **Installed app (Windows)** lives under `%LOCALAPPDATA%\cfb-tix\app\` with logs and data alongside.
 
 ---
 
 ## 💾 Downloading & Installing
 
-## 🔧 Building & Installing (Linux)
+### 🔧 Linux (ext4 image)
 
 The app ships as a self-contained **ext4 image** that installs into `~/.local/share/cfb-tix/`.
 
@@ -96,41 +83,77 @@ This will:
 - **Install the CSV sync timer (daily at 06:10 local)**  
 - **Do a first-time pull of `price_snapshots.csv`**
 
+### 🪟 Windows (zip package)
+
+On Windows, the app ships as a **zip archive** (`cfb-tix-win.zip`) built with `make win-zip`.  
+
+```powershell
+# Build the Windows zip (if developing)
+make win-zip
+
+# Install into %LOCALAPPDATA%\cfb-tix
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\install_win.ps1 -AppDir "$PWD"
+```
+
+This will:
+- Copy the app into `%LOCALAPPDATA%\cfb-tix\app`
+- Create a Python venv in `%LOCALAPPDATA%\cfb-tix\venv`
+- Install the app (editable mode)
+- Register a background **Task Scheduler job** to run `cfb-tix --no-gui` at logon
+- Create a Start Menu shortcut: **“CFB Tickets (GUI)”**
+
+Uninstall/reset:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\reset_windows.ps1
+```
+
 ---
 
 ## 📊 Shared CSV Sync
 
 We keep a single shared `price_snapshots.csv` on the repo’s **GitHub Release** (`snapshots` tag).  
-The installer sets up a **systemd user timer** (`cfb-tix-sync.timer`) that:
 
-- Every morning at 06:10 local time:
-  - Downloads the current CSV from GitHub
-  - Merges with your local copy
-  - Uploads the merged version back to the Release (requires `GH_TOKEN`)
+- **Linux**: a `systemd --user` timer runs daily at 06:10 (`cfb-tix-sync.timer`).  
+- **Windows**: a Task Scheduler job (`cfb-tix-sync`) runs daily at 06:10.
 
-### Managing the sync job
+Both do:
+- Download the shared CSV
+- Merge with your local copy
+- Upload the merged version back to GitHub Release (requires `GH_TOKEN`)
+
+### Managing the sync job (Linux)
 
 ```bash
-# Check status of sync service + timer
-make sync-status
-
-# Run sync right now (merge + upload)
-make sync-now
-
-# View recent logs
-make sync-logs
-
-# Remove the timer if you don’t want daily sync
-make sync-uninstall
+make sync-status      # status of service + timer
+make sync-now         # run now
+make sync-logs        # recent logs
+make sync-uninstall   # disable + remove timer
 ```
 
-### Manual sync
+### Managing the sync job (Windows)
+
+```powershell
+# Register task (default 06:10)
+powershell -ExecutionPolicy Bypass -File .\scripts\register_sync.ps1 -At "06:10"
+
+# Run it now
+Start-ScheduledTask -TaskName "cfb-tix-sync"
+
+# Check status
+Get-ScheduledTaskInfo -TaskName "cfb-tix-sync"
+
+# Unregister
+powershell -ExecutionPolicy Bypass -File .\scripts\register_sync.ps1 -Unregister
+```
+
+### Manual sync (both OSes)
 
 ```bash
 # Pull latest CSV only
 make data-pull
 
-# Merge + upload (requires GH_TOKEN in ~/.local/share/cfb-tix/app/.env)
+# Merge + upload (requires GH_TOKEN in .env)
 make data-push
 ```
 
@@ -141,67 +164,7 @@ make data-push
 - **Downloading works without a token** if the repo is public.  
 - **Uploading requires a GitHub token.**
 
-Create `~/.local/share/cfb-tix/app/.env` with:
-
-```
-GH_TOKEN=ghp_yourtokenhere
-```
-
-**What you get (Linux):**
-- **Daemon service (user)**: `~/.config/systemd/user/cfb-tix.service` → runs `cfb-tix --no-gui`  
-- **GUI launcher**: Applications menu → **“CFB Tickets (GUI)”**  
-- **Autostart toggle**: `cfb-tix autostart --enable|--disable|--status`
-
-## 🪟 Installing & CSV Sync (Windows)
-
-On Windows, we use a **Task Scheduler job** to keep `price_snapshots.csv` synced daily.
-
-### Install the scheduled task
-
-From PowerShell (run once):
-
-```powershell
-cd $HOME\cfb-ticket-tracker
-
-# Register the daily sync at 06:10 local time
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\register_sync.ps1 -Repo "$PWD" -At "06:10"
-```
-
-This will:
-- Create a Task Scheduler job named **CFB-Tix Snapshot Sync**
-- Run every day at 06:10 local time
-- Run `scripts/sync_snapshots.py pull_push` using your Python
-- Do a first-time pull of `price_snapshots.csv` immediately
-
-### Managing the sync job
-
-```powershell
-# Run the sync right now
-Start-ScheduledTask -TaskName "CFB-Tix Snapshot Sync"
-
-# Check the last run result
-Get-ScheduledTaskInfo -TaskName "CFB-Tix Snapshot Sync"
-
-# Delete the task if you no longer want daily sync
-Unregister-ScheduledTask -TaskName "CFB-Tix Snapshot Sync" -Confirm:$false
-```
-
-### Manual sync
-
-```powershell
-# Pull latest CSV only
-python scripts/sync_snapshots.py pull
-
-# Merge + upload (requires GH_TOKEN in .env)
-python scripts/sync_snapshots.py pull_push
-```
-
-### 🔑 Authentication for Uploads
-
-- **Downloading works without a token** if the repo is public.  
-- **Uploading requires a GitHub token.**
-
-Create `.env` in your repo root with:
+Create `.env` in the installed app dir with:
 
 ```
 GH_TOKEN=ghp_yourtokenhere
@@ -222,11 +185,10 @@ pgrep -fa 'cfb[-_]tix'                           # confirm the process is runnin
 tail -n 200 ~/.local/share/cfb-tix/app/logs/cfb_tix.log
 ```
 
-**Autostart (Linux/systemd user service):**
-```bash
-cfb-tix autostart --enable
-cfb-tix autostart --disable
-cfb-tix autostart --status
+**Quick checks (Windows):**
+```powershell
+Get-ScheduledTask -TaskName 'CFB Tickets','cfb-tix-sync'
+Get-Content $env:LOCALAPPDATA\cfb-tix\app\logs\cfb_tix.log -Tail 200
 ```
 
 ---
@@ -264,17 +226,16 @@ python -m cfb_tix --no-gui
 
 ## 🔍 Troubleshooting
 
+**Linux**
 ```bash
-# Process alive?
 pgrep -fa 'cfb[-_]tix' || echo "cfb-tix not running"
-
-# Tail the daemon log
 tail -f ~/.local/share/cfb-tix/app/logs/cfb_tix.log
+```
 
-# Re-run model steps from the installed app
-APP=~/.local/share/cfb-tix/app
-PY=~/.local/share/cfb-tix/venv/bin/python
-cd "$APP" && "$PY" -m modeling.train_price_model && "$PY" -m modeling.predict_price
+**Windows**
+```powershell
+Get-ScheduledTask -TaskName 'cfb-tix-sync'
+Get-Content $env:LOCALAPPDATA\cfb-tix\app\logs\cfb_tix.log -Tail 50 -Wait
 ```
 
 ---

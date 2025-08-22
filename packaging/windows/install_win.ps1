@@ -1,87 +1,114 @@
-# packaging/windows/install_win.ps1
-# Idempotent installer for current user:
-# - Creates %LocalAppData%\cfb-tix\venv and installs the app in editable mode from {AppDir}\app
-# - Registers "CFB Tickets" Task Scheduler job at user logon to run headless daemon
-# - Creates Start Menu shortcut "CFB Tickets (GUI)" pointing to venv Scripts\cfb-tix-gui(.exe)
+<# Builds a self-contained Windows zip with:
+   - /app                 → repo (clean copy, excludes junk)
+   - /assets/...          → windows icon (if present)
+   - /install_win.ps1     → idempotent app installer (venv + autostart + Start Menu)
+   - /install_sync_win.ps1→ schedules daily CSV sync + first-time pull (prompts for GH token)
+
+   Output: packaging\dist\cfb-tix-win.zip
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# --- repo roots ---
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$REPO_ROOT  = Resolve-Path (Join-Path $SCRIPT_DIR "..\..")
+$DIST_DIR   = Join-Path $REPO_ROOT "packaging\dist"
+$WORK_DIR   = Join-Path $REPO_ROOT ".build_win_work"
+$STAGE      = Join-Path $WORK_DIR "root"
+$ZIP_PATH   = Join-Path $DIST_DIR "cfb-tix-win.zip"
+
+# --- clean work ---
+if (Test-Path $WORK_DIR) { Remove-Item -Recurse -Force $WORK_DIR }
+New-Item -ItemType Directory -Force -Path $STAGE | Out-Null
+New-Item -ItemType Directory -Force -Path $DIST_DIR | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $STAGE "app") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $STAGE "assets\icons") | Out-Null
+
+# --- copy repo into /app (exclude junk) ---
+$src = $REPO_ROOT
+$dst = Join-Path $STAGE "app"
+# robocopy exit codes: 0,1 = success; 2+ also success w/ extra, so don't Stop on non-zero.
+$copyArgs = @(
+  "`"$src`"", "`"$dst`"", "/E", "/PURGE", "/NFL", "/NDL", "/NJH", "/NJS", "/NC", "/NS", "/NP",
+  "/XF","*.pyc",
+  "/XD",".git",".github","packaging\dist","dist","build","__pycache__","*.egg-info",".venv",".mypy_cache",".pytest_cache"
+)
+$null = Start-Process -FilePath robocopy.exe -ArgumentList $copyArgs -Wait -NoNewWindow -PassThru
+
+# --- copy Windows icon if present ---
+$ico = Join-Path $REPO_ROOT "assets\icons\cfb-tix.ico"
+if (Test-Path $ico) {
+  Copy-Item $ico (Join-Path $STAGE "assets\icons\cfb-tix.ico")
+}
+
+# --- drop installers into stage root ---
+# 1) Use your existing install_win.ps1 from the repo to keep single source of truth
+$installerSrc = Join-Path $REPO_ROOT "packaging\windows\install_win.ps1"
+if (-not (Test-Path $installerSrc)) {
+  throw "Expected installer at packaging\windows\install_win.ps1 not found."
+}
+Copy-Item $installerSrc (Join-Path $STAGE "install_win.ps1")
+
+# 2) Generate install_sync_win.ps1 (Windows analog of install_sync.sh)
+$syncScript = @'
+# install_sync_win.ps1 — per-user daily CSV sync + first-time pull
 param(
-  [string]$AppDir = "$(Split-Path -Parent $MyInvocation.MyCommand.Path)",
-  [switch]$Uninstall
+  [string]$RepoDir   = "$env:LOCALAPPDATA\cfb-tix\app",
+  [string]$PythonBin = "$env:LOCALAPPDATA\cfb-tix\venv\Scripts\python.exe",
+  [string]$RunTime   = "06:10"  # local time, HH:mm
 )
 
 $ErrorActionPreference = "Stop"
+$taskName = "cfb-tix-sync"
+$envFile  = Join-Path $env:APPDATA "cfb-tix\env"
+$envDir   = Split-Path $envFile -Parent
 
-$pkgName = "cfb-tix"
-$appName = "CFB Ticket Price Tracker"
-$taskName = "CFB Tickets"
-$localBase = Join-Path $env:LocalAppData $pkgName
-$venvDir = Join-Path $localBase "venv"
-$appDst  = Join-Path $localBase "app"
-$iconPath = Join-Path $AppDir "assets\icons\cfb-tix.ico"
-$pyExe = Join-Path $venvDir "Scripts\python.exe"
-$guiExe = Join-Path $venvDir "Scripts\cfb-tix-gui.exe"  # console_scripts stub
-if (-not (Test-Path $guiExe)) {
-  # when running from python -m, console_scripts may be .exe or no .exe depending on pip
-  $guiExe = Join-Path $venvDir "Scripts\cfb-tix-gui"
-}
-$startMenuDir = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
-$shortcutPath = Join-Path $startMenuDir "CFB Tickets (GUI).lnk"
-
-function Ensure-Shortcut {
-  param([string]$Target, [string]$Shortcut, [string]$Icon)
-  $shell = New-Object -ComObject WScript.Shell
-  $sc = $shell.CreateShortcut($Shortcut)
-  $sc.TargetPath = $Target
-  $sc.WorkingDirectory = (Split-Path $Target -Parent)
-  if (Test-Path $Icon) { $sc.IconLocation = $Icon }
-  $sc.WindowStyle = 1
-  $sc.Description = "Open the CFB Ticket Price Tracker GUI"
-  $sc.Save()
+# ---- Prompt for GH token (once) and store securely ----
+New-Item -ItemType Directory -Force -Path $envDir | Out-Null
+if (-not (Test-Path $envFile) -or -not (Get-Content $envFile | Select-String -SimpleMatch "GH_TOKEN=")) {
+  Write-Host "🔑 No GitHub token found."
+  $token = Read-Host -AsSecureString "Paste your GitHub access token (leave blank to skip uploads)"
+  $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token))
+  if ($plain) {
+    "GH_TOKEN=$plain" | Out-File -Encoding utf8 -FilePath $envFile -Force
+    Write-Host "✅ Saved token to $envFile"
+  } else {
+    "GH_TOKEN=" | Out-File -Encoding utf8 -FilePath $envFile -Force
+    Write-Host "⚠️ Skipping token setup. Uploads will be disabled."
+  }
 }
 
-if ($Uninstall) {
-  try {
-    schtasks.exe /Delete /TN "$taskName" /F | Out-Null
-  } catch { }
-  if (Test-Path $shortcutPath) { Remove-Item -Force "$shortcutPath" }
-  Write-Host "✅ Unregistered scheduled task and removed Start Menu shortcut."
-  exit 0
+# ---- Create a small wrapper that loads env then runs the sync step ----
+$binDir = Join-Path $env:LOCALAPPDATA "cfb-tix\bin"
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+$runner = Join-Path $binDir "run_sync.ps1"
+@"
+`$ErrorActionPreference = 'Stop'
+`$envVars = Get-Content -ErrorAction SilentlyContinue '$envFile' | Where-Object { $_ -match '=' }
+foreach (`$kv in `$envVars) {
+  `$name,`$val = `$kv -split '=',2
+  if (`$name) { [Environment]::SetEnvironmentVariable(`$name, `$val, 'Process') }
 }
+& '$PythonBin' '$RepoDir\scripts\sync_snapshots.py' pull_push
+"@ | Out-File -Encoding utf8 -FilePath $runner -Force
 
-# Create base dirs
-New-Item -ItemType Directory -Force -Path $localBase | Out-Null
-New-Item -ItemType Directory -Force -Path $appDst     | Out-Null
-New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
+# ---- (Re)create daily scheduled task at $RunTime ----
+try { schtasks /Delete /TN "$taskName" /F | Out-Null } catch { }
+schtasks /Create /TN "$taskName" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$runner`"" `
+  /SC DAILY /ST $RunTime /RL LIMITED /F | Out-Null
 
-# Copy/refresh app source into user-writable location (exclude junk)
-$copyArgs = @("/E","/PURGE","/NFL","/NDL","/NJH","/NJS","/NC","/NS","/NP",
-              "/XF","*.pyc",
-              "/XD",".git","dist","build","__pycache__",".github","*.egg-info")
-robocopy "$AppDir\app" "$appDst" $copyArgs | Out-Null
+# ---- First-time pull (download only; non-fatal) ----
+try { & $PythonBin "$RepoDir\scripts\sync_snapshots.py" pull } catch { }
 
-# Ensure Python & venv
-$python = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command py -ErrorAction SilentlyContinue)
-if (-not $python) { throw "Python is required in PATH." }
+Write-Host "✅ Installed user task $taskName at $RunTime daily."
+Write-Host "   Repo: $RepoDir"
+Write-Host "   Token file: $envFile"
+'@
+Set-Content -Path (Join-Path $STAGE "install_sync_win.ps1") -Value $syncScript -Encoding UTF8
+# --- zip the staged payload ---
+if (Test-Path $ZIP_PATH) { Remove-Item -Force $ZIP_PATH }
+Compress-Archive -Path (Join-Path $STAGE '*') -DestinationPath $ZIP_PATH
 
-if (-not (Test-Path $venvDir)) {
-  & $python.Path -m venv "$venvDir"
-}
-& "$pyExe" -m pip install --upgrade --disable-pip-version-check pip setuptools wheel
-
-Push-Location $appDst
-& "$pyExe" -m pip install -e .
-Pop-Location
-
-# Register (replace) scheduled task at user logon
-try {
-  schtasks.exe /Delete /TN "$taskName" /F | Out-Null
-} catch { }
-
-$action  = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"& '$pyExe' -m cfb_tix --no-gui`""
-schtasks.exe /Create /TN "$taskName" /TR "$action" /SC ONLOGON /RL LIMITED /F | Out-Null
-
-# Create Start Menu shortcut to GUI
-Ensure-Shortcut -Target "$guiExe" -Shortcut "$shortcutPath" -Icon "$iconPath"
-
-Write-Host "✅ $appName installed for user."
-Write-Host "• Background task '$taskName' registered (runs headless on logon)."
-Write-Host "• Start Menu → 'CFB Tickets (GUI)'."
+Write-Host "🎉 Built $ZIP_PATH"
