@@ -5,6 +5,7 @@ import os
 import sys
 import atexit
 import logging
+import argparse
 import subprocess
 from pathlib import Path
 from datetime import datetime
@@ -23,7 +24,7 @@ from logging.handlers import RotatingFileHandler
 
 # -------- Paths & logging --------
 NY = ZoneInfo("America/New_York")
-ROOT = Path(__file__).resolve().parents[2]  # project root (one above src/)
+ROOT = Path(__file__).resolve().parents[2]  # app root (…/app)
 DATA = ROOT / "data"
 LOGS = ROOT / "logs"
 LOGS.mkdir(parents=True, exist_ok=True)
@@ -55,7 +56,6 @@ class StatusAnnouncer:
 
     def _notify_linux(self, title: str, body: str) -> None:
         try:
-            # Use notify-send if available
             if _which("notify-send"):
                 subprocess.run(["notify-send", "--app-name=CFB Tickets", title, body],
                                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -64,7 +64,6 @@ class StatusAnnouncer:
 
     def _notify_windows(self, title: str, body: str) -> None:
         try:
-            # Try PowerShell toast (Windows 10+). Non-fatal if it fails.
             ps = r"""
             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
@@ -97,7 +96,6 @@ class StatusAnnouncer:
             self._notify_linux(title, body)
         elif os.name == "nt":
             self._notify_windows(title, body)
-        # macOS not implemented — console/logs are sufficient
 
     def step(self, msg: str) -> None:
         text = self._fmt(f"▶ {msg}")
@@ -121,6 +119,20 @@ class StatusAnnouncer:
         print(text, flush=True)
         logger.info(text)
 # ================================================================================
+
+def _repo_root():
+    # src/cfb_tix/daemon.py -> repo root is two levels up from this file
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+def _first_run_sync():
+    root = _repo_root()
+    sentinel = os.path.join(root, "data", ".snapshots_synced")
+    local_csv = os.path.join(root, "data", "daily", "price_snapshots.csv")
+    if not os.path.exists(local_csv):
+        subprocess.run([sys.executable, os.path.join(root, "scripts", "sync_snapshots.py"), "pull"], check=False)
+    os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+    open(sentinel, "w").close()
+
 def _which(name: str) -> Optional[str]:
     from shutil import which
     return which(name)
@@ -128,7 +140,7 @@ def _which(name: str) -> Optional[str]:
 
 def run_module(mod: str, args: List[str] | None = None, cwd: Path | None = None) -> None:
     """
-    Run a package module as: python -m <mod> [args...] with cwd defaulting to project root.
+    Run a package module as: python -m <mod> [args...] with cwd defaulting to app root.
     Keeps the daemon alive on failure; logs exceptions.
     """
     args = args or []
@@ -234,12 +246,71 @@ def _dump_schedule(sched: BackgroundScheduler) -> None:
         logger.info("JOB %-20s Next run: %s", job.id or job.name, job.next_run_time)
 
 
-def main(no_gui: bool = False) -> None:
-    # Ensure all relative paths resolve to the project root
+# ===== systemd user service (autostart) =========================================
+SERVICE_PATH = Path.home() / ".config/systemd/user/cfb-tix.service"
+UNIT_TEXT = """[Unit]
+Description=CFB Ticket Tracker Daemon
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/cfb-tix/app
+ExecStart=%h/.local/share/cfb-tix/venv/bin/cfb-tix --no-gui
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=%h/.local/share/cfb-tix/app/src
+
+[Install]
+WantedBy=default.target
+"""
+
+def _systemd_available() -> bool:
+    return sys.platform.startswith("linux") and _which("systemctl") is not None
+
+def _systemctl_user(*args: str) -> int:
+    return subprocess.run(["systemctl", "--user", *args], check=False).returncode
+
+def _ensure_unit_file() -> None:
+    SERVICE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not SERVICE_PATH.exists():
+        SERVICE_PATH.write_text(UNIT_TEXT)
+
+def autostart_enable() -> int:
+    if not _systemd_available():
+        print("systemctl not found (Linux/systemd only).")
+        return 1
+    _ensure_unit_file()
+    _systemctl_user("daemon-reload")
+    rc = _systemctl_user("enable", "--now", "cfb-tix.service")
+    if rc == 0:
+        print("✅ Autostart enabled (and started).")
+    return rc
+
+def autostart_disable() -> int:
+    if not _systemd_available():
+        print("systemctl not found (Linux/systemd only).")
+        return 1
+    _ensure_unit_file()
+    rc = _systemctl_user("disable", "--now", "cfb-tix.service")
+    if rc == 0:
+        print("✅ Autostart disabled (and stopped).")
+    return rc
+
+def autostart_status() -> int:
+    if not _systemd_available():
+        print("systemctl not found (Linux/systemd only).")
+        return 1
+    return _systemctl_user("status", "cfb-tix.service")
+# ================================================================================
+
+
+def _run_daemon(no_gui: bool) -> None:
+    # Ensure all relative paths resolve to the app root
     try:
         os.chdir(ROOT)
     except Exception:
-        logger.exception("Failed to chdir to project root: %s", ROOT)
+        logger.exception("Failed to chdir to app root: %s", ROOT)
 
     # ---- Pre-GUI status announcer ----
     say = StatusAnnouncer()
@@ -318,10 +389,79 @@ def main(no_gui: bool = False) -> None:
             pass
 
 
-def gui():
-    """GUI-only launcher: no scheduler, no startup jobs."""
+# ===== CLI entrypoints ==========================================================
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="cfb-tix",
+        description="CFB Ticket Tracker daemon & utilities",
+    )
+    sub = p.add_subparsers(dest="command")
+
+    # Default run (daemon)
+    run_p = sub.add_parser("run", help="Run the daemon (scheduler + optional GUI)")
+    run_p.add_argument("--no-gui", action="store_true", help="Run headless (no GUI)")
+    run_p.set_defaults(func=lambda args: _run_daemon(no_gui=args.no_gui))
+
+    # Autostart management (Linux/systemd)
+    au = sub.add_parser("autostart", help="Manage login autostart via systemd --user")
+    g = au.add_mutually_exclusive_group(required=True)
+    g.add_argument("--enable", action="store_true", help="Enable autostart and start now")
+    g.add_argument("--disable", action="store_true", help="Disable autostart and stop")
+    g.add_argument("--status", action="store_true", help="Show service status")
+    def _do_autostart(args: argparse.Namespace) -> None:
+        if args.enable:
+            sys.exit(autostart_enable())
+        if args.disable:
+            sys.exit(autostart_disable())
+        sys.exit(autostart_status())
+    au.set_defaults(func=_do_autostart)
+
+    # Back-compat: allow top-level --no-gui without subcommand
+    p.add_argument("--no-gui", action="store_true", help=argparse.SUPPRESS)
+
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """
+    Console entry point for `cfb-tix`.
+    Examples:
+      cfb-tix                         # run with GUI
+      cfb-tix --no-gui                # run headless (back-compat)
+      cfb-tix run --no-gui            # run headless (preferred)
+      cfb-tix autostart --enable      # enable user service
+      cfb-tix autostart --disable     # disable user service
+      cfb-tix autostart --status      # show service status
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = _build_parser()
+
+    # If no subcommand provided, default to "run"
+    if not argv or argv[0].startswith("-"):
+        # Support legacy top-level --no-gui
+        args = parser.parse_args(["run", *argv])
+    else:
+        args = parser.parse_args(argv)
+
+    # If invoked via old style wrapper that passed a boolean, tolerate it:
+    if isinstance(args, bool):  # defensive; shouldn't happen with argparse
+        _run_daemon(no_gui=bool(args))
+        return 0
+
+    # Dispatch
+    func = getattr(args, "func", None)
+    if func is None:
+        # Should not happen because we inject "run" by default
+        parser.print_help()
+        return 2
+    func(args)
+    return 0
+
+
+def gui() -> None:
+    """GUI-only launcher: no scheduler, no startup jobs (entry point: cfb-tix-gui)."""
     subprocess.call([sys.executable, "-m", "gui.ticket_predictor_gui"], cwd=str(ROOT))
 
 
 if __name__ == "__main__":
-    main(no_gui=("--no-gui" in sys.argv))
+    sys.exit(main())

@@ -120,6 +120,18 @@ class StatusAnnouncer:
         logger.info(text)
 # ================================================================================
 
+def _repo_root():
+    # src/cfb_tix/daemon.py -> repo root is two levels up from this file
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+def _first_run_sync():
+    root = _repo_root()
+    sentinel = os.path.join(root, "data", ".snapshots_synced")
+    local_csv = os.path.join(root, "data", "daily", "price_snapshots.csv")
+    if not os.path.exists(local_csv):
+        subprocess.run([sys.executable, os.path.join(root, "scripts", "sync_snapshots.py"), "pull"], check=False)
+    os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+    open(sentinel, "w").close()
 
 def _which(name: str) -> Optional[str]:
     from shutil import which
