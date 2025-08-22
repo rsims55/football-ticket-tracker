@@ -36,3 +36,9 @@ packaging/windows/Output/
 .build_ext4_work/
 *.ext4
 *.exe
+
+# Build artifacts
+/dist/
+.build_ext4_work/
+*.ext4
+*.exe
