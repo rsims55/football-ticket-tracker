@@ -1,5 +1,6 @@
-# src/cfb_tix/daemon.py
+﻿# src/cfb_tix/daemon.py
 from __future__ import annotations
+from .gui.ticket_predictor_gui import main as gui_main
 
 import os
 import sys
@@ -24,7 +25,7 @@ from logging.handlers import RotatingFileHandler
 
 # -------- Paths & logging --------
 NY = ZoneInfo("America/New_York")
-ROOT = Path(__file__).resolve().parents[2]  # app root (…/app)
+ROOT = Path(__file__).resolve().parents[2]  # app root (â€¦/app)
 DATA = ROOT / "data"
 LOGS = ROOT / "logs"
 LOGS.mkdir(parents=True, exist_ok=True)
@@ -44,8 +45,8 @@ class StatusAnnouncer:
     """
     Prints/Logs a clear pre-GUI step-by-step status.
     Best-effort desktop notifications:
-      • Linux: notify-send (if available)
-      • Windows: PowerShell toast (if available)
+      â€¢ Linux: notify-send (if available)
+      â€¢ Windows: PowerShell toast (if available)
     All failures are swallowed to avoid breaking startup.
     """
     def __init__(self, channel: str = "startup"):
@@ -98,18 +99,18 @@ class StatusAnnouncer:
             self._notify_windows(title, body)
 
     def step(self, msg: str) -> None:
-        text = self._fmt(f"▶ {msg}")
+        text = self._fmt(f"â–¶ {msg}")
         print(text, flush=True)
         logger.info(text)
-        self._notify("CFB Tickets: Starting…", msg)
+        self._notify("CFB Tickets: Startingâ€¦", msg)
 
     def ok(self, msg: str = "Done") -> None:
-        text = self._fmt(f"✓ {msg}")
+        text = self._fmt(f"âœ“ {msg}")
         print(text, flush=True)
         logger.info(text)
 
     def fail(self, msg: str) -> None:
-        text = self._fmt(f"✗ {msg}")
+        text = self._fmt(f"âœ— {msg}")
         print(text, flush=True)
         logger.error(text)
         self._notify("CFB Tickets: Error", msg)
@@ -173,7 +174,7 @@ def check_and_build_annual() -> None:
     need = [annual / f"rivalries_{year}.csv", annual / f"stadiums_{year}.csv"]
     missing = [p for p in need if not p.exists()]
     if missing:
-        logger.info("Annual missing: %s — running annual_setup", [p.name for p in missing])
+        logger.info("Annual missing: %s â€” running annual_setup", [p.name for p in missing])
         run_module("builders.annual_setup", ["--year", str(year)])
 
     # Roll previous year after May 1 of current year
@@ -201,7 +202,7 @@ def ensure_weekly_files_exist() -> None:
 
     need = [weekly / f"full_{year}_schedule.csv", weekly / f"wiki_rankings_{year}.csv"]
     if not all(p.exists() for p in need):
-        logger.info("Weekly files missing — running weekly_update once")
+        logger.info("Weekly files missing â€” running weekly_update once")
         run_module("builders.weekly_update")
 
 
@@ -236,7 +237,7 @@ def sunday_report() -> None:
 
 # -------- GUI --------
 def launch_gui() -> None:
-    logger.info("Launching GUI…")
+    logger.info("Launching GUIâ€¦")
     # Spawn GUI separate so scheduler keeps running even if GUI closes/crashes
     subprocess.Popen([sys.executable, "-m", "gui.ticket_predictor_gui"], cwd=str(ROOT))
 
@@ -284,7 +285,7 @@ def autostart_enable() -> int:
     _systemctl_user("daemon-reload")
     rc = _systemctl_user("enable", "--now", "cfb-tix.service")
     if rc == 0:
-        print("✅ Autostart enabled (and started).")
+        print("âœ… Autostart enabled (and started).")
     return rc
 
 def autostart_disable() -> int:
@@ -294,7 +295,7 @@ def autostart_disable() -> int:
     _ensure_unit_file()
     rc = _systemctl_user("disable", "--now", "cfb-tix.service")
     if rc == 0:
-        print("✅ Autostart disabled (and stopped).")
+        print("âœ… Autostart disabled (and stopped).")
     return rc
 
 def autostart_status() -> int:
@@ -338,7 +339,7 @@ def _run_daemon(no_gui: bool) -> None:
         say.fail("Daily snapshot failed (continuing; see logs)")
 
     try:
-        say.step("Daily model update (train → predict)")
+        say.step("Daily model update (train â†’ predict)")
         daily_model_update()
         say.ok("Model updated")
     except Exception:

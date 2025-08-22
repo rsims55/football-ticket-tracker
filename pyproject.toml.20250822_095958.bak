@@ -1,4 +1,4 @@
-﻿[build-system]
+[build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
@@ -11,19 +11,19 @@ requires-python = ">=3.9"
 authors = [{ name = "Randi Sims" }]
 license = { text = "Proprietary" }
 
-# Core + GUI/runtime deps (Windows & Linux)
+# Core + GUI/runtime deps
 dependencies = [
   "pandas>=1.5",
   "numpy>=1.23",
   "PyQt5>=5.15,<6",
   "matplotlib>=3.6",
   "apscheduler>=3.10",
-  "tzlocal>=5.2",
   "requests>=2.31",
   "beautifulsoup4>=4.12",
   "joblib>=1.3",
   "scikit-learn>=1.5",
   "python-dotenv>=1.0",
+  "tzlocal>=5.2",
   "tomli; python_version < '3.11'"
 ]
 
@@ -41,18 +41,18 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-# Now that the GUI is under cfb_tix/, do NOT list top-level "gui*"
+# If these subpackages exist (with __init__.py), they'll be included.
 include = [
   "cfb_tix*",
   "builders*",
   "fetchers*",
-  "loggers*",
+  "gui*",
   "modeling*",
-  "preparation*",
   "reports*",
   "scrapers*"
 ]
 
+# Ship non-.py assets (icons/templates/etc.)
 [tool.setuptools.package-data]
-# ship icons/assets if they live inside the cfb_tix tree
 cfb_tix = ["**/*.*"]
+gui = ["**/*.*"]
