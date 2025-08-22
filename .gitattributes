@@ -1,0 +1,8 @@
+# PowerShell & batch: CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.iss text eol=crlf
+
+# Bash & sh: LF
+*.sh  text eol=lf
+Makefile text eol=lf

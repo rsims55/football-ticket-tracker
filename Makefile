@@ -114,26 +114,21 @@ data-push:
 # ========= Windows helpers =========
 # Build distributable zip (Windows analog of ext4 image)
 win-zip:
-	$(PSFILE) .\packaging\windows\build_zip.ps1
+	$(PSFILE) packaging/windows/build_zip.ps1
 
-# Install into %LOCALAPPDATA%\cfb-tix using your canonical installer
 win-install:
-	$(PSFILE) .\packaging\windows\install_win.ps1 -AppDir "$(REPO_DIR)"
+	# pwd -W returns C:\...\ form so PowerShell treats it correctly
+	$(PSFILE) packaging/windows/install_win.ps1 -AppDir "$$(pwd -W)"
 
-# Uninstall/reset Windows install (kills tasks, removes payload & shortcuts)
 win-reset:
-	$(PSFILE) .\scripts\reset_windows.ps1
+	$(PSFILE) scripts/reset_windows.ps1
 
-# Quick status checks on Windows
 win-smoke:
-	@echo "→ Checking Scheduled Tasks (cfb-tix & sync)…"
-	- $(PS) "Get-ScheduledTask -TaskName 'CFB Tickets','cfb-tix-sync' | Format-Table -AutoSize" || true
-	@echo "→ Checking GUI/daemon stubs exist…"
-	- $(PS) "Get-ChildItem -Path $$env:LOCALAPPDATA\cfb-tix\venv\Scripts\ -Filter 'cfb-tix*' | Select-Object Name,Length" || true
+	$(PS) "Get-ScheduledTask -TaskName 'CFB Tickets','cfb-tix-sync' | Format-Table -AutoSize" || true
+	$(PS) "Get-ChildItem -Path $$env:LOCALAPPDATA\cfb-tix\venv\Scripts\ -Filter 'cfb-tix*' | Select Name,Length" || true
 
-# Windows: register daily sync via scripts/register_sync.ps1
 win-sync-install:
-	$(PSFILE) .\scripts\register_sync.ps1 -At "$(SYNC_TIME)"
+	$(PSFILE) scripts/register_sync.ps1 -At "$(SYNC_TIME)"
 
 win-sync-now:
 	$(PS) "Start-ScheduledTask -TaskName 'cfb-tix-sync'" || true
@@ -143,5 +138,4 @@ win-sync-status:
 	$(PS) "Get-ScheduledTaskInfo -TaskName 'cfb-tix-sync'" || true
 
 win-sync-uninstall:
-	- $(PSFILE) .\scripts\register_sync.ps1 -Unregister || true
-	@echo "🧹 Removed cfb-tix-sync scheduled task."
+	- $(PSFILE) scripts/register_sync.ps1 -Unregister || true

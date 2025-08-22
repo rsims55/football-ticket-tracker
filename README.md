@@ -83,14 +83,11 @@ This will:
 - **Install the CSV sync timer (daily at 06:10 local)**  
 - **Do a first-time pull of `price_snapshots.csv`**
 
-### 🪟 Windows (zip package)
+### 🪟 Windows (installer script)
 
-On Windows, the app ships as a **zip archive** (`cfb-tix-win.zip`) built with `make win-zip`.  
+On Windows, install using the provided PowerShell script:
 
 ```powershell
-# Build the Windows zip (if developing)
-make win-zip
-
 # Install into %LOCALAPPDATA%\cfb-tix
 powershell -ExecutionPolicy Bypass -File .\packaging\windows\install_win.ps1 -AppDir "$PWD"
 ```
@@ -101,6 +98,8 @@ This will:
 - Install the app (editable mode)
 - Register a background **Task Scheduler job** to run `cfb-tix --no-gui` at logon
 - Create a Start Menu shortcut: **“CFB Tickets (GUI)”**
+- Register a daily **CSV sync** task at `06:10` (runs `scripts\sync_snapshots.py pull_push`)
+- Do a first-time pull of `price_snapshots.csv`
 
 Uninstall/reset:
 
@@ -108,7 +107,28 @@ Uninstall/reset:
 powershell -ExecutionPolicy Bypass -File .\scripts\reset_windows.ps1
 ```
 
----
+Managing the sync job:
+
+```powershell
+# Run the sync now
+Start-ScheduledTask -TaskName "CFB-Tix Snapshot Sync"
+
+# Check last run result
+Get-ScheduledTaskInfo -TaskName "CFB-Tix Snapshot Sync"
+
+# Delete the task
+Unregister-ScheduledTask -TaskName "CFB-Tix Snapshot Sync" -Confirm:$false
+```
+
+Manual sync:
+
+```powershell
+# Pull only
+python scripts/sync_snapshots.py pull
+
+# Merge + upload (requires GH_TOKEN in .env)
+python scripts/sync_snapshots.py pull_push
+```
 
 ## 📊 Shared CSV Sync
 
