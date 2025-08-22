@@ -75,24 +75,76 @@ cfb-ticket-tracker/
 
 ## 💾 Downloading & Installing
 
-### Linux (ext4 image)
+## 🔧 Building & Installing (Linux)
 
-1) Download **`cfb-tix.ext4`** from the latest GitHub Release.  
-2) Mount and run the installer (autostart enabled by default):
+The app ships as a self-contained **ext4 image** that installs into `~/.local/share/cfb-tix/`.
+
 ```bash
-mkdir -p ~/mnt/cfb-tix
-sudo mount -o loop,ro cfb-tix.ext4 ~/mnt/cfb-tix
-bash ~/mnt/cfb-tix/install_linux.sh
-# or opt out of autostart:
-bash ~/mnt/cfb-tix/install_linux.sh --no-autostart
-sudo umount ~/mnt/cfb-tix && rmdir ~/mnt/cfb-tix
+# Build the ext4 image
+make ext4
+
+# Mount and run the installer from the image
+make install-linux
 ```
 
-If the GUI needs Qt/XCB libs on your distro:
+This will:
+- Copy the app into `~/.local/share/cfb-tix/app`
+- Create a Python venv at `~/.local/share/cfb-tix/venv`
+- Install the app (editable mode)
+- Enable autostart (systemd --user)
+- Install the desktop launcher for the GUI
+- **Install the CSV sync timer (daily at 06:10 local)**  
+- **Do a first-time pull of `price_snapshots.csv`**
+
+---
+
+## 📊 Shared CSV Sync
+
+We keep a single shared `price_snapshots.csv` on the repo’s **GitHub Release** (`snapshots` tag).  
+The installer sets up a **systemd user timer** (`cfb-tix-sync.timer`) that:
+
+- Every morning at 06:10 local time:
+  - Downloads the current CSV from GitHub
+  - Merges with your local copy
+  - Uploads the merged version back to the Release (requires `GH_TOKEN`)
+
+### Managing the sync job
+
 ```bash
-sudo apt-get update && sudo apt-get install -y \
-  libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
-  libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-shm0
+# Check status of sync service + timer
+make sync-status
+
+# Run sync right now (merge + upload)
+make sync-now
+
+# View recent logs
+make sync-logs
+
+# Remove the timer if you don’t want daily sync
+make sync-uninstall
+```
+
+### Manual sync
+
+```bash
+# Pull latest CSV only
+make data-pull
+
+# Merge + upload (requires GH_TOKEN in ~/.local/share/cfb-tix/app/.env)
+make data-push
+```
+
+---
+
+## 🔑 Authentication for Uploads
+
+- **Downloading works without a token** if the repo is public.  
+- **Uploading requires a GitHub token.**
+
+Create `~/.local/share/cfb-tix/app/.env` with:
+
+```
+GH_TOKEN=ghp_yourtokenhere
 ```
 
 **What you get (Linux):**
@@ -100,10 +152,60 @@ sudo apt-get update && sudo apt-get install -y \
 - **GUI launcher**: Applications menu → **“CFB Tickets (GUI)”**  
 - **Autostart toggle**: `cfb-tix autostart --enable|--disable|--status`
 
-### Windows (.exe)
+## 🪟 Installing & CSV Sync (Windows)
 
-1) Download **`cfb-tix-setup.exe`** from the latest GitHub Release and run it.  
-2) The installer places the app in `%LocalAppData%\cfb-tix\app`, creates `%LocalAppData%\cfb-tix\venv`, registers a **Task Scheduler** job (daemon on logon), and adds a **Start Menu** shortcut “CFB Tickets (GUI)”.
+On Windows, we use a **Task Scheduler job** to keep `price_snapshots.csv` synced daily.
+
+### Install the scheduled task
+
+From PowerShell (run once):
+
+```powershell
+cd $HOME\cfb-ticket-tracker
+
+# Register the daily sync at 06:10 local time
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\register_sync.ps1 -Repo "$PWD" -At "06:10"
+```
+
+This will:
+- Create a Task Scheduler job named **CFB-Tix Snapshot Sync**
+- Run every day at 06:10 local time
+- Run `scripts/sync_snapshots.py pull_push` using your Python
+- Do a first-time pull of `price_snapshots.csv` immediately
+
+### Managing the sync job
+
+```powershell
+# Run the sync right now
+Start-ScheduledTask -TaskName "CFB-Tix Snapshot Sync"
+
+# Check the last run result
+Get-ScheduledTaskInfo -TaskName "CFB-Tix Snapshot Sync"
+
+# Delete the task if you no longer want daily sync
+Unregister-ScheduledTask -TaskName "CFB-Tix Snapshot Sync" -Confirm:$false
+```
+
+### Manual sync
+
+```powershell
+# Pull latest CSV only
+python scripts/sync_snapshots.py pull
+
+# Merge + upload (requires GH_TOKEN in .env)
+python scripts/sync_snapshots.py pull_push
+```
+
+### 🔑 Authentication for Uploads
+
+- **Downloading works without a token** if the repo is public.  
+- **Uploading requires a GitHub token.**
+
+Create `.env` in your repo root with:
+
+```
+GH_TOKEN=ghp_yourtokenhere
+```
 
 ---
 
