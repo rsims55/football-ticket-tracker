@@ -18,3 +18,21 @@ dist/
 build/
 packaging/windows/Output/
 *.egg-info/
+
+# Build artifacts
+/dist/
+.build_ext4_work/
+*.ext4
+*.exe
+
+# Build artifacts
+/dist/
+.build_ext4_work/
+*.ext4
+*.exe
+
+# Build artifacts
+/dist/
+.build_ext4_work/
+*.ext4
+*.exe
