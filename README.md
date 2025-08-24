@@ -103,6 +103,35 @@ A cross-platform toolkit to track, model, and visualize college football ticket 
   - Push only: `python -m cfb_tix.windows.data_sync push`
   - Pull → Push: `python -m cfb_tix.windows.data_sync pull_push`
 
+### For GitHub Token
+
+The Windows daemon pulls on startup and runs a daily pull → push at **7:00 AM local**. To push back to GitHub, it needs a Personal Access Token (PAT). You can use a **Fine‑grained token (recommended)** or a **Classic token**.
+
+### Option A — Fine‑grained token (recommended, least privilege)
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine‑grained tokens → Generate new token**
+2. **Token name:** `cfb-tix sync`
+3. **Expiration:** choose your rotation policy (e.g., 90 days)
+4. **Repository access:** **Only select repositories** → select **`rsims55/football-ticket-tracker`**
+5. **Repository permissions:**
+   - **Contents:** **Read and write** ✅
+   - **Metadata:** **Read‑only** ✅
+   - **Actions:** **Read and write** ⬜ *(optional, only if you need to trigger/manage workflows)*
+   - **Pull requests:** **Read and write** ⬜ *(optional, only if you push branches that open PRs)*
+6. **Generate** and **copy** the token value.
+
+### Option B — Classic token
+1. GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**
+2. **Note:** `cfb-tix sync`
+3. **Expiration:** choose (e.g., 90 days)
+4. **Scopes:**
+   - **`repo`** ✅ *(required for pull/push)*
+   - **`workflow`** ⬜ *(optional; trigger/manage GitHub Actions)*
+
+### Save the token locally (Windows)
+From the project root in an active virtual environment:
+```powershell
+.\venv\Scripts\pythonw.exe -m cfb_tix.windows.data_sync ensure_token
+
 ---
 
 ## 🧰 Commands & entry points
