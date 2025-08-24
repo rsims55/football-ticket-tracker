@@ -374,7 +374,7 @@ class TicketApp(QMainWindow):
             self.ax = ax  # cache for future resizes
 
         snap_filtered = self.snapshots[self.snapshots["event_id"] == event_id].dropna(
-            subset=["collected_dt", "lowest_price", "average_price"], how="any"
+            subset=["collected_dt", "lowest_price"], how="any"
         )
 
         if snap_filtered.empty:
@@ -382,7 +382,6 @@ class TicketApp(QMainWindow):
         else:
             snap_filtered = snap_filtered.sort_values("collected_dt")
             ax.plot(snap_filtered["collected_dt"], snap_filtered["lowest_price"], label="Lowest Price", linewidth=2)
-            ax.plot(snap_filtered["collected_dt"], snap_filtered["average_price"], label="Average Price", linewidth=2)
 
             ax.set_title("Price Trend Over Time")
             ax.set_xlabel("Date")
