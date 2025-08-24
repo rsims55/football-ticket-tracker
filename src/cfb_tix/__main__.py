@@ -1,4 +1,11 @@
 # src/cfb_tix/__main__.py
+"""
+Module launcher so `python -m cfb_tix ...` behaves like the CLI.
+Examples:
+  python -m cfb_tix run --no-gui
+  python -m cfb_tix run --with-gui
+"""
 from .daemon import main
-import sys
-main(no_gui=("--no-gui" in sys.argv))
+
+if __name__ == "__main__":
+    main()

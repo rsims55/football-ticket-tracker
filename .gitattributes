@@ -1,0 +1,8 @@
+# Normalize text files to LF in the repo
+* text=auto eol=lf
+
+# PowerShell scripts can be CRLF in working tree
+*.ps1 text eol=crlf
+
+# Ensure TOML stays plain UTF-8 and LF
+*.toml text eol=lf
