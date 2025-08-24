@@ -1,284 +1,164 @@
-# 🏈 College Football Ticket Price Forecasting
+# 🎟️ College Football Ticket Price Tracker
 
-Forecasts college football ticket prices and identifies the **optimal date & time to buy**. The app merges schedules, rankings, stadium capacity, rivalry flags, and live price snapshots, then trains a model to predict price trajectories and surface the best purchase window.
-
----
-
-## 🔧 Features
-
-- ✅ **Data builders**: schedules, rankings (CFD + Wikipedia fallback), stadiums, rivalries  
-- ⏱ **Snapshots 4× daily**: logs lowest & average prices + listings from TickPick  
-- 🧠 **Daily modeling**: trains & predicts price trajectories; writes optimal purchase rows  
-- 📨 **Weekly report**: accuracy summary emailed Sundays  
-- 🖥️ **GUI (PyQt5)**: pick a matchup, see predictions, countdown to the optimal time  
-- 🏃 **Daemon**: background scheduler keeps running even if the GUI is closed
+A cross-platform toolkit to track, model, and visualize college football ticket prices. Priority platform: **Windows** (silent background daemon, Start Menu/Desktop shortcuts, and automatic icon packaging). Linux quickstart included.
 
 ---
 
-## 📁 Project Structure (repo)
+## ✨ What you get
 
-```text
-cfb-ticket-tracker/
-├── assets/
-│   └── icons/                         # cfb-tix.svg, cfb-tix.ico
-├── data/
-│   ├── annual/                        # stadiums_YYYY.csv, rivalries_YYYY.csv
-│   ├── weekly/                        # full_YYYY_schedule.csv, wiki_rankings_YYYY.csv
-│   ├── daily/                         # price_snapshots.csv
-│   ├── predicted/                     # predicted_prices_optimal.csv
-│   └── permanent/                     # team_aliases.json, tickpick_teams.txt
-├── logs/                              # local logs (dev runs)
-├── models/                            # trained model(s) (dev runs)
-├── packaging/
-│   ├── build_ext4.sh                  # Linux ext4 image builder
-│   └── windows/
-│       ├── install_win.ps1
-│       └── installer.iss
-├── reports/
-│   └── weekly/
-├── scripts/
-│   └── reset_linux.sh
-├── src/
-│   ├── builders/                      # annual + weekly setup & daily snapshot
-│   │   ├── annual_setup.py
-│   │   ├── daily_snapshot.py
-│   │   └── weekly_update.py
-│   ├── cfb_tix/                       # daemon + entry points
-│   │   ├── daemon.py                  # `cfb-tix` (daemon) / `cfb-tix-gui` (GUI only)
-│   │   ├── __init__.py
-│   │   └── __main__.py
-│   ├── fetchers/
-│   │   ├── fetch_ncaa_events.py
-│   │   ├── rankings_fetcher.py
-│   │   └── schedule_fetcher.py
-│   ├── gui/
-│   │   └── ticket_predictor_gui.py
-│   ├── modeling/
-│   │   ├── train_price_model.py
-│   │   ├── predict_price.py
-│   │   └── evaluate_predictions.py
-│   ├── reports/
-│   │   ├── generate_weekly_report.py
-│   │   └── send_email.py
-│   └── scrapers/
-│       ├── rivalry_scraper.py
-│       ├── stadium_scraper.py
-│       └── tickpick_pricer.py
-├── .env (optional)
-├── pyproject.toml
-└── README.md
-```
-
-> **Installed app (Linux)** lives under `~/.local/share/cfb-tix/app/` with **data** in `~/.local/share/cfb-tix/app/data/` and **logs** in `~/.local/share/cfb-tix/app/logs/`.
+- **GUI app**: “Ticket Price Predictor” (PyQt5), launched windowlessly via a Start Menu/Desktop shortcut.
+- **Background daemon**: “CFB Ticket Tracker (Background)” runs **silently** (no console window) and:
+  - Pulls the latest `data/daily/price_snapshots.csv` at startup.
+  - Runs a **daily sync at 7:00 AM** local time (pull → push if you have a token).
+- **Icons & shortcuts**: Installed via `cfb-tix-shortcuts` (no PowerShell popups).
+- **One source of truth** for snapshots: a GitHub Release asset (`snapshots-latest` → `price_snapshots.csv`) with safe ETag caching.
 
 ---
 
-## 💾 Downloading & Installing
+## 📦 Project layout (key parts)
 
-## 🔧 Building & Installing (Linux)
-
-The app ships as a self-contained **ext4 image** that installs into `~/.local/share/cfb-tix/`.
-
-```bash
-# Build the ext4 image
-make ext4
-
-# Mount and run the installer from the image
-make install-linux
-```
-
-This will:
-- Copy the app into `~/.local/share/cfb-tix/app`
-- Create a Python venv at `~/.local/share/cfb-tix/venv`
-- Install the app (editable mode)
-- Enable autostart (systemd --user)
-- Install the desktop launcher for the GUI
-- **Install the CSV sync timer (daily at 06:10 local)**  
-- **Do a first-time pull of `price_snapshots.csv`**
+- `src/gui/` — GUI (`ticket_predictor_gui.py`)
+- `src/cfb_tix/daemon.py` — headless daemon (`cfb-tix run --no-gui`), schedules the 7:00 AM sync
+- `src/cfb_tix/launchers.py` — windowless Windows launcher for the daemon
+- `src/cfb_tix/windows/create_shortcuts.py` — creates Start Menu, Desktop, Startup shortcuts (icons, no console)
+- `src/cfb_tix/windows/data_sync.py` — pull/push `price_snapshots.csv` against GitHub Releases; can prompt for token
+- `assets/icons/` — source icons; packaged copies live under `src/cfb_tix/assets/icons/`
+- `data/` — local data folder (daemon/GUI read & write here)
 
 ---
 
-## 📊 Shared CSV Sync
+## 🪟 Windows Quickstart (recommended)
 
-We keep a single shared `price_snapshots.csv` on the repo’s **GitHub Release** (`snapshots` tag).  
-The installer sets up a **systemd user timer** (`cfb-tix-sync.timer`) that:
+1) **Install prerequisites**
+   - Install Git for Windows.
+   - Install **Python 3.11 (64-bit)** and check “Add python.exe to PATH".
 
-- Every morning at 06:10 local time:
-  - Downloads the current CSV from GitHub
-  - Merges with your local copy
-  - Uploads the merged version back to the Release (requires `GH_TOKEN`)
+2) **Clone & create a virtual environment**
+   - `git clone https://github.com/rsims55/football-ticket-tracker.git`
+   - `cd football-ticket-tracker`
+   - `python -m venv venv`
+   - `.\venv\Scripts\Activate` (PowerShell) or run the equivalent in your shell.
 
-### Managing the sync job
+3) **Install the package (editable)**
+   - `python -m pip install --upgrade pip wheel setuptools`
+   - `pip install -e .`
 
-```bash
-# Check status of sync service + timer
-make sync-status
+4) **Create shortcuts (icons, no console)**
+   - `cfb-tix-shortcuts`
+   - This adds:
+     - Start Menu → **CFB Ticket Tracker**
+       - **Ticket Price Predictor** (GUI)
+       - **CFB Ticket Tracker (Background)** (daemon, silent)
+     - Desktop → **Ticket Price Predictor**
+     - Startup → **CFB-Ticket-Tracker** (daemon auto-starts every login)
 
-# Run sync right now (merge + upload)
-make sync-now
+5) **First-run token (optional but recommended)**
+   - If you installed via the Windows installer, it already prompted you for a GitHub token.
+   - If you installed manually, you can add it now:
+     - `.\venv\Scripts\pythonw.exe -m cfb_tix.windows.data_sync ensure_token`
+     - This stores `GITHUB_TOKEN=<your token>` in `.env` at the repo root.
+   - The token is **required only for uploads**; downloads work without it (subject to GitHub rate limits).
 
-# View recent logs
-make sync-logs
+6) **Run**
+   - GUI: Start Menu → **Ticket Price Predictor**.
+   - Background daemon (silent): Start Menu → **CFB Ticket Tracker (Background)**. It also auto-starts at login.
 
-# Remove the timer if you don’t want daily sync
-make sync-uninstall
-```
-
-### Manual sync
-
-```bash
-# Pull latest CSV only
-make data-pull
-
-# Merge + upload (requires GH_TOKEN in ~/.local/share/cfb-tix/app/.env)
-make data-push
-```
-
----
-
-## 🔑 Authentication for Uploads
-
-- **Downloading works without a token** if the repo is public.  
-- **Uploading requires a GitHub token.**
-
-Create `~/.local/share/cfb-tix/app/.env` with:
-
-```
-GH_TOKEN=ghp_yourtokenhere
-```
-
-**What you get (Linux):**
-- **Daemon service (user)**: `~/.config/systemd/user/cfb-tix.service` → runs `cfb-tix --no-gui`  
-- **GUI launcher**: Applications menu → **“CFB Tickets (GUI)”**  
-- **Autostart toggle**: `cfb-tix autostart --enable|--disable|--status`
-
-## 🪟 Installing & CSV Sync (Windows)
-
-On Windows, we use a **Task Scheduler job** to keep `price_snapshots.csv` synced daily.
-
-### Install the scheduled task
-
-From PowerShell (run once):
-
-```powershell
-cd $HOME\cfb-ticket-tracker
-
-# Register the daily sync at 06:10 local time
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\register_sync.ps1 -Repo "$PWD" -At "06:10"
-```
-
-This will:
-- Create a Task Scheduler job named **CFB-Tix Snapshot Sync**
-- Run every day at 06:10 local time
-- Run `scripts/sync_snapshots.py pull_push` using your Python
-- Do a first-time pull of `price_snapshots.csv` immediately
-
-### Managing the sync job
-
-```powershell
-# Run the sync right now
-Start-ScheduledTask -TaskName "CFB-Tix Snapshot Sync"
-
-# Check the last run result
-Get-ScheduledTaskInfo -TaskName "CFB-Tix Snapshot Sync"
-
-# Delete the task if you no longer want daily sync
-Unregister-ScheduledTask -TaskName "CFB-Tix Snapshot Sync" -Confirm:$false
-```
-
-### Manual sync
-
-```powershell
-# Pull latest CSV only
-python scripts/sync_snapshots.py pull
-
-# Merge + upload (requires GH_TOKEN in .env)
-python scripts/sync_snapshots.py pull_push
-```
-
-### 🔑 Authentication for Uploads
-
-- **Downloading works without a token** if the repo is public.  
-- **Uploading requires a GitHub token.**
-
-Create `.env` in your repo root with:
-
-```
-GH_TOKEN=ghp_yourtokenhere
-```
+7) **Data locations**
+   - Snapshots live at `data/daily/price_snapshots.csv`.
+   - The daemon performs an initial pull at start, then a **daily sync at 7:00 AM** local time.
 
 ---
 
-## ▶️ Running
+## 🐧 Linux Quickstart
 
-**Entry points**
-- `cfb-tix` — run daemon (scheduler). Launches GUI unless `--no-gui`  
-- `cfb-tix --no-gui` — headless scheduler service  
-- `cfb-tix-gui` — GUI only (no scheduler)
-
-**Quick checks (Linux):**
-```bash
-pgrep -fa 'cfb[-_]tix'                           # confirm the process is running
-tail -n 200 ~/.local/share/cfb-tix/app/logs/cfb_tix.log
-```
-
-**Autostart (Linux/systemd user service):**
-```bash
-cfb-tix autostart --enable
-cfb-tix autostart --disable
-cfb-tix autostart --status
-```
-
----
-
-## ⏰ Built-in Schedules (America/New_York)
-
-- **Annual check**: daily @ **00:30** (ensure current-year files; drop prior-year after May 1)  
-- **Weekly refresh**: **Wed 06:00** (schedule + rankings)  
-- **Daily snapshots**: **00:00, 06:00, 12:00, 18:00** (prices)  
-- **Daily modeling**: **06:00** (train → predict)  
-- **Sunday report**: **Sun 06:30** (evaluate + weekly report + email)
+1) **Prereqs**: Git, Python 3.11.
+2) **Clone & venv**:
+   - `git clone https://github.com/rsims55/football-ticket-tracker.git`
+   - `cd football-ticket-tracker`
+   - `python3 -m venv venv`
+   - `source venv/bin/activate`
+3) **Install**:
+   - `pip install --upgrade pip`
+   - `pip install -e .`
+4) **Run**:
+   - GUI: `python -m gui.ticket_predictor_gui`
+   - Daemon (foreground): `python -m cfb_tix run --no-gui`
+5) **Optional autostart (systemd user)**:
+   - Copy `packaging/linux/cfb-tix.service` to `~/.config/systemd/user/cfb-tix.service`
+   - `systemctl --user enable --now cfb-tix.service`
+6) **Token prompt** (optional for uploads):
+   - `python -m cfb_tix.windows.data_sync ensure_token` (works on Linux too; stores to `.env`)
 
 ---
 
-## 🧪 Dev Quickstart
+## 🔁 Data sync model
 
-```bash
-# From repo root
-python3 -m venv .venv && source .venv/bin/activate
-pip install -U pip wheel setuptools
-pip install -e .  # installs `cfb-tix` & deps via pyproject
-
-# Optional .env for external APIs
-# CFD_API_KEY=...
-# SEATGEEK_CLIENT_ID=...
-# SEATGEEK_CLIENT_SECRET=...
-
-# Manual run (dev)
-python -m cfb_tix --no-gui
-```
-
-**Key runtime deps** (packaged): `joblib`, `scikit-learn` (plus transitive `scipy`, `threadpoolctl`).
+- **Remote source**: GitHub Release tag `snapshots-latest`, asset name `price_snapshots.csv`.
+- **On start**: the daemon pulls the latest file using conditional requests (ETag / Last-Modified).
+- **Daily at 7:00 AM**: pull latest → push local (push requires token).
+- **Token**: read from `SNAP_GH_TOKEN` or `GITHUB_TOKEN` env vars, or `.env` at repo root.
+- **Manual commands** (all platforms):
+  - Ensure token: `python -m cfb_tix.windows.data_sync ensure_token`
+  - Pull only: `python -m cfb_tix.windows.data_sync pull`
+  - Push only: `python -m cfb_tix.windows.data_sync push`
+  - Pull → Push: `python -m cfb_tix.windows.data_sync pull_push`
 
 ---
 
-## 🔍 Troubleshooting
+## 🧰 Commands & entry points
 
-```bash
-# Process alive?
-pgrep -fa 'cfb[-_]tix' || echo "cfb-tix not running"
-
-# Tail the daemon log
-tail -f ~/.local/share/cfb-tix/app/logs/cfb_tix.log
-
-# Re-run model steps from the installed app
-APP=~/.local/share/cfb-tix/app
-PY=~/.local/share/cfb-tix/venv/bin/python
-cd "$APP" && "$PY" -m modeling.train_price_model && "$PY" -m modeling.predict_price
-```
+- GUI (module): `python -m gui.ticket_predictor_gui`
+- Daemon (module): `python -m cfb_tix run --no-gui`
+- GUI desktop app (Windows shim): Start Menu → **Ticket Price Predictor**
+- Background daemon (Windows shim): Start Menu → **CFB Ticket Tracker (Background)**
+- Shortcut creator: `cfb-tix-shortcuts`
 
 ---
 
-## 📜 License
+## 🔧 Configuration (env)
 
-© 2025 Randi Sims. All rights reserved.
+- `SNAP_OWNER` (default `rsims55`)
+- `SNAP_REPO` (default `football-ticket-tracker`)
+- `SNAP_TAG` (default `snapshots-latest`)
+- `SNAP_ASSET` (default `price_snapshots.csv`)
+- `SNAP_DEST` (default `data/daily/price_snapshots.csv`)
+- `SNAP_GH_TOKEN` or `GITHUB_TOKEN` (required for uploads; optional for downloads)
+
+You can set these in a `.env` file in the repo root (the token prompt writes here automatically).
+
+---
+
+## 🖼 Icons & packaging
+
+- Icons are included in wheels and sdists:
+  - `src/cfb_tix/assets/icons/cfb-tix_gui.ico`
+  - `src/cfb_tix/assets/icons/cfb-tix_daemon.ico`
+- `cfb-tix-shortcuts` assigns these icons to Start Menu/Desktop/Startup shortcuts on Windows.
+- Launchers use **GUI-style executables** (via `[project.gui-scripts]`) to avoid console windows.
+
+---
+
+## 🧪 Troubleshooting
+
+- **No shortcuts created**: Ensure the venv is active and run `cfb-tix-shortcuts` again.
+- **Icons missing on shortcuts**: Confirm the `.ico` files exist under `src/cfb_tix/assets/icons/` and reinstall `pip install -e .`.
+- **No uploads**: Add a token via `pythonw -m cfb_tix.windows.data_sync ensure_token` or set `GITHUB_TOKEN`.
+- **GUI won’t start**: Try `python -m gui.ticket_predictor_gui` from the venv to see errors in the console.
+- **Daemon not syncing**: Check `logs/cfb_tix.log`.
+
+---
+
+## 📝 Development notes
+
+- GUI lives under `src/gui/` (not under `cfb_tix`). Entry points are configured accordingly.
+- Daemon honors `--with-gui` if you want to route through the same process (dev convenience).
+- Packaging uses:
+  - `[project.gui-scripts]` for windowless Windows shims.
+  - `include-package-data = true` and `[tool.setuptools.package-data] cfb_tix = ["assets/icons/*.ico"]`.
+  - `MANIFEST.in` to include icons in sdists.
+
+---
+
+## 📄 License
+
+Proprietary (see `pyproject.toml`).

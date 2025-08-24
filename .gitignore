@@ -1,44 +1,56 @@
-# Ignore Python virtual environments
-venv/
-
-# Ignore environment variable files
-.env
-
-# Ignore compiled Python files
+# Python bytecode / build
 __pycache__/
-
-# Ignore VSCode settings (optional)
-.vscode/
-
-# Ignore macOS metadata
-.DS_Store
-
-# Installers & build outputs
-dist/
-build/
-packaging/windows/Output/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dylib
 *.egg-info/
+.eggs/
+build/
+dist/
+*.whl
 
-# Build artifacts
-/dist/
-.build_ext4_work/
-*.ext4
-*.exe
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
 
-# Build artifacts
-/dist/
-.build_ext4_work/
-*.ext4
-*.exe
+# Env & secrets
+.env
+.env.*
 
-# Build artifacts
-/dist/
-.build_ext4_work/
-*.ext4
-*.exe
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Build artifacts
-/dist/
+# Logs
+logs/
+*.log
+
+# Coverage (if you use it)
+.coverage
+htmlcov/
+
+# Data: scratch & archives
+data/daily/_tmp_*
+data/daily/archives/*
+
+# Keep the live snapshots file tracked
+!data/daily/price_snapshots.csv
+
+# Generated plots/exports
+data/predicted/*.png
+
+# Linux image build work dirs & artifacts
 .build_ext4_work/
-*.ext4
-*.exe
+packaging/.build_ext4_work/
+packaging/dist/*.ext4
+
+# Local helpers
+repo_tree.txt

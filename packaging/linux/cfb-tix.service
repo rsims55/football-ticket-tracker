@@ -1,0 +1,10 @@
+[Unit]
+Description=CFB Ticket Tracker Daemon
+
+[Service]
+WorkingDirectory=%h/cfb-ticket-tracker
+ExecStart=%h/cfb-ticket-tracker/venv/bin/python -m cfb_tix run --no-gui
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

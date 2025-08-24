@@ -34,10 +34,9 @@ Source: "{#SourceBase}\packaging\windows\install_win.ps1"; DestDir: "{app}"; Fla
 Source: "{#SourceBase}\assets\icons\cfb-tix.ico"; DestDir: "{app}\assets\icons"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Run]
-; Run post-install as current user, no admin prompts
-Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install_win.ps1"" -AppDir ""{app}"""; \
-  Flags: nowait postinstall skipifsilent
+Filename: "powershell.exe";
+Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\register_sync.ps1"" -Repo ""{app}""";
+Flags: runhidden nowait postinstall skipifsilent
 
 [UninstallRun]
 ; On uninstall, remove scheduled task and shortcut (idempotent)
