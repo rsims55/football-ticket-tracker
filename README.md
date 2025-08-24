@@ -9,7 +9,11 @@ A cross-platform toolkit to track, model, and visualize college football ticket 
 - **GUI app**: “Ticket Price Predictor” (PyQt5), launched windowlessly via a Start Menu/Desktop shortcut.
 - **Background daemon**: “CFB Ticket Tracker (Background)” runs **silently** (no console window) and:
   - Pulls the latest `data/daily/price_snapshots.csv` at startup.
-  - Runs a **daily sync at 7:00 AM** local time (pull → push if you have a token).
+  - Runs a **daily sync at 7:10 AM** local time (pull → push if you have a token).
+  - Scrapes ticket prices four times a day **6:00AM, 12:00PM, 6:00PM, 12:00AM**
+  - Renders an updated model **twice a day at 6:45 AM and 6:45 PM**
+  - Runs a weekly update **Wednesday at 5:45 AM to update kickoff times and rankings**
+  - Runs an annual updater **May 1st at 5:00 AM to update the current year's rivalries and schedules**
 - **Icons & shortcuts**: Installed via `cfb-tix-shortcuts` (no PowerShell popups).
 - **One source of truth** for snapshots: a GitHub Release asset (`snapshots-latest` → `price_snapshots.csv`) with safe ETag caching.
 
@@ -131,7 +135,7 @@ The Windows daemon pulls on startup and runs a daily pull → push at **7:00 AM 
 From the project root in an active virtual environment:
 ```powershell
 .\venv\Scripts\pythonw.exe -m cfb_tix.windows.data_sync ensure_token
-
+```
 ---
 
 ## 🧰 Commands & entry points
