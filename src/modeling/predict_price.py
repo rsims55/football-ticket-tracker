@@ -44,16 +44,38 @@ MIN_REQUIRED_INPUT = [
     "week",                           # ← require week now that it's in snapshots
 ]
 
-def _coerce_booleans(df: pd.DataFrame, cols):
-    for c in cols:
-        if c in df.columns:
-            if df[c].dtype == object:
-                df[c] = (
-                    df[c].astype(str).str.strip().str.lower()
-                    .map({"true": True, "false": False, "1": True, "0": False})
-                )
-            df[c] = df[c].astype("boolean").astype(bool)
+def _coerce_booleans(df, bool_cols=None):
+    """
+    Normalize boolean-like columns with NaNs/strings/0/1 safely.
+    If bool_cols is None, use the default set used in this script.
+    """
+    import numpy as np
+    import pandas as pd
+
+    if bool_cols is None:
+        bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
+
+    # Only keep existing columns
+    bool_cols = [c for c in bool_cols if c in df.columns]
+
+    truth_map = {
+        True: True, False: False,
+        "true": True, "false": False, "True": True, "False": False,
+        "yes": True, "no": False, "YES": True, "NO": False,
+        "y": True, "n": False, "Y": True, "N": False,
+        1: True, 0: False, "1": True, "0": False,
+        "t": True, "f": False, "T": True, "F": False,
+        np.nan: np.nan
+    }
+
+    for c in bool_cols:
+        s = df[c]
+        if not pd.api.types.is_bool_dtype(s):
+            s = s.map(truth_map).astype("boolean")
+        df[c] = s.fillna(False).astype(bool)
+
     return df
+
 
 def _compose_start_datetime(row) -> pd.Timestamp:
     date_str = str(row.get("date_local", "")).strip()

@@ -33,19 +33,43 @@ TARGET = "lowest_price"
 REQUIRED = NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]
 
 
-def _coerce_booleans(df: pd.DataFrame, cols):
-    """Ensure boolean-like columns are actually bools."""
-    for c in cols:
-        if c in df.columns:
-            if df[c].dtype == object:
-                df[c] = (
-                    df[c].astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .map({"true": True, "false": False, "1": True, "0": False})
-                )
-            df[c] = df[c].astype("boolean").astype(bool, copy=False)
+def _coerce_booleans(df, bool_cols=None):
+    """
+    Make boolean-like columns robust against NaN/strings/0/1 before casting.
+    If bool_cols is not passed, it uses a default list.
+    """
+    import numpy as np
+    import pandas as pd
+
+    # Default list if none provided
+    if bool_cols is None:
+        bool_cols = [
+            "neutral_site", "rivalry", "conference_game", "is_weeknight"
+        ]
+
+    # Keep only columns that actually exist
+    bool_cols = [c for c in bool_cols if c in df.columns]
+
+    truth_map = {
+        True: True, False: False,
+        "true": True, "false": False,
+        "True": True, "False": False,
+        "yes": True, "no": False,
+        "YES": True, "NO": False,
+        "y": True, "n": False,
+        1: True, 0: False, "1": True, "0": False,
+        "t": True, "f": False, "T": True, "F": False,
+        np.nan: np.nan
+    }
+
+    for c in bool_cols:
+        s = df[c]
+        if not pd.api.types.is_bool_dtype(s):
+            s = s.map(truth_map).astype("boolean")
+        df[c] = s.fillna(False).astype(bool)
+
     return df
+
 
 
 def _coerce_numerics(df: pd.DataFrame, cols):
