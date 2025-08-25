@@ -1,15 +1,16 @@
 # packaging/windows/install_win.ps1
 # Idempotent installer for current user:
-# - Requires secrets.txt at the PROJECT ROOT (same folder as pyproject.toml)
-# - If missing, prompts to create a template, opens in Notepad, and waits
-# - Mirrors the project into %LocalAppData%\cfb-tix\app
+# - Requires secrets.txt at the REPO ROOT (NOT next to pyproject.toml). Prompts to create if missing.
+# - Mirrors repo's app/ folder into %LocalAppData%\cfb-tix\app
 # - Creates %LocalAppData%\cfb-tix\venv and installs the app (editable) into that venv
 # - Registers "CFB Tickets" Task Scheduler job at user logon to run the headless daemon
-# - Creates Start Menu shortcut "CFB Tickets (GUI)" pointing to venv Scripts\cfb-tix-gui(.exe)
-# - Immediately runs daily_snapshot and weekly_update once after install
+#   (fixed: uses `pythonw.exe -m cfb_tix run --no-gui`)
+# - Creates Start Menu shortcut "CFB Tickets (GUI)" that calls a wrapper for reliable GUI launch
+# - Immediately runs daily_snapshot and weekly_update once (weekly skipped if CFD_API_KEY is blank)
+
 param(
-  [string]$AppDir = "$(Split-Path -Parent $MyInvocation.MyCommand.Path)",
-  [switch]$Uninstall
+  [switch]$Uninstall,
+  [switch]$NoJobs   # pass -NoJobs to skip the first-run jobs
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,39 +19,60 @@ $ErrorActionPreference = "Stop"
 $pkgName   = "cfb-tix"
 $appName   = "CFB Ticket Price Tracker"
 $taskName  = "CFB Tickets"
-$localBase = Join-Path $env:LocalAppData $pkgName
-$venvDir   = Join-Path $localBase "venv"
-$appDst    = Join-Path $localBase "app"
 
-# Start Menu (per-user)
-$startMenuDir = Join-Path $env:AppData "Microsoft\Windows\Start Menu\Programs"
-$shortcutPath = Join-Path $startMenuDir "CFB Tickets (GUI).lnk"
+# Resolve repo root (script is at repo\packaging\windows\install_win.ps1)
+try {
+  $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+} catch {
+  $RepoRoot = (Get-Location).Path
+}
 
-# Icons (repo or packaged)
-$iconPath = Join-Path (Join-Path $AppDir "..") "assets\icons\cfb-tix.ico"
-if (-not (Test-Path $iconPath)) { $iconPath = Join-Path $appDst "assets\icons\cfb-tix.ico" }
+# IMPORTANT: your pyproject.toml is under app/, so we mirror from there
+$RepoAppSrc = Join-Path $RepoRoot 'app'
+if (-not (Test-Path (Join-Path $RepoAppSrc 'pyproject.toml'))) {
+  throw "Expected pyproject.toml at: $RepoAppSrc. Run this from your cloned repo root where 'app\pyproject.toml' exists."
+}
 
-# Python executables inside venv
-$pyExe  = Join-Path $venvDir "Scripts\python.exe"
-$pyWExe = Join-Path $venvDir "Scripts\pythonw.exe"  # preferred for no console
+# Secrets live at the REPO ROOT (not next to pyproject)
+$SecretsPath = Join-Path $RepoRoot 'secrets.txt'
 
-function Ensure-Shortcut {
-  param([string]$Target, [string]$Shortcut, [string]$Icon)
+$Base    = Join-Path $env:LocalAppData $pkgName
+$VenvDir = Join-Path $Base 'venv'
+$AppDst  = Join-Path $Base 'app'
+$LogsDir = Join-Path $Base 'logs'
+$BinDir  = Join-Path $Base 'bin'
+
+$PyExe   = Join-Path $VenvDir 'Scripts\python.exe'
+$PywExe  = Join-Path $VenvDir 'Scripts\pythonw.exe'
+
+# GUI
+$GuiPy       = Join-Path $AppDst 'src\gui\ticket_predictor_gui.py'
+$IconPath    = Join-Path $AppDst 'assets\icons\cfb-tix.ico'
+$GuiWrapper  = Join-Path $BinDir 'run_gui.cmd'
+$UserStart   = Join-Path $env:AppData 'Microsoft\Windows\Start Menu\Programs'
+$ShortcutU   = Join-Path $UserStart 'CFB Tickets (GUI).lnk'
+
+# ---------- helpers ----------
+function Ensure-Dir([string[]]$paths) {
+  foreach ($p in $paths) { if (-not (Test-Path $p)) { New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+}
+
+function Ensure-Shortcut([string]$Target,[string]$Args,[string]$Shortcut,[string]$Icon,[string]$WorkDir,[int]$WindowStyle=1) {
   New-Item -ItemType Directory -Force -Path (Split-Path $Shortcut -Parent) | Out-Null
   $shell = New-Object -ComObject WScript.Shell
   $sc = $shell.CreateShortcut($Shortcut)
   $sc.TargetPath = $Target
-  $sc.WorkingDirectory = (Split-Path $Target -Parent)
+  $sc.Arguments  = $Args
+  $sc.WorkingDirectory = $WorkDir
   if (Test-Path $Icon) { $sc.IconLocation = $Icon }
-  $sc.WindowStyle = 1
-  $sc.Description = "Open the CFB Ticket Price Tracker GUI"
+  $sc.WindowStyle = $WindowStyle
+  $sc.Description = 'Open the CFB Ticket Price Tracker GUI'
   $sc.Save()
 }
 
-function Read-KeyValueFile {
-  param([string]$Path)
+function Read-KeyValueFile([string]$Path) {
   $map = @{}
-  if (-not (Test-Path $Path)) { throw "Secrets file not found: $Path" }
+  if (-not (Test-Path $Path)) { return $map }
   $lines = Get-Content -Raw $Path -ErrorAction Stop -Encoding UTF8
   foreach ($line in ($lines -split "`r?`n")) {
     $t = $line.Trim()
@@ -66,135 +88,142 @@ function Read-KeyValueFile {
   return $map
 }
 
-# ---- Uninstall path ----
+# ---------- uninstall ----------
 if ($Uninstall) {
-  try { schtasks.exe /Delete /TN "$taskName" /F | Out-Null } catch { }
-  if (Test-Path $shortcutPath) { Remove-Item -Force "$shortcutPath" }
-  Write-Host "✅ Unregistered scheduled task and removed Start Menu shortcut."
+  try { schtasks /End /TN "$taskName" 2>$null | Out-Null } catch {}
+  try { schtasks /Delete /TN "$taskName" /F 2>$null | Out-Null } catch {}
+  if (Test-Path $ShortcutU) { Remove-Item $ShortcutU -Force }
+  if (Test-Path $Base) { Remove-Item $Base -Recurse -Force -ErrorAction SilentlyContinue }
+  Write-Host "✅ Uninstalled: scheduled task, user shortcut, and %LocalAppData%\$pkgName"
   exit 0
 }
 
-# ---- Locate PROJECT ROOT (where pyproject.toml lives) ----
-# Try: repo two levels up from packaging\windows\ ; else current working dir
-$repoGuess = Resolve-Path (Join-Path $AppDir "..\..") -ErrorAction SilentlyContinue
-$srcRoot = $null
-if ($repoGuess -and (Test-Path (Join-Path $repoGuess "pyproject.toml"))) {
-  $srcRoot = "$repoGuess"
-} elseif (Test-Path (Join-Path (Get-Location).Path "pyproject.toml")) {
-  $srcRoot = (Get-Location).Path
-} else {
-  throw "Could not locate project root (pyproject.toml). Run this script from the repo."
-}
+# ---------- ensure folders ----------
+Ensure-Dir @($Base,$VenvDir,$AppDst,$LogsDir,$BinDir,$UserStart)
 
-# ---- Require secrets.txt at PROJECT ROOT; prompt to create if missing ----
-$secretsPath = Join-Path $srcRoot "secrets.txt"
-if (-not (Test-Path $secretsPath)) {
-  Write-Host "secrets.txt not found at: $secretsPath" -ForegroundColor Yellow
-  $ans = Read-Host "Create a template secrets.txt there now? (Y/N)"
-  if ($ans -match '^[Yy]') {
-    $template = @"
+# ---------- require/collect secrets ----------
+if (-not (Test-Path $SecretsPath)) {
+@"
 # secrets.txt — configuration for CFB Ticket Price Tracker
-# Place this file at the PROJECT ROOT (same folder as pyproject.toml).
-# Lines are KEY=VALUE (compatible with python-dotenv). Leave blank to fill later.
+# Place this at the REPO ROOT (same folder that has the 'app\' directory).
+# KEY=VALUE (compatible with python-dotenv). Leave blank to fill later.
 
 # GitHub token (either key name works; SNAP_GH_TOKEN is normalized)
 SNAP_GH_TOKEN=
 # GITHUB_TOKEN=
 
-# CollegeFootballData API key (used by schedule/weekly jobs)
+# CollegeFootballData API key (used by weekly/schedule jobs)
 CFD_API_KEY=
 
 # Email settings (for notifications/exports if used)
 GMAIL_APP_PASSWORD=
 GMAIL_ADDRESS=
 TO_EMAIL=
-
-# Tips:
-# - Keep this file OUT of version control (add 'secrets.txt' to .gitignore).
-# - You can commit a 'secrets.example.txt' with empty values for teammates.
-"@
-    $template | Out-File -Encoding ASCII -Force $secretsPath
-    Write-Host "Opening secrets.txt for editing..." -ForegroundColor Cyan
-    notepad $secretsPath
-    Write-Host "Save the file, then press Enter to continue..."
-    [void][System.Console]::ReadLine()
-  } else {
-    throw "Please create secrets.txt at the project root and rerun. Expected at: $secretsPath"
-  }
+"@ | Out-File -Encoding ASCII -Force $SecretsPath
+  Write-Host "⚠️  Created $SecretsPath. Please fill it now, save, then return here."
+  Start-Process notepad $SecretsPath
+  Read-Host "Press ENTER after you saved secrets.txt"
 }
+$secrets = Read-KeyValueFile $SecretsPath
 
-# ---- Parse secrets and set env ----
-$secrets = Read-KeyValueFile -Path $secretsPath
-if (-not $secrets.ContainsKey("SNAP_GH_TOKEN") -and $secrets.ContainsKey("GITHUB_TOKEN")) {
-  $secrets["SNAP_GH_TOKEN"] = $secrets["GITHUB_TOKEN"]
-}
-if (-not $secrets.ContainsKey("GITHUB_TOKEN") -and $secrets.ContainsKey("SNAP_GH_TOKEN")) {
-  $secrets["GITHUB_TOKEN"] = $secrets["SNAP_GH_TOKEN"]
-}
-$keys = @("SNAP_GH_TOKEN","GITHUB_TOKEN","CFD_API_KEY","GMAIL_APP_PASSWORD","GMAIL_ADDRESS","TO_EMAIL")
-foreach ($k in $keys) {
-  if ($secrets.ContainsKey($k) -and $secrets[$k]) {
-    [Environment]::SetEnvironmentVariable($k, $secrets[$k], "User")
-  }
-}
+# normalize alias both ways
+if (-not $secrets.ContainsKey('SNAP_GH_TOKEN') -and $secrets.ContainsKey('GITHUB_TOKEN')) { $secrets['SNAP_GH_TOKEN'] = $secrets['GITHUB_TOKEN'] }
+if (-not $secrets.ContainsKey('GITHUB_TOKEN') -and $secrets.ContainsKey('SNAP_GH_TOKEN')) { $secrets['GITHUB_TOKEN'] = $secrets['SNAP_GH_TOKEN'] }
 
-# ---- Create base dirs ----
-New-Item -ItemType Directory -Force -Path $localBase,$appDst,$startMenuDir | Out-Null
+# Persist as user env (optional but convenient)
+$keys = @('SNAP_GH_TOKEN','GITHUB_TOKEN','CFD_API_KEY','GMAIL_APP_PASSWORD','GMAIL_ADDRESS','TO_EMAIL')
+foreach ($k in $keys) { if ($secrets.ContainsKey($k) -and $secrets[$k]) { [Environment]::SetEnvironmentVariable($k,$secrets[$k],'User') } }
 
-# ---- Mirror sources into user-writable appDst (exclude junk) ----
-$rcArgs = @(
-  $srcRoot, $appDst,
-  '/MIR',
-  '/XD', '.git', '.venv', 'venv', 'packaging\dist', 'packaging\.build_ext4_work', '__pycache__',
-  '/XF', '*.pyc', '*.log'
+# ---------- mirror repo app -> installed app ----------
+$robocopyArgs = @(
+  '/MIR','/NFL','/NDL','/NJH','/NJS','/NC','/NS','/NP',
+  '/XD','.git','__pycache__','.github','dist','build','*.egg-info','.venv','venv','packaging\dist','packaging\.build*',
+  '/XF','*.pyc','*.log'
 )
-robocopy @rcArgs | Out-Null
+& robocopy "$RepoAppSrc" "$AppDst" $robocopyArgs | Out-Null
 
-# ---- Write .env next to the installed app ----
-$envPath = Join-Path $appDst ".env"
+# ---------- write .env next to installed app ----------
+$envPath = Join-Path $AppDst '.env'
 $envOut = foreach ($k in $keys) { if ($secrets.ContainsKey($k)) { "$k=$($secrets[$k])" } }
 $envOut -join "`r`n" | Out-File -Encoding ASCII -Force $envPath
-try { icacls "$envPath" /inheritance:r /grant:r "$env:USERNAME:(R,W)" | Out-Null } catch { }
+try { icacls "$envPath" /inheritance:r /grant:r "$env:USERNAME:(R,W)" | Out-Null } catch {}
 
-# ---- Ensure Python & venv ----
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
-if (-not $python) { throw "Python is required in PATH." }
-
-if (-not (Test-Path $venvDir)) {
-  & $python.Path -m venv "$venvDir"
+# ---------- choose Python (prefer 3.12, then 3.11, else 'python') ----------
+$chosenPy = $null
+$pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+if ($pyLauncher) {
+  $list = & py -0p
+  if ($list -match '3\.12') { $chosenPy = 'py -3.12' }
+  elseif ($list -match '3\.11') { $chosenPy = 'py -3.11' }
 }
-& "$pyExe" -m pip install --upgrade --disable-pip-version-check pip setuptools wheel
+if (-not $chosenPy) {
+  $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+  if ($pythonCmd) { $chosenPy = 'python' } else { throw "Python not found. Install Python 3.12 or 3.11." }
+}
 
-# ---- Install app into that venv (editable) ----
-Push-Location $appDst
-& "$pyExe" -m pip install -e .
+# ---------- venv + install editable ----------
+if (-not (Test-Path $VenvDir)) {
+  Write-Host "Creating venv with: $chosenPy"
+  cmd /c "$chosenPy -m venv `"$VenvDir`""
+}
+& "$PyExe" -m pip install --upgrade --disable-pip-version-check pip setuptools wheel
+Push-Location $AppDst
+& "$PyExe" -m pip install -e .
 Pop-Location
 
-# ---- Immediately run daily_snapshot and weekly_update once ----
-$daily  = Join-Path $appDst "src\builders\daily_snapshot.py"
-$weekly = Join-Path $appDst "src\builders\weekly_update.py"
-if (-not (Test-Path $weekly)) { $weekly = Join-Path $appDst "src\reports\generate_weekly_report.py" }
+# ---------- first-run jobs ----------
+if (-not $NoJobs) {
+  $haveCFD = ($secrets.ContainsKey('CFD_API_KEY') -and $secrets['CFD_API_KEY'])
+  try {
+    Write-Host "▶ Running daily_snapshot once..."
+    & "$PyExe" (Join-Path $AppDst 'src\builders\daily_snapshot.py')
+  } catch { Write-Host "WARN: daily_snapshot failed: $($_.Exception.Message)" }
 
-Write-Host ">> Running daily_snapshot.py once..."
-try { & "$pyExe" "$daily" } catch { Write-Host "WARN: daily_snapshot failed: $($_.Exception.Message)" }
+  try {
+    if ($haveCFD) {
+      Write-Host "▶ Running weekly_update once..."
+      $weekly = Join-Path $AppDst 'src\builders\weekly_update.py'
+      if (-not (Test-Path $weekly)) { $weekly = Join-Path $AppDst 'src\reports\generate_weekly_report.py' }
+      & "$PyExe" $weekly
+    } else {
+      Write-Host "⏭️  Skipping weekly_update (CFD_API_KEY is blank)."
+    }
+  } catch { Write-Host "WARN: weekly_update failed: $($_.Exception.Message)" }
+}
 
-Write-Host ">> Running weekly_update once..."
-try { & "$pyExe" "$weekly" } catch { Write-Host "WARN: weekly_update failed: $($_.Exception.Message)" }
+# ---------- register/replace scheduled task (FIXED command) ----------
+try { schtasks /Delete /TN "$taskName" /F 2>$null | Out-Null } catch {}
+$runner = (Test-Path $PywExe) ? $PywExe : $PyExe
+# no ternary in older PS; do it explicitly:
+if (-not (Test-Path $PywExe)) { $runner = $PyExe } else { $runner = $PywExe }
+$action = "`"$runner`" -m cfb_tix run --no-gui"
+schtasks /Create /TN "$taskName" /TR $action /SC ONLOGON /RL LIMITED /F | Out-Null
 
-# ---- Register (replace) scheduled task at user logon ----
-try { schtasks.exe /Delete /TN "$taskName" /F | Out-Null } catch { }
-$runner = $pyWExe
-if (-not (Test-Path $pyWExe)) { $runner = $pyExe }
-$action = "`"$runner`" -m cfb_tix --no-gui"
-schtasks.exe /Create /TN "$taskName" /TR $action /SC ONLOGON /RL LIMITED /F | Out-Null
+# ---------- GUI wrapper (reliable) + user shortcut ----------
+@"
+@echo off
+setlocal
+set "BASE=%LOCALAPPDATA%\cfb-tix"
+set "APP=%BASE%\app"
+set "PYW=%BASE%\venv\Scripts\pythonw.exe"
+set "GUI=%APP%\src\gui\ticket_predictor_gui.py"
+cd /d "%APP%"
+start "" "%PYW%" "%GUI%"
+"@ | Out-File -Encoding ASCII -Force $GuiWrapper
 
-# ---- Create Start Menu shortcut to GUI ----
-$guiExe = Join-Path $venvDir "Scripts\cfb-tix-gui.exe"
-if (-not (Test-Path $guiExe)) { $guiExe = Join-Path $venvDir "Scripts\cfb-tix-gui" }
-Ensure-Shortcut -Target "$guiExe" -Shortcut "$shortcutPath" -Icon "$iconPath"
+Ensure-Shortcut -Target $GuiWrapper -Args '' -Shortcut $ShortcutU -Icon $IconPath -WorkDir (Split-Path $GuiPy -Parent) -WindowStyle 1
 
+# ---------- kick daemon once & show status ----------
+schtasks /Run /TN "$taskName" 2>$null | Out-Null
+Start-Sleep -Seconds 3
+
+$log1 = Join-Path $Base 'logs\cfb_tix.log'
+$log2 = Join-Path $env:LOCALAPPDATA 'cfb-tix\cfb-tix\Logs\cfb_tix.log'
+$log = $(if (Test-Path $log1) { $log1 } elseif (Test-Path $log2) { $log2 } else { $null })
+
+Write-Host ""
 Write-Host "✅ $appName installed for user."
-Write-Host "• Background task '$taskName' registered (runs headless on logon)."
-Write-Host "• Start Menu → 'CFB Tickets (GUI)'."
-Write-Host "• Using secrets file at: $secretsPath"
+schtasks /Query /TN "$taskName"
+Write-Host "Start Menu (user): $ShortcutU"
+Write-Host "Log: " ($log ?? '<not found yet>')
+if ($log) { Get-Content $log -Tail 20 }

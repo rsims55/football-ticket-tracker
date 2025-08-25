@@ -96,7 +96,7 @@ def job_daily_snapshot(paths: Paths) -> None:
 
 def job_train_model(paths: Paths) -> None:
     # adjust if your training script lives elsewhere
-    run_py_script("src/modeling/train_model.py", paths.app_root)
+    run_py_script("src/modeling/train_price_model.py", paths.app_root)
 
 def job_predict_price(paths: Paths) -> None:
     run_py_script("src/modeling/predict_price.py", paths.app_root)
