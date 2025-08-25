@@ -54,3 +54,10 @@ packaging/dist/*.ext4
 
 # Local helpers
 repo_tree.txt
+
+# Zip File Maker
+make_clean.zip.sh
+
+# secrets
+secrets.txt
+.env

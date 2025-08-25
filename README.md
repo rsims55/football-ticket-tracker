@@ -31,6 +31,24 @@ A cross-platform toolkit to track, model, and visualize college football ticket 
 
 ---
 
+## Secrets configuration (`secrets.txt` in the project root)
+
+Create a file named **`secrets.txt`** in the project root (same folder as `pyproject.toml`) with `KEY=VALUE` lines:
+
+SNAP_GH_TOKEN=
+
+GITHUB_TOKEN=
+
+CFD_API_KEY=
+GMAIL_APP_PASSWORD=
+GMAIL_ADDRESS=
+TO_EMAIL=
+
+
+The Windows installer will require this file, prompt to create it if missing, mirror the repo into `%LocalAppData%\cfb-tix\app`, create a per-user venv, write an `.env`, register the background daemon (on logon), create a Start Menu shortcut for the GUI, and run `daily_snapshot` & `weekly_update` once.
+
+---
+
 ## 🪟 Windows Quickstart (recommended)
 
 1) **Install prerequisites**

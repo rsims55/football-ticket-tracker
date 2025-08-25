@@ -597,11 +597,21 @@ def log_price_snapshot():
         key_cols.append("event_id")
     key_cols.extend(["date_collected", "time_collected"])
 
-    # Ensure missing team info is filled
-    snap_all["home_team_name"] = snap_all["home_team_name"].fillna("FBS Team")
-    snap_all["away_team_name"] = snap_all["away_team_name"].fillna("FCS Opponent")
-    snap_all["home_team_slug"] = snap_all["home_team_slug"].fillna("fbs-team")
-    snap_all["away_team_slug"] = snap_all["away_team_slug"].fillna("fcs-opponent")
+    # Ensure missing team info is filled (tolerate different column names)
+    def _ensure_col(df, target, candidates, default):
+        src = next((c for c in candidates if c in df.columns), None)
+        if target not in df.columns:
+            df[target] = df[src] if src else default
+        else:
+            if src is not None and df[target].isna().all():
+                df[target] = df[src]
+        df[target] = df[target].fillna(default)
+        return df
+
+    snap_all = _ensure_col(snap_all, "home_team_name", ["home_team_name","homeTeam","home_team","team_name"], "FBS Team")
+    snap_all = _ensure_col(snap_all, "away_team_name", ["away_team_name","awayTeam","away_team"], "FCS Opponent")
+    snap_all = _ensure_col(snap_all, "home_team_slug", ["home_team_slug","home_slug","homeTeamSlug","team_slug"], "fbs-team")
+    snap_all = _ensure_col(snap_all, "away_team_slug", ["away_team_slug","away_slug","awayTeamSlug"], "fcs-opponent")
 
     if os.path.exists(SNAPSHOT_PATH):
         existing = pd.read_csv(SNAPSHOT_PATH)
