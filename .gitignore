@@ -1,63 +1,68 @@
-# Python bytecode / build
+# --- Python cache/venv ---
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-*.so
-*.dylib
 *.egg-info/
 .eggs/
-build/
-dist/
-*.whl
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
 
-# Virtual environments
-.venv/
+# local virtualenvs (any name)
 venv/
-env/
-ENV/
-.python-version
+.env/
+.venv*/
+env*/
+ENV*/
 
-# Env & secrets
-.env
-.env.*
+# poetry / pip-tools artifacts
+poetry.lock
+pip-wheel-metadata/
 
-# Editors / OS
+# --- Editors/IDEs ---
 .vscode/
 .idea/
+*.code-workspace
+
+# --- OS cruft ---
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Logs
+# --- Logs & runtime files ---
 logs/
 *.log
+*.pid
+*.sqlite
+.tmp/
+tmp/
 
-# Coverage (if you use it)
-.coverage
-htmlcov/
+# --- Local data/artifacts ---
+data/
+!data/README.md
+artifacts/
+!artifacts/README.md
 
-# Data: scratch & archives
-data/daily/_tmp_*
-data/daily/archives/*
-
-# Keep the live snapshots file tracked
-!data/daily/price_snapshots.csv
-
-# Generated plots/exports
-data/predicted/*.png
-
-# Linux image build work dirs & artifacts
-.build_ext4_work/
-packaging/.build_ext4_work/
-packaging/dist/*.ext4
-
-# Local helpers
-repo_tree.txt
-
-# Zip File Maker
-make_clean.zip.sh
-
-# secrets
-secrets.txt
+# --- Secrets & environment ---
 .env
+.env.*
+secrets.txt
+secrets/*.json
+*.key
+*.pem
+
+# --- Packaging outputs ---
+dist/
+build/
+packaging/dist/
+packaging/*.ext4
+packaging/*.zip
+
+# --- Windows Task Scheduler exports ---
+packaging/windows/task/*.xml
+packaging/windows/task/*.sch
+
+# --- App cache & user-local mirrors (Windows/Linux) ---
+%LOCALAPPDATA%/cfb-tix/
+.local/share/cfb-tix/
