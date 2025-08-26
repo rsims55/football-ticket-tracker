@@ -1,0 +1,6 @@
+sys.executable = C:\Users\randi\GitHub Repos\football-ticket-tracker\football-ticket-tracker\.venv\Scripts\pythonw.exe
+sys.version    = 3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]
+site-packages  = ['C:\\Users\\randi\\GitHub Repos\\football-ticket-tracker\\football-ticket-tracker\\.venv', 'C:\\Users\\randi\\GitHub Repos\\football-ticket-tracker\\football-ticket-tracker\\.venv\\Lib\\site-packages']
+sys.path[0:3]  = ['C:\\Users\\randi\\GitHub Repos\\football-ticket-tracker\\football-ticket-tracker', 'C:\\Users\\randi\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip', 'C:\\Users\\randi\\AppData\\Local\\Programs\\Python\\Python312\\DLLs']
+pandas OK      = 2.3.2
+pandas file    = C:\Users\randi\GitHub Repos\football-ticket-tracker\football-ticket-tracker\.venv\Lib\site-packages\pandas\__init__.py
