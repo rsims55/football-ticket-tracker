@@ -12,8 +12,8 @@ p = d.detect_paths()
 
 print("weekly_update");      d.job_weekly_update(p)
 print("daily_snapshot");     d.job_daily_snapshot(p)
-print("train_model");        d.job_train_model(p)
-print("predict_price");      d.job_predict_price(p)
-print("evaluate_predictions"); d.job_evaluate_predictions(p)
+# print("train_model");        d.job_train_model(p)
+# print("predict_price");      d.job_predict_price(p)
+# print("evaluate_predictions"); d.job_evaluate_predictions(p)
 
 print("done")
