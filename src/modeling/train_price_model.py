@@ -1,4 +1,3 @@
-# src/modeling/train_price_model.py
 from __future__ import annotations
 
 import os
@@ -17,9 +16,17 @@ from sklearn.ensemble import RandomForestRegressor
 # -----------------------------
 # Repo-locked paths (runs from anywhere)
 # -----------------------------
-_THIS = Path(__file__).resolve()
-SRC_DIR = _THIS.parents[2]         # .../src
-PROJ_DIR = SRC_DIR.parent          # repo root
+def _find_repo_root(start: Path) -> Path:
+    cur = start
+    for p in [cur] + list(cur.parents):
+        if (p / "pyproject.toml").exists() or (p / ".git").exists():
+            return p
+    # Fallback: two levels up (src/..)
+    return start.parent.parent
+
+_THIS    = Path(__file__).resolve()
+PROJ_DIR = _find_repo_root(_THIS)
+SRC_DIR  = PROJ_DIR / "src"
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -30,25 +37,18 @@ def _under_repo(p: Path) -> bool:
     except AttributeError:
         return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
 
-# Resolve snapshot path
-_env_snap = os.getenv("SNAPSHOT_PATH")
-if REPO_DATA_LOCK or not _env_snap:
-    SNAPSHOT_PATH = PROJ_DIR / "data" / "daily" / "price_snapshots.csv"
-else:
-    SNAPSHOT_PATH = Path(_env_snap).expanduser()
-    if not _under_repo(SNAPSHOT_PATH) and not ALLOW_ESCAPE:
-        print(f"🚫 SNAPSHOT_PATH outside repo → {SNAPSHOT_PATH} ; forcing repo path")
-        SNAPSHOT_PATH = PROJ_DIR / "data" / "daily" / "price_snapshots.csv"
+def _resolve_file(env_name: str, default_rel: Path) -> Path:
+    env_val = os.getenv(env_name)
+    if REPO_DATA_LOCK or not env_val:
+        return PROJ_DIR / default_rel
+    p = Path(env_val).expanduser()
+    if _under_repo(p) or ALLOW_ESCAPE:
+        return p
+    print(f"🚫 {env_name} outside repo → {p} ; forcing repo path")
+    return PROJ_DIR / default_rel
 
-# Resolve model path
-_env_model = os.getenv("MODEL_PATH")
-if REPO_DATA_LOCK or not _env_model:
-    MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
-else:
-    MODEL_PATH = Path(_env_model).expanduser()
-    if not _under_repo(MODEL_PATH) and not ALLOW_ESCAPE:
-        print(f"🚫 MODEL_PATH outside repo → {MODEL_PATH} ; forcing repo path")
-        MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
+SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data") / "daily" / "price_snapshots.csv")
+MODEL_PATH    = _resolve_file("MODEL_PATH",    Path("models") / "ticket_price_model.pkl")
 
 print("[train_price_model] Paths resolved:")
 print(f"  PROJ_DIR:      {PROJ_DIR}")
