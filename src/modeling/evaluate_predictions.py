@@ -1,4 +1,3 @@
-# src/modeling/evaluate_predictions.py
 from __future__ import annotations
 
 import os
@@ -14,9 +13,16 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 # -----------------------------
 # Repo-locked paths (runs from anywhere)
 # -----------------------------
-_THIS = Path(__file__).resolve()
-SRC_DIR = _THIS.parents[2]         # .../src
-PROJ_DIR = SRC_DIR.parent          # repo root
+def _find_repo_root(start: Path) -> Path:
+    cur = start
+    for p in [cur] + list(cur.parents):
+        if (p / "pyproject.toml").exists() or (p / ".git").exists():
+            return p
+    return start.parent.parent
+
+_THIS    = Path(__file__).resolve()
+PROJ_DIR = _find_repo_root(_THIS)
+SRC_DIR  = PROJ_DIR / "src"
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -34,14 +40,14 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
     p = Path(env_val).expanduser()
     if _under_repo(p) or ALLOW_ESCAPE:
         return p
-    print(f"🚫 {env_name} resolves outside repo → {p} ; forcing repo path")
+    print(f"🚫 {env_name} outside repo → {p} ; forcing repo path")
     return PROJ_DIR / default_rel
 
 PREDICTIONS_PATH = _resolve_file("PREDICTIONS_PATH", Path("data") / "predicted" / "predicted_prices_optimal.csv")
 SNAPSHOTS_PATH   = _resolve_file("SNAPSHOTS_PATH",   Path("data") / "daily"     / "price_snapshots.csv")
 ERROR_LOG_PATH   = _resolve_file("ERROR_LOG_PATH",   Path("data") / "predicted" / "evaluation_metrics.csv")
 MERGED_OUTPUT    = _resolve_file("MERGED_OUTPUT",    Path("data") / "predicted" / "merged_eval_results.csv")
-TRAIN_SCRIPT     = PROJ_DIR / "src" / "modeling" / "train_price_model.py"  # repo-absolute for retrain
+TRAIN_SCRIPT     = PROJ_DIR / "src" / "modeling" / "train_price_model.py"
 
 print("[evaluate_predictions] Paths resolved:")
 print(f"  PROJ_DIR:         {PROJ_DIR}")
@@ -50,6 +56,7 @@ print(f"  SNAPSHOTS_PATH:   {SNAPSHOTS_PATH}")
 print(f"  ERROR_LOG_PATH:   {ERROR_LOG_PATH}")
 print(f"  MERGED_OUTPUT:    {MERGED_OUTPUT}")
 print(f"  TRAIN_SCRIPT:     {TRAIN_SCRIPT}")
+
 
 PERCENT_ERROR_THRESHOLD = 0.05  # 5%
 ERROR_FRACTION_TRIGGER = 0.5    # Retrain if >50% of games exceed threshold

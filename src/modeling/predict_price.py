@@ -1,4 +1,3 @@
-# src/modeling/predict_price.py
 from __future__ import annotations
 
 import os
@@ -11,9 +10,16 @@ from datetime import datetime, timedelta
 # -----------------------------
 # Repo-locked paths (runs from anywhere)
 # -----------------------------
-_THIS = Path(__file__).resolve()
-SRC_DIR = _THIS.parents[2]         # .../src
-PROJ_DIR = SRC_DIR.parent          # repo root
+def _find_repo_root(start: Path) -> Path:
+    cur = start
+    for p in [cur] + list(cur.parents):
+        if (p / "pyproject.toml").exists() or (p / ".git").exists():
+            return p
+    return start.parent.parent
+
+_THIS    = Path(__file__).resolve()
+PROJ_DIR = _find_repo_root(_THIS)
+SRC_DIR  = PROJ_DIR / "src"
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -25,28 +31,25 @@ def _under_repo(p: Path) -> bool:
         return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
 
 def _resolve_file(env_name: str, default_rel: Path) -> Path:
-    """
-    Resolve a file path with repo-locking. Uses env var only if lock=OFF and (under repo or escape allowed).
-    default_rel is relative to PROJ_DIR.
-    """
     env_val = os.getenv(env_name)
     if REPO_DATA_LOCK or not env_val:
         return PROJ_DIR / default_rel
     p = Path(env_val).expanduser()
     if _under_repo(p) or ALLOW_ESCAPE:
         return p
-    print(f"🚫 {env_name} resolves outside repo → {p} ; forcing repo path")
+    print(f"🚫 {env_name} outside repo → {p} ; forcing repo path")
     return PROJ_DIR / default_rel
 
-MODEL_PATH  = _resolve_file("MODEL_PATH",   Path("models") / "ticket_price_model.pkl")
-PRICE_PATH  = _resolve_file("PRICE_PATH",   Path("data") / "daily" / "price_snapshots.csv")
-OUTPUT_PATH = _resolve_file("OUTPUT_PATH",  Path("data") / "predicted" / "predicted_prices_optimal.csv")
+MODEL_PATH  = _resolve_file("MODEL_PATH",  Path("models") / "ticket_price_model.pkl")
+PRICE_PATH  = _resolve_file("PRICE_PATH",  Path("data") / "daily" / "price_snapshots.csv")
+OUTPUT_PATH = _resolve_file("OUTPUT_PATH", Path("data") / "predicted" / "predicted_prices_optimal.csv")
 
 print("[predict_price] Paths resolved:")
 print(f"  PROJ_DIR:    {PROJ_DIR}")
 print(f"  MODEL_PATH:  {MODEL_PATH}")
 print(f"  PRICE_PATH:  {PRICE_PATH}")
 print(f"  OUTPUT_PATH: {OUTPUT_PATH}")
+
 
 # -----------------------------
 # Sim grid
