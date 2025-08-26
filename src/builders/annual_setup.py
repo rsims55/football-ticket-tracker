@@ -1,3 +1,4 @@
+# src/builders/annual_setup.py
 #!/usr/bin/env python3
 """
 Annual setup script:
@@ -6,38 +7,49 @@ Annual setup script:
 
 Run:
   python src/builders/annual_setup.py --year 2025
+  # optional override (kept inside repo unless REPO_ALLOW_NON_REPO_OUT=1):
+  python src/builders/annual_setup.py --outdir C:\path\to\repo\data\annual
 """
+from __future__ import annotations
+
 import os
 import sys
 import argparse
 from datetime import datetime
+from pathlib import Path
+from typing import Dict
 import pandas as pd
 
 # --- Robust project path handling (run from anywhere) ---
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))   # .../src
-PROJ_DIR = os.path.abspath(os.path.join(SRC_DIR, ".."))      # project root
+CURRENT_DIR = Path(__file__).resolve().parent
+SRC_DIR     = CURRENT_DIR.parent                 # .../src
+PROJ_DIR    = SRC_DIR.parent                     # repo root
 for p in (SRC_DIR, PROJ_DIR):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+    p_str = str(p)
+    if p_str not in sys.path:
+        sys.path.insert(0, p_str)
 
 # --- Project imports ---
 from scrapers.stadium_scraper import StadiumScraper
 from scrapers.rivalry_scraper import RivalryScraper
 
+# --- Repo-lock flags (same behavior as other scripts) ---
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
 
-# --- Helpers ---
-def ensure_dir(path: str) -> None:
-    d = os.path.dirname(path)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
+def _under_repo(p: Path) -> bool:
+    try:
+        return p.resolve().is_relative_to(PROJ_DIR.resolve())
+    except AttributeError:
+        return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
 
+def ensure_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-def safe_to_csv(df: pd.DataFrame, path: str) -> None:
+def safe_to_csv(df: pd.DataFrame, path: Path) -> None:
     ensure_dir(path)
     df.to_csv(path, index=False)
     print(f"✅ Saved {len(df):,} rows to {path}")
-
 
 def build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Annual data setup for stadiums and rivalries")
@@ -45,55 +57,71 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--outdir",
         type=str,
-        default=os.path.join(PROJ_DIR, "data", "annual"),
-        help="Output directory (default: data/annual/)"
+        default=str(PROJ_DIR / "data" / "annual"),
+        help="Output directory (default: <repo>/data/annual/)"
     )
     return ap
 
+def _resolve_outdir(cli_outdir: str) -> Path:
+    """
+    Resolve the final output directory with repo-locking:
+      - If REPO_DATA_LOCK=1 (default): force <repo>/data/annual
+      - Else respect --outdir, but if it escapes the repo and ALLOW_ESCAPE=0, force repo path
+    """
+    default = PROJ_DIR / "data" / "annual"
+    if REPO_DATA_LOCK:
+        outdir = default
+        # If user passed something else, warn that we're ignoring it
+        if cli_outdir and Path(cli_outdir).resolve() != outdir.resolve():
+            print("⚠️  REPO_DATA_LOCK=1 → ignoring --outdir; writing under repo data/annual")
+    else:
+        outdir = Path(cli_outdir).expanduser()
+        if not _under_repo(outdir) and not ALLOW_ESCAPE:
+            print(f"🚫 --outdir resolves outside repo: {outdir}")
+            print("    Forcing repo path; set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
+            outdir = default
+    outdir.mkdir(parents=True, exist_ok=True)
+    return outdir
 
-def scrape_stadiums(year: int, outdir: str) -> pd.DataFrame:
+def scrape_stadiums(year: int, outdir: Path) -> pd.DataFrame:
     print("🏟️ Scraping stadium data…")
     df = StadiumScraper().scrape()
     # Expect columns like: ['school','stadium','capacity','city','state', ...]
     if "school" in df.columns:
         df = df.sort_values(df.columns.tolist()).drop_duplicates(subset=["school"], keep="first")
-    path = os.path.join(outdir, f"stadiums_{year}.csv")
+    path = outdir / f"stadiums_{year}.csv"
     safe_to_csv(df, path)
     return df
 
-
-def scrape_rivalries(year: int, outdir: str) -> pd.DataFrame:
+def scrape_rivalries(year: int, outdir: Path) -> pd.DataFrame:
     print("🔥 Scraping rivalry data…")
-    rivals_map = RivalryScraper().scrape()  # dict[str, list[str]]
-
-    # Deduplicate unordered pairs using a set of frozensets
+    rivals_map: Dict[str, list] = RivalryScraper().scrape()  # dict[str, list[str]]
     pair_set = set()
-    for team, rivals in rivals_map.items():
+    for team, rivals in (rivals_map or {}).items():
         for r in rivals or []:
-            if not isinstance(r, str):
-                continue
-            pair_set.add(frozenset((team, r)))
+            if isinstance(r, str):
+                pair_set.add(frozenset((team, r)))
 
-    # Back to two-column DataFrame (alphabetize within each pair)
     rows = []
     for pair in pair_set:
         a, b = sorted(list(pair))
         rows.append({"team": a, "rival": b})
 
     df = pd.DataFrame(rows).sort_values(["team", "rival"]).reset_index(drop=True)
-    path = os.path.join(outdir, f"rivalries_{year}.csv")
+    path = outdir / f"rivalries_{year}.csv"
     safe_to_csv(df, path)
     return df
-
 
 def main():
     ap = build_argparser()
     args = ap.parse_args()
 
-    year = args.year
-    outdir = args.outdir
+    year = int(args.year)
+    outdir = _resolve_outdir(args.outdir)
 
-    print(f"🗓️  Running annual setup for {year} (output dir: {outdir})")
+    print("[annual_setup] Paths resolved:")
+    print(f"  PROJ_DIR: {PROJ_DIR}")
+    print(f"  OUTDIR:   {outdir} (REPO_DATA_LOCK={'1' if REPO_DATA_LOCK else '0'}, ALLOW_ESCAPE={'1' if ALLOW_ESCAPE else '0'})")
 
     try:
         scrape_stadiums(year, outdir)
@@ -106,7 +134,6 @@ def main():
         print(f"❌ Rivalry scraping failed: {e}")
 
     print("🎉 Annual setup complete.")
-
 
 if __name__ == "__main__":
     main()

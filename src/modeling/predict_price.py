@@ -1,15 +1,56 @@
 # src/modeling/predict_price.py
+from __future__ import annotations
+
 import os
+from pathlib import Path
 import pandas as pd
 import joblib
 import numpy as np
 from datetime import datetime, timedelta
 
-MODEL_PATH = "models/ticket_price_model.pkl"
-PRICE_PATH = "data/daily/price_snapshots.csv"
-OUTPUT_PATH = "data/predicted/predicted_prices_optimal.csv"
+# -----------------------------
+# Repo-locked paths (runs from anywhere)
+# -----------------------------
+_THIS = Path(__file__).resolve()
+SRC_DIR = _THIS.parents[2]         # .../src
+PROJ_DIR = SRC_DIR.parent          # repo root
 
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
+
+def _under_repo(p: Path) -> bool:
+    try:
+        return p.resolve().is_relative_to(PROJ_DIR.resolve())
+    except AttributeError:
+        return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
+
+def _resolve_file(env_name: str, default_rel: Path) -> Path:
+    """
+    Resolve a file path with repo-locking. Uses env var only if lock=OFF and (under repo or escape allowed).
+    default_rel is relative to PROJ_DIR.
+    """
+    env_val = os.getenv(env_name)
+    if REPO_DATA_LOCK or not env_val:
+        return PROJ_DIR / default_rel
+    p = Path(env_val).expanduser()
+    if _under_repo(p) or ALLOW_ESCAPE:
+        return p
+    print(f"🚫 {env_name} resolves outside repo → {p} ; forcing repo path")
+    return PROJ_DIR / default_rel
+
+MODEL_PATH  = _resolve_file("MODEL_PATH",   Path("models") / "ticket_price_model.pkl")
+PRICE_PATH  = _resolve_file("PRICE_PATH",   Path("data") / "daily" / "price_snapshots.csv")
+OUTPUT_PATH = _resolve_file("OUTPUT_PATH",  Path("data") / "predicted" / "predicted_prices_optimal.csv")
+
+print("[predict_price] Paths resolved:")
+print(f"  PROJ_DIR:    {PROJ_DIR}")
+print(f"  MODEL_PATH:  {MODEL_PATH}")
+print(f"  PRICE_PATH:  {PRICE_PATH}")
+print(f"  OUTPUT_PATH: {OUTPUT_PATH}")
+
+# -----------------------------
 # Sim grid
+# -----------------------------
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 MAX_DAYS_OUT = 30
 
@@ -23,7 +64,7 @@ NUMERIC_FEATURES = [
     "isRankedMatchup",
     "homeTeamRank",
     "awayTeamRank",
-    "week",  # ← NEW: add week as numeric predictor
+    "week",
 ]
 CATEGORICAL_FEATURES = ["homeConference", "awayConference"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -41,7 +82,7 @@ MIN_REQUIRED_INPUT = [
     "isRankedMatchup",
     "homeTeamRank",
     "awayTeamRank",
-    "week",                           # ← require week now that it's in snapshots
+    "week",
 ]
 
 def _coerce_booleans(df, bool_cols=None):
@@ -55,7 +96,6 @@ def _coerce_booleans(df, bool_cols=None):
     if bool_cols is None:
         bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
 
-    # Only keep existing columns
     bool_cols = [c for c in bool_cols if c in df.columns]
 
     truth_map = {
@@ -76,7 +116,6 @@ def _coerce_booleans(df, bool_cols=None):
 
     return df
 
-
 def _compose_start_datetime(row) -> pd.Timestamp:
     date_str = str(row.get("date_local", "")).strip()
     time_str = str(row.get("time_local", "")).strip()
@@ -84,7 +123,7 @@ def _compose_start_datetime(row) -> pd.Timestamp:
     return pd.to_datetime(dt_str, errors="coerce")
 
 def _load_model():
-    if not os.path.exists(MODEL_PATH):
+    if not MODEL_PATH.exists():
         raise FileNotFoundError("Trained model not found. Run train_price_model.py first.")
     return joblib.load(MODEL_PATH)
 
@@ -172,7 +211,7 @@ def _simulate_one_game(game_row: pd.Series, model) -> dict:
     }
 
 def main():
-    if not os.path.exists(PRICE_PATH):
+    if not PRICE_PATH.exists():
         raise FileNotFoundError(f"Snapshot CSV not found at '{PRICE_PATH}'")
 
     price_df = pd.read_csv(PRICE_PATH)
@@ -183,7 +222,7 @@ def main():
     results = [_simulate_one_game(row, model) for _, row in games_df.iterrows()]
     out = pd.DataFrame(results)
 
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(OUTPUT_PATH, index=False)
     print(f"✅ Optimal purchase predictions saved to {OUTPUT_PATH}")
 

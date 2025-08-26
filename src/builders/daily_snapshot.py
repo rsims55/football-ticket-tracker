@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, Set
+from pathlib import Path
 
 import pandas as pd
 
@@ -25,10 +26,44 @@ TIMEZONE = ZoneInfo("America/New_York")
 YEAR = int(os.getenv("SEASON_YEAR", datetime.now(TIMEZONE).year))
 
 # ---------------------------
-# Output config
+# Output config (FORCE repo paths by default)
 # ---------------------------
-DAILY_DIR = os.getenv("DAILY_DIR", os.path.join(PROJ_DIR, "data", "daily"))
-SNAPSHOT_PATH = os.getenv("SNAPSHOT_PATH", os.path.join(DAILY_DIR, "price_snapshots.csv"))
+# If REPO_DATA_LOCK=1 (default), ignore env overrides and force repo paths.
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+
+# Proposed (from env), but may be ignored if lock is ON
+_env_daily = os.getenv("DAILY_DIR")
+_env_snap  = os.getenv("SNAPSHOT_PATH")
+
+if REPO_DATA_LOCK:
+    DAILY_DIR = os.path.join(PROJ_DIR, "data", "daily")
+    SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
+else:
+    # Respect env or fall back to repo
+    DAILY_DIR = _env_daily or os.path.join(PROJ_DIR, "data", "daily")
+    SNAPSHOT_PATH = _env_snap or os.path.join(DAILY_DIR, "price_snapshots.csv")
+
+# Hard safety rails: if someone did set envs and lock is ON, warn loudly.
+if REPO_DATA_LOCK and (_env_daily or _env_snap):
+    print("⚠️  REPO_DATA_LOCK=1 -> ignoring DAILY_DIR/SNAPSHOT_PATH env and writing to repo paths only.")
+
+# Final guard: even with lock OFF, refuse paths that escape the repo unless explicitly allowed.
+# (You can allow escapes by setting REPO_ALLOW_NON_REPO_OUT=1 for special cases.)
+ALLOW_ESCAPE = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
+def _under_repo(p: str) -> bool:
+    try:
+        return Path(p).resolve().is_relative_to(Path(PROJ_DIR).resolve())
+    except AttributeError:
+        rp, rroot = Path(p).resolve(), Path(PROJ_DIR).resolve()
+        return str(rp).startswith(str(rroot))
+
+if not _under_repo(DAILY_DIR) or not _under_repo(SNAPSHOT_PATH):
+    if not ALLOW_ESCAPE:
+        print(f"🚫 Output resolved outside repo:\n  DAILY_DIR={DAILY_DIR}\n  SNAPSHOT={SNAPSHOT_PATH}\n  PROJ_DIR={PROJ_DIR}")
+        print("    Forcing repo-relative paths. Set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
+        DAILY_DIR = os.path.join(PROJ_DIR, "data", "daily")
+        SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
+
 os.makedirs(DAILY_DIR, exist_ok=True)
 
 # Combined export behavior
@@ -42,8 +77,8 @@ TEAMS_JSON_PATH = os.getenv(
     os.path.join(PROJ_DIR, "data", "permanent", "tickpick_teams.txt")
 )
 # 0 (or negative) means "all teams"
-TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
-# TEAMS_LIMIT = 3
+# TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
+TEAMS_LIMIT = 3
 
 # Collection windows (can be enforced by setting ALWAYS_RUN_DAILY=0)
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
@@ -92,7 +127,6 @@ def _read_json_array(path: str) -> Optional[List[dict]]:
         if not txt:
             print(f"⚠️  Teams file is empty: {path}")
             return None
-        # Try JSON array first
         if txt.lstrip().startswith("["):
             try:
                 data = json.loads(txt)
@@ -103,7 +137,6 @@ def _read_json_array(path: str) -> Optional[List[dict]]:
             except Exception as e:
                 print(f"⚠️  JSON array parse error: {e}")
                 return None
-        # Try JSON-Lines (one object per line)
         items: List[dict] = []
         with open(path, "r", encoding="utf-8") as f:
             for ln, line in enumerate(f, start=1):
@@ -132,7 +165,6 @@ def _load_teams_list() -> List[Dict[str, str]]:
     """
     data = _read_json_array(TEAMS_JSON_PATH)
 
-    # If .txt didn’t work, try a .json sibling
     if data is None and TEAMS_JSON_PATH.endswith(".txt"):
         alt = TEAMS_JSON_PATH[:-4] + ".json"
         if os.path.exists(alt):
@@ -166,7 +198,6 @@ def _load_teams_list() -> List[Dict[str, str]]:
         else:
             print("⚠️  Teams file contained no valid {slug,url} entries.")
 
-    # Fallback -> 3 teams (LOUD warning)
     fallback = [
         {"slug": "boston-college-eagles-football",
          "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"},
@@ -268,7 +299,6 @@ def _load_schedule() -> Optional[pd.DataFrame]:
                 return c
         return None
 
-    # Required fields (must exist in some form)
     required_map = {
         "startDateEastern": ["startDateEastern", "start_date_eastern", "startDate", "game_date", "date_local"],
         "homeTeam":         ["homeTeam", "home_team", "home"],
@@ -284,7 +314,6 @@ def _load_schedule() -> Optional[pd.DataFrame]:
         if src != canon:
             rename_dict[src] = canon
 
-    # Optional fields (nice-to-have; fill with NA if absent)
     optional_map = {
         "stadium":          ["stadium", "venue", "venue_name", "stadium_name", "site"],
         "capacity":         ["capacity", "cap", "max_capacity"],
@@ -307,7 +336,6 @@ def _load_schedule() -> Optional[pd.DataFrame]:
     if rename_dict:
         df = df.rename(columns=rename_dict)
 
-    # Ensure all optional columns exist (fill with NA if they weren't present)
     for canon in optional_map.keys():
         if canon not in df.columns:
             df[canon] = pd.NA
@@ -330,7 +358,6 @@ def _prepare_snapshots_for_join(snap: pd.DataFrame) -> pd.DataFrame:
     df["away_key"] = df["away_team_guess"].map(_normalize_team_name)
     return df
 
-# ---- Rivalries loading & matching ----
 def _choose_rivalry_columns(df: pd.DataFrame) -> Optional[Tuple[str, str]]:
     cols_lower = {c.lower(): c for c in df.columns}
     preferred_pairs = [
@@ -376,7 +403,6 @@ def _load_rivalries() -> Optional[Set[frozenset]]:
 
 def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]]) -> pd.DataFrame:
     """Set isRivalry boolean by checking (home, away) pair against rivalry_pairs (order-agnostic)."""
-    # Ensure output column exists
     if snap.empty:
         snap["isRivalry"] = False
         return snap
@@ -386,7 +412,6 @@ def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]])
             snap["isRivalry"] = False
         return snap
 
-    # Get home/away columns safely without triggering Series truthiness
     if "homeTeam" in snap.columns:
         home_series = snap["homeTeam"]
     else:
@@ -397,7 +422,6 @@ def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]])
     else:
         away_series = pd.Series([""] * len(snap), index=snap.index)
 
-    # Normalize (handle NaN -> "")
     home_norm = home_series.fillna("").map(_normalize_team_name)
     away_norm = away_series.fillna("").map(_normalize_team_name)
 
@@ -407,7 +431,6 @@ def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]])
     snap["isRivalry"] = [is_rival(h, a) for h, a in zip(home_norm, away_norm)]
     snap["isRivalry"] = snap["isRivalry"].astype(bool)
     return snap
-
 
 def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     if snap.empty:
@@ -622,9 +645,24 @@ def log_price_snapshot():
         )
         combined.to_csv(SNAPSHOT_PATH, index=False)
         print(f"✅ Snapshot appended ({len(snap_all)} new rows). Total now: {len(combined)}")
+        print(f"[daily_snapshot] write complete → {SNAPSHOT_PATH}")
+        # freshness log
+        _df = combined
     else:
         snap_all.to_csv(SNAPSHOT_PATH, index=False)
         print(f"✅ Snapshot saved ({len(snap_all)} rows) to {SNAPSHOT_PATH}")
+        print(f"[daily_snapshot] write complete → {SNAPSHOT_PATH}")
+        # freshness log
+        _df = snap_all
+
+    # Post-write freshness assertion (America/New_York)
+    try:
+        col = "date_collected"
+        max_date = pd.to_datetime(_df[col], errors="coerce").max()
+        now_d = datetime.now(ZoneInfo("America/New_York")).date()
+        print(f"[daily_snapshot] rows={len(_df)}, max({col})={max_date.date() if pd.notnull(max_date) else 'NA'} (now={now_d})")
+    except Exception as e:
+        print(f"[daily_snapshot] freshness check failed: {e}")
 
     # ---- clean up single temp files ----
     if KEEP_COMBINED_EXPORTS:

@@ -1,6 +1,9 @@
 # src/gui/ticket_predictor_gui.py
+from __future__ import annotations
+
 import sys
 import os
+from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from PyQt5.QtWidgets import (
@@ -13,8 +16,33 @@ from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 from matplotlib.ticker import MultipleLocator
 
-PRED_PATH = "data/predicted/predicted_prices_optimal.csv"
-SNAPSHOT_PATH = "data/daily/price_snapshots.csv"
+# -----------------------------
+# Repo-locked paths (runs from anywhere)
+# -----------------------------
+_THIS = Path(__file__).resolve()
+SRC_DIR = _THIS.parents[1]          # .../src
+PROJ_DIR = SRC_DIR.parent           # repo root
+
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
+
+def _under_repo(p: Path) -> bool:
+    try:
+        return p.resolve().is_relative_to(PROJ_DIR.resolve())
+    except AttributeError:
+        return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
+
+def _resolve_file(env_name: str, default_rel: Path) -> Path:
+    env_val = os.getenv(env_name)
+    if REPO_DATA_LOCK or not env_val:
+        return PROJ_DIR / default_rel
+    p = Path(env_val).expanduser()
+    if _under_repo(p) or ALLOW_ESCAPE:
+        return p
+    return PROJ_DIR / default_rel
+
+PRED_PATH     = _resolve_file("PRED_PATH",    Path("data") / "predicted" / "predicted_prices_optimal.csv")
+SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH",Path("data") / "daily"     / "price_snapshots.csv")
 
 class TicketApp(QMainWindow):
     def __init__(self):
@@ -22,14 +50,15 @@ class TicketApp(QMainWindow):
         self.setWindowTitle("🎟️ Ticket Price Predictor")
         self.setGeometry(200, 200, 1000, 720)
         self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f0f2f5;
-                font-family: Arial;
-            }
+            QMainWindow { background-color: #f0f2f5; font-family: Arial; }
         """)
 
-        self.snapshots = self.load_snapshot_data()
-        self.df = self.load_and_merge_data()   # predictions + snapshots (by event_id)
+        try:
+            self.snapshots = self.load_snapshot_data()
+            self.df = self.load_and_merge_data()   # predictions + snapshots (by event_id)
+        except Exception as e:
+            QMessageBox.critical(self, "Startup Error", f"{e}")
+            raise
 
         # state for live countdown / chart re-render
         self.current_row = None
@@ -45,7 +74,7 @@ class TicketApp(QMainWindow):
 
     # ---------------- Data loading ----------------
     def load_snapshot_data(self) -> pd.DataFrame:
-        if not os.path.exists(SNAPSHOT_PATH):
+        if not SNAPSHOT_PATH.exists():
             raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}'")
         snaps = pd.read_csv(SNAPSHOT_PATH)
 
@@ -57,8 +86,9 @@ class TicketApp(QMainWindow):
         else:
             snaps["collected_dt"] = pd.NaT
 
-        if "date_local" in snaps.columns:
+        if "startDateEastern" not in snaps.columns and "date_local" in snaps.columns:
             snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"], errors="coerce")
+
         if "homeTeam" not in snaps.columns and "home_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"home_team_guess": "homeTeam"})
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
@@ -66,7 +96,7 @@ class TicketApp(QMainWindow):
         return snaps
 
     def load_and_merge_data(self) -> pd.DataFrame:
-        if not os.path.exists(PRED_PATH):
+        if not PRED_PATH.exists():
             raise FileNotFoundError(f"Could not find predictions CSV at '{PRED_PATH}'")
         pred = pd.read_csv(PRED_PATH)
 
@@ -118,11 +148,7 @@ class TicketApp(QMainWindow):
         title = QLabel("🎟️ Ticket Price Predictor")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("""
-            QLabel {
-                font-size: 26px;
-                font-weight: bold;
-                margin-bottom: 6px;
-            }
+            QLabel { font-size: 26px; font-weight: bold; margin-bottom: 6px; }
         """)
         container_layout.addWidget(title)
 
@@ -181,18 +207,15 @@ class TicketApp(QMainWindow):
         self.countdown_label = QLabel("")
         self.countdown_label.setTextFormat(Qt.RichText)
         self.countdown_label.setAlignment(Qt.AlignLeft)
-        self.countdown_label.setStyleSheet("""
-            QLabel { font-size: 14px; padding: 2px 0 8px 2px; }
-        """)
+        self.countdown_label.setStyleSheet("QLabel { font-size: 14px; padding: 2px 0 8px 2px; }")
         container_layout.addWidget(self.countdown_label, stretch=0)
 
         # ---- Chart (responsive) ----
-        # Use constrained_layout so margins/ticks adapt on resize
         self.chart_canvas = FigureCanvas(Figure(constrained_layout=True))
         self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.chart_canvas.setMinimumHeight(260)
         self.ax = self.chart_canvas.figure.add_subplot(111)
-        container_layout.addWidget(self.chart_canvas, stretch=1)  # canvas takes remaining vertical space
+        container_layout.addWidget(self.chart_canvas, stretch=1)
 
     # ----- Window resize: refresh chart ticks and redraw efficiently -----
     def resizeEvent(self, event):
@@ -337,7 +360,7 @@ class TicketApp(QMainWindow):
 
         html = f"""
             <div style="font-size: 15px; line-height: 1.6;">
-                <h2 style="margin-bottom: 2px;">{row['homeTeam']} vs {row['awayTeam']}</h2>
+                <h2 style="margin-bottom: 2px;">{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}</h2>
                 <div style="font-size: 18px; font-weight: 700; color: #6a1b9a; margin-bottom: 6px;">
                     Predicted Price: ${row['predicted_lowest_price']:.2f}
                 </div><br>
@@ -356,12 +379,9 @@ class TicketApp(QMainWindow):
     def _tick_step_for_height(self) -> int:
         """Use finer price tick steps on larger chart heights."""
         h = self.chart_canvas.height()
-        if h >= 700:
-            return 20
-        if h >= 600:
-            return 25
-        if h >= 480:
-            return 50
+        if h >= 700: return 20
+        if h >= 600: return 25
+        if h >= 480: return 50
         return 100
 
     def render_chart(self, event_id, reuse_axes: bool = True):
@@ -399,10 +419,7 @@ class TicketApp(QMainWindow):
             except Exception:
                 pass
 
-        # with constrained_layout=True, margins adapt, but add a touch more bottom padding
         self.chart_canvas.figure.subplots_adjust(bottom=0.18)
-
-        # coalesced redraw (smoother during resizes)
         self.chart_canvas.draw_idle()
 
     # ---------------- Live countdown tick ----------------
@@ -432,17 +449,40 @@ class TicketApp(QMainWindow):
             html = f'<div style="color:#2e7d32;">Countdown to Optimal Ticket Price: {human}</div>'
         self.countdown_label.setText(html)
 
+    # ---------- helpers reused above ----------
+    def _parse_time_hhmm(self, t_str: str):
+        if not t_str:
+            return None
+        try:
+            return pd.to_datetime(str(t_str)).time()
+        except Exception:
+            for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+                try:
+                    return datetime.strptime(str(t_str), fmt).time()
+                except Exception:
+                    continue
+            return None
+
+    def _humanize_delta(self, td: pd.Timedelta) -> str:
+        total_seconds = int(td.total_seconds())
+        sign = "-" if total_seconds < 0 else ""
+        total_seconds = abs(total_seconds)
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        parts = []
+        if days: parts.append(f"{days}d")
+        if hours or days: parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+        parts.append(f"{seconds}s")
+        return sign + " ".join(parts)
+
 def main():
-    """Entry point for cfb-tix-gui."""
-    import sys
-    from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
     win = TicketApp()
     win.show()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = TicketApp()
-    window.show()
-    sys.exit(app.exec_())
+    main()
