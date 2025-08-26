@@ -1,3 +1,4 @@
+# src/cfb_tix/daemon.py
 from __future__ import annotations
 
 import argparse
@@ -49,7 +50,7 @@ def detect_paths() -> Paths:
     log_file = logs_dir / "cfb_tix.log"
     return Paths(
         repo_root=repo,
-        app_root=repo,
+        app_root=repo,      # app_root == repo_root for this project
         logs_dir=logs_dir,
         log_file=log_file,
         py_exe=Path(sys.executable),
@@ -100,6 +101,19 @@ def _commit_if_dirty(repo_root: Path) -> bool:
     _popen(["git", "commit", "-m", f"automated snapshot sync ({ts})"], cwd=repo_root)
     return True
 
+def _child_env_for_repo(paths: Paths) -> dict:
+    """Environment for child scripts: repo-locked and with src on PYTHONPATH."""
+    env = os.environ.copy()
+    # Force repo-lock defaults unless caller explicitly overrides
+    env.setdefault("REPO_DATA_LOCK", "1")
+    env.setdefault("REPO_ALLOW_NON_REPO_OUT", "0")
+    # Helpful for scripts that import via repo/src
+    src_dir = str(paths.repo_root / "src")
+    existing = env.get("PYTHONPATH", "")
+    if src_dir not in existing.split(os.pathsep):
+        env["PYTHONPATH"] = (src_dir + (os.pathsep + existing if existing else ""))
+    return env
+
 def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int:
     """Run a Python script via the current interpreter."""
     script = cwd / script_rel
@@ -137,11 +151,9 @@ def _git_sync_safe(repo_root: Path) -> None:
         logging.info("Not a git repo; skipping sync.")
         return
 
-    # Safer pull that auto-stashes if needed
     run(["git", "fetch", "--all"])
     run(["git", "pull", "--rebase", "--autostash"])
 
-    # Stage & commit if anything changed locally
     rc, status = run(["git", "status", "--porcelain"])
     if rc == 0 and status.strip():
         run(["git", "add", "-A"])
@@ -150,7 +162,6 @@ def _git_sync_safe(repo_root: Path) -> None:
         if rc != 0:
             logging.warning("git commit returned %s\n%s", rc, out)
 
-    # Push (no-op if nothing to push)
     rc, out = run(["git", "push"])
     if rc != 0:
         logging.error("git push failed:\n%s", out)
@@ -184,35 +195,44 @@ def do_sync(paths: Paths, label: str) -> None:
 # ---------- jobs ----------
 
 def job_daily_snapshot(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
     try:
-        run_py_script("src/builders/daily_snapshot.py", paths.app_root)
+        run_py_script("src/builders/daily_snapshot.py", paths.app_root, env=env)
     finally:
         do_sync(paths, "daily_snapshot")
 
 def job_train_model(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
     try:
-        run_py_script("src/modeling/train_price_model.py", paths.app_root)
+        run_py_script("src/modeling/train_price_model.py", paths.app_root, env=env)
     finally:
         do_sync(paths, "train_model")
 
 def job_predict_price(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
     try:
-        run_py_script("src/modeling/predict_price.py", paths.app_root)
+        run_py_script("src/modeling/predict_price.py", paths.app_root, env=env)
     finally:
         do_sync(paths, "predict_price")
 
 def job_weekly_update(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
     try:
-        if (paths.app_root / "src/builders/weekly_update.py").exists():
-            run_py_script("src/builders/weekly_update.py", paths.app_root)
+        # Prefer your current location: src/preparation/weekly_update.py
+        if (paths.app_root / "src/preparation/weekly_update.py").exists():
+            run_py_script("src/preparation/weekly_update.py", paths.app_root, env=env)
+        elif (paths.app_root / "src/builders/weekly_update.py").exists():
+            run_py_script("src/builders/weekly_update.py", paths.app_root, env=env)
         else:
-            run_py_script("src/reports/generate_weekly_report.py", paths.app_root)
+            # Last resort (older report generator)
+            run_py_script("src/reports/generate_weekly_report.py", paths.app_root, env=env)
     finally:
         do_sync(paths, "weekly_update")
 
 def job_annual_setup(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
     try:
-        run_py_script("src/builders/annual_setup.py", paths.app_root)
+        run_py_script("src/builders/annual_setup.py", paths.app_root, env=env)
     finally:
         do_sync(paths, "annual_setup")
 
@@ -227,6 +247,14 @@ def job_hourly_sync(paths: Paths) -> None:
         do_sync(paths, "hourly_sync")
     except Exception as e:
         logging.warning("Hourly sync failed: %s", e)
+
+# Optional: run evaluation after predictions (enable schedule if desired)
+def job_evaluate_predictions(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
+    try:
+        run_py_script("src/modeling/evaluate_predictions.py", paths.app_root, env=env)
+    finally:
+        do_sync(paths, "evaluate_predictions")
 
 # ---------- main ----------
 
@@ -244,6 +272,11 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
     sched.add_job(lambda: job_predict_price(paths),
                   CronTrigger(hour="6,18", minute="45", timezone=TZ),
                   id="job_predict_price", name="job_predict_price", replace_existing=True)
+
+    # Optional: evaluate right after predict (uncomment to enable)
+    # sched.add_job(lambda: job_evaluate_predictions(paths),
+    #               CronTrigger(hour="6,18", minute="50", timezone=TZ),
+    #               id="job_evaluate_predictions", name="job_evaluate_predictions", replace_existing=True)
 
     # Weekly: Wednesday 05:30
     sched.add_job(lambda: job_weekly_update(paths),
@@ -268,7 +301,7 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
 def log_next_runs(sched: BackgroundScheduler) -> None:
     for j in sched.get_jobs():
         next_run = j.next_run_time.astimezone(TZ) if j.next_run_time else "n/a"
-        logging.info("JOB %-17s next: %s", j.id.replace("job_", ""), next_run)
+        logging.info("JOB %-22s next: %s", j.id.replace("job_", ""), next_run)
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = argparse.ArgumentParser(prog="cfb-tix")
@@ -322,7 +355,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         gui_script = paths.app_root / "src/gui/ticket_predictor_gui.py"
         if gui_script.exists():
             try:
-                subprocess.Popen([sys.executable, str(gui_script)], cwd=str(paths.app_root))
+                env = _child_env_for_repo(paths)
+                subprocess.Popen([sys.executable, str(gui_script)], cwd=str(paths.app_root), env=env)
             except Exception as e:
                 logging.warning("GUI failed to launch: %s", e)
 
