@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 import sys
+import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -31,14 +32,14 @@ class Paths:
 def detect_paths() -> Paths:
     """Resolve paths whether running from source or from installed copy."""
     here = Path(__file__).resolve()
-    # Source layout: .../src/cfb_tix/daemon.py  -> repo root is here.parents[3] or [2]
+    # Source layout: .../src/cfb_tix/daemon.py  -> repo root is here.parents[2]
     # Installed layout: %LocalAppData%/cfb-tix/app/src/cfb_tix/daemon.py
-    # Walk up until we find pyproject.toml or a top-level 'src' sibling.
     cur = here
-    repo = None
+    repo: Optional[Path] = None
     for p in [cur.parents[i] for i in range(1, 6)]:
-        if (p / "pyproject.toml").exists() or (p / "src").exists():
-            repo = p if (p / "pyproject.toml").exists() else p
+        # First hit with pyproject.toml (repo root) wins; else keep walking
+        if (p / "pyproject.toml").exists():
+            repo = p
             break
     if repo is None:
         # Fallback to LocalAppData layout
@@ -73,6 +74,19 @@ def notify(title: str, msg: str) -> None:
     except Exception:
         pass
 
+def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
+    """Run a process and return (exitcode, combined_output)."""
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        shell=False,
+    )
+    out, _ = proc.communicate()
+    return proc.returncode, out
+
 def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int:
     """Run a Python script via the current interpreter."""
     script = cwd / script_rel
@@ -89,36 +103,99 @@ def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int
         notify("CFB-Tix job failed", f"{script_rel}\n{e}")
         return 1
 
-# ---------- jobs ----------
+# ---------- Git sync (prefer your data_sync; else fallback to plain git) ----------
 
-def job_daily_snapshot(paths: Paths) -> None:
-    run_py_script("src/builders/daily_snapshot.py", paths.app_root)
+def _git_sync_safe(repo_root: Path) -> None:
+    """Pull --rebase, stage, commit, push if there are tracked changes (respects .gitignore)."""
+    def run(args: list[str]) -> tuple[int, str]:
+        rc, out = _popen(args, cwd=repo_root)
+        if rc != 0:
+            logging.warning("git %s failed (rc=%s)\n%s", " ".join(args), rc, out)
+        return rc, out
 
-def job_train_model(paths: Paths) -> None:
-    # adjust if your training script lives elsewhere
-    run_py_script("src/modeling/train_price_model.py", paths.app_root)
+    rc, _ = run(["git", "rev-parse", "--is-inside-work-tree"])
+    if rc != 0:
+        logging.info("Not a git repo; skipping sync.")
+        return
 
-def job_predict_price(paths: Paths) -> None:
-    run_py_script("src/modeling/predict_price.py", paths.app_root)
+    run(["git", "fetch", "--all"])
+    run(["git", "pull", "--rebase"])
 
-def job_weekly_update(paths: Paths) -> None:
-    # prefer builders/weekly_update.py; fallback to reports/generate_weekly_report.py
-    if (paths.app_root / "src/builders/weekly_update.py").exists():
-        run_py_script("src/builders/weekly_update.py", paths.app_root)
-    else:
-        run_py_script("src/reports/generate_weekly_report.py", paths.app_root)
+    rc, status = run(["git", "status", "--porcelain"])
+    if rc != 0 or not status.strip():
+        logging.info("No changes to commit.")
+        return
 
-def job_annual_setup(paths: Paths) -> None:
-    run_py_script("src/builders/annual_setup.py", paths.app_root)
+    run(["git", "add", "-A"])
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rc, out = run(["git", "commit", "-m", f"automated snapshot sync ({ts})"])
+    if rc != 0:
+        logging.warning("git commit returned %s\n%s", rc, out)
 
-def job_daily_pull_push(paths: Paths) -> None:
-    # Optional GitHub sync
+    rc, out = run(["git", "push"])
+    if rc != 0:
+        logging.error("git push failed:\n%s", out)
+        notify("CFB-Tix sync failed", "git push failed — see daemon log.")
+        raise RuntimeError("git push failed")
+    logging.info("✅ git sync complete.")
+
+def do_sync(paths: Paths, label: str) -> None:
+    """Try your Windows helper first, then fallback to direct git if unavailable."""
     try:
         from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
         updated, pushed = pull_then_push(verbose=False)
-        logging.info("Daily pull/push -> updated=%s, pushed=%s", updated, pushed)
+        logging.info("[%s] pull_then_push -> updated=%s, pushed=%s", label, updated, pushed)
     except Exception as e:
-        logging.warning("Daily pull/push skipped or failed: %s", e)
+        logging.info("[%s] data_sync not available or failed (%s); falling back to git.", label, e)
+        _git_sync_safe(paths.repo_root)
+
+# ---------- jobs ----------
+
+def job_daily_snapshot(paths: Paths) -> None:
+    try:
+        run_py_script("src/builders/daily_snapshot.py", paths.app_root)
+    finally:
+        do_sync(paths, "daily_snapshot")
+
+def job_train_model(paths: Paths) -> None:
+    try:
+        run_py_script("src/modeling/train_price_model.py", paths.app_root)
+    finally:
+        do_sync(paths, "train_model")
+
+def job_predict_price(paths: Paths) -> None:
+    try:
+        run_py_script("src/modeling/predict_price.py", paths.app_root)
+    finally:
+        do_sync(paths, "predict_price")
+
+def job_weekly_update(paths: Paths) -> None:
+    try:
+        if (paths.app_root / "src/builders/weekly_update.py").exists():
+            run_py_script("src/builders/weekly_update.py", paths.app_root)
+        else:
+            run_py_script("src/reports/generate_weekly_report.py", paths.app_root)
+    finally:
+        do_sync(paths, "weekly_update")
+
+def job_annual_setup(paths: Paths) -> None:
+    try:
+        run_py_script("src/builders/annual_setup.py", paths.app_root)
+    finally:
+        do_sync(paths, "annual_setup")
+
+def job_daily_pull_push(paths: Paths) -> None:
+    # Kept for compatibility; now just delegates to do_sync
+    try:
+        do_sync(paths, "daily_pull_push")
+    except Exception as e:
+        logging.warning("Daily pull/push failed: %s", e)
+
+def job_hourly_sync(paths: Paths) -> None:
+    try:
+        do_sync(paths, "hourly_sync")
+    except Exception as e:
+        logging.warning("Hourly sync failed: %s", e)
 
 # ---------- main ----------
 
@@ -128,7 +205,8 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
                   id="job_daily_snapshot", name="job_daily_snapshot", replace_existing=True)
 
-    # 06:45 and 18:45
+    # 06:45 and 18:45 — train & predict are separate jobs;
+    # scheduler is configured to avoid overlap (max_instances=1)
     sched.add_job(lambda: job_train_model(paths),
                   CronTrigger(hour="6,18", minute="45", timezone=TZ),
                   id="job_train_model", name="job_train_model", replace_existing=True)
@@ -147,14 +225,20 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(month=5, day=1, hour=5, minute=0, timezone=TZ),
                   id="job_annual_setup", name="job_annual_setup", replace_existing=True)
 
-    # Optional: Daily GH sync at 07:10
+    # Daily GH sync at 07:10 (kept)
     sched.add_job(lambda: job_daily_pull_push(paths),
                   CronTrigger(hour=7, minute=10, timezone=TZ),
                   id="job_daily_pull_push", name="job_daily_pull_push", replace_existing=True)
 
+    # NEW: hourly safety sync (quarter past)
+    sched.add_job(lambda: job_hourly_sync(paths),
+                  CronTrigger(minute=15, timezone=TZ),
+                  id="job_hourly_sync", name="job_hourly_sync", replace_existing=True)
+
 def log_next_runs(sched: BackgroundScheduler) -> None:
     for j in sched.get_jobs():
-        logging.info("JOB %-17s next: %s", j.id.replace("job_", ""), j.next_run_time.astimezone(TZ) if j.next_run_time else "n/a")
+        next_run = j.next_run_time.astimezone(TZ) if j.next_run_time else "n/a"
+        logging.info("JOB %-17s next: %s", j.id.replace("job_", ""), next_run)
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = argparse.ArgumentParser(prog="cfb-tix")
@@ -168,17 +252,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     setup_logging(paths.log_file)
     logging.info("CFB-Tix daemon starting up (root=%s)", paths.app_root)
 
-    # Optional initial sync
+    # Initial pull to ensure we're up to date before first jobs
     try:
-        from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
-        updated, _ = pull_then_push(verbose=False)
-        logging.info("Initial pull complete (updated=%s)", updated)
+        do_sync(paths, "initial_pull")
+        logging.info("Initial pull complete.")
     except Exception as e:
-        logging.info("Initial pull skipped: %s", e)
+        logging.info("Initial pull skipped/fallback failed: %s", e)
 
-    sched = BackgroundScheduler(timezone=TZ)
+    # Coalesce late runs, prevent overlap, allow small grace
+    sched = BackgroundScheduler(
+        timezone=TZ,
+        job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 900},
+    )
     schedule_all(sched, paths)
-    logging.info("Adding job tentatively -- it will be properly scheduled when the scheduler starts")
+    logging.info("Scheduling jobs…")
     sched.start()
     logging.info("Scheduler started")
     log_next_runs(sched)

@@ -38,12 +38,6 @@ logs/
 .tmp/
 tmp/
 
-# --- Local data/artifacts ---
-data/
-!data/README.md
-artifacts/
-!artifacts/README.md
-
 # --- Secrets & environment ---
 .env
 .env.*
@@ -66,3 +60,10 @@ packaging/windows/task/*.sch
 # --- App cache & user-local mirrors (Windows/Linux) ---
 %LOCALAPPDATA%/cfb-tix/
 .local/share/cfb-tix/
+
+# --- Data handling ---
+# Track everything in data/ by default
+# Ignore only the permanent subfolder (machine-specific stuff)
+data/permanent/
+
+
