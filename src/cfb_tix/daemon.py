@@ -32,34 +32,37 @@ class Paths:
 def detect_paths() -> Paths:
     """Resolve paths whether running from source or from installed copy."""
     here = Path(__file__).resolve()
-    # Source layout: .../src/cfb_tix/daemon.py  -> repo root is here.parents[2]
-    # Installed layout: %LocalAppData%/cfb-tix/app/src/cfb_tix/daemon.py
-    cur = here
+    # Source layout: .../src/cfb_tix/daemon.py -> repo_root has pyproject.toml
     repo: Optional[Path] = None
-    for p in [cur.parents[i] for i in range(1, 6)]:
-        # First hit with pyproject.toml (repo root) wins; else keep walking
+    for i in range(1, 6):
+        p = here.parents[i]
         if (p / "pyproject.toml").exists():
             repo = p
             break
     if repo is None:
-        # Fallback to LocalAppData layout
+        # Fallback to LocalAppData layout if pyproject isn't found
         repo = Path(os.getenv("LOCALAPPDATA", "")) / APP_NAME / "app"
 
-    app_root = repo
-    logs_dir = Path(user_log_dir(APP_NAME, APP_NAME))
+    # Use appauthor=False so we DON'T get the doubled "cfb-tix\\cfb-tix\\Logs"
+    logs_dir = Path(user_log_dir(APP_NAME, appauthor=False))
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_file = logs_dir / "cfb_tix.log"
-    py_exe = Path(sys.executable)
-    return Paths(repo, app_root, logs_dir, log_file, py_exe)
+    return Paths(
+        repo_root=repo,
+        app_root=repo,
+        logs_dir=logs_dir,
+        log_file=log_file,
+        py_exe=Path(sys.executable),
+    )
 
 def setup_logging(log_file: Path) -> None:
-    log = logging.getLogger()
-    log.setLevel(logging.INFO)
-    if not any(isinstance(h, logging.FileHandler) for h in log.handlers):
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    if not any(isinstance(h, logging.FileHandler) for h in root.handlers):
         fh = logging.FileHandler(log_file, encoding="utf-8")
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         fh.setFormatter(fmt)
-        log.addHandler(fh)
+        root.addHandler(fh)
 
 # ---------- helpers ----------
 
@@ -87,6 +90,16 @@ def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     out, _ = proc.communicate()
     return proc.returncode, out
 
+def _commit_if_dirty(repo_root: Path) -> bool:
+    """Stage and commit tracked changes if any; return True if a commit was made."""
+    rc, out = _popen(["git", "status", "--porcelain"], cwd=repo_root)
+    if rc != 0 or not out.strip():
+        return False
+    _popen(["git", "add", "-A"], cwd=repo_root)
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _popen(["git", "commit", "-m", f"automated snapshot sync ({ts})"], cwd=repo_root)
+    return True
+
 def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int:
     """Run a Python script via the current interpreter."""
     script = cwd / script_rel
@@ -106,7 +119,13 @@ def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int
 # ---------- Git sync (prefer your data_sync; else fallback to plain git) ----------
 
 def _git_sync_safe(repo_root: Path) -> None:
-    """Pull --rebase, stage, commit, push if there are tracked changes (respects .gitignore)."""
+    """
+    Robust git sync:
+      - pull --rebase --autostash (handles unstaged changes cleanly)
+      - stage/commit any changes
+      - push (no-op if up-to-date)
+    Respects .gitignore.
+    """
     def run(args: list[str]) -> tuple[int, str]:
         rc, out = _popen(args, cwd=repo_root)
         if rc != 0:
@@ -118,20 +137,20 @@ def _git_sync_safe(repo_root: Path) -> None:
         logging.info("Not a git repo; skipping sync.")
         return
 
+    # Safer pull that auto-stashes if needed
     run(["git", "fetch", "--all"])
-    run(["git", "pull", "--rebase"])
+    run(["git", "pull", "--rebase", "--autostash"])
 
+    # Stage & commit if anything changed locally
     rc, status = run(["git", "status", "--porcelain"])
-    if rc != 0 or not status.strip():
-        logging.info("No changes to commit.")
-        return
+    if rc == 0 and status.strip():
+        run(["git", "add", "-A"])
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rc, out = run(["git", "commit", "-m", f"automated snapshot sync ({ts})"])
+        if rc != 0:
+            logging.warning("git commit returned %s\n%s", rc, out)
 
-    run(["git", "add", "-A"])
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rc, out = run(["git", "commit", "-m", f"automated snapshot sync ({ts})"])
-    if rc != 0:
-        logging.warning("git commit returned %s\n%s", rc, out)
-
+    # Push (no-op if nothing to push)
     rc, out = run(["git", "push"])
     if rc != 0:
         logging.error("git push failed:\n%s", out)
@@ -140,14 +159,27 @@ def _git_sync_safe(repo_root: Path) -> None:
     logging.info("✅ git sync complete.")
 
 def do_sync(paths: Paths, label: str) -> None:
-    """Try your Windows helper first, then fallback to direct git if unavailable."""
+    """
+    Commit locally (if dirty) then try repo helper (src -> pkg), else fallback to plain git.
+    This guarantees new artifacts under data/ (except data/permanent/) get committed + pushed.
+    """
+    committed = _commit_if_dirty(paths.repo_root)
     try:
-        from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
+        from src.cfb_tix.windows.data_sync import pull_then_push  # type: ignore
         updated, pushed = pull_then_push(verbose=False)
-        logging.info("[%s] pull_then_push -> updated=%s, pushed=%s", label, updated, pushed)
-    except Exception as e:
-        logging.info("[%s] data_sync not available or failed (%s); falling back to git.", label, e)
-        _git_sync_safe(paths.repo_root)
+        logging.info("[%s] pull_then_push (src) -> updated=%s, pushed=%s, committed=%s",
+                     label, updated, pushed, committed)
+        return
+    except Exception as e1:
+        try:
+            from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
+            updated, pushed = pull_then_push(verbose=False)
+            logging.info("[%s] pull_then_push (pkg) -> updated=%s, pushed=%s, committed=%s",
+                         label, updated, pushed, committed)
+            return
+        except Exception as e2:
+            logging.info("[%s] data_sync unavailable (%s / %s); using plain git.", label, e1, e2)
+            _git_sync_safe(paths.repo_root)
 
 # ---------- jobs ----------
 
@@ -185,7 +217,6 @@ def job_annual_setup(paths: Paths) -> None:
         do_sync(paths, "annual_setup")
 
 def job_daily_pull_push(paths: Paths) -> None:
-    # Kept for compatibility; now just delegates to do_sync
     try:
         do_sync(paths, "daily_pull_push")
     except Exception as e:
@@ -205,8 +236,7 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
                   id="job_daily_snapshot", name="job_daily_snapshot", replace_existing=True)
 
-    # 06:45 and 18:45 — train & predict are separate jobs;
-    # scheduler is configured to avoid overlap (max_instances=1)
+    # 06:45 and 18:45 — train & predict are separate jobs
     sched.add_job(lambda: job_train_model(paths),
                   CronTrigger(hour="6,18", minute="45", timezone=TZ),
                   id="job_train_model", name="job_train_model", replace_existing=True)
@@ -225,12 +255,12 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(month=5, day=1, hour=5, minute=0, timezone=TZ),
                   id="job_annual_setup", name="job_annual_setup", replace_existing=True)
 
-    # Daily GH sync at 07:10 (kept)
+    # Daily GH sync at 07:10
     sched.add_job(lambda: job_daily_pull_push(paths),
                   CronTrigger(hour=7, minute=10, timezone=TZ),
                   id="job_daily_pull_push", name="job_daily_pull_push", replace_existing=True)
 
-    # NEW: hourly safety sync (quarter past)
+    # Hourly safety sync (quarter past)
     sched.add_job(lambda: job_hourly_sync(paths),
                   CronTrigger(minute=15, timezone=TZ),
                   id="job_hourly_sync", name="job_hourly_sync", replace_existing=True)
@@ -245,7 +275,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub = args.add_subparsers(dest="cmd")
     p_run = sub.add_parser("run", help="Run daemon (with --no-gui for headless)")
     p_run.add_argument("--no-gui", action="store_true", help="Do not launch the GUI")
-    # default: run
     parsed = args.parse_args(argv)
 
     paths = detect_paths()
@@ -267,6 +296,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     schedule_all(sched, paths)
     logging.info("Scheduling jobs…")
     sched.start()
+
+    # Kickoff: run key jobs once after startup (staggered to avoid overlap)
+    from apscheduler.triggers.date import DateTrigger
+    base = datetime.datetime.now(TZ) + datetime.timedelta(seconds=5)
+    sched.add_job(lambda: job_daily_snapshot(paths),
+                  DateTrigger(run_date=base),
+                  id="kickoff_daily_snapshot", replace_existing=True)
+    sched.add_job(lambda: job_train_model(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=45)),
+                  id="kickoff_train_model", replace_existing=True)
+    sched.add_job(lambda: job_predict_price(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=90)),
+                  id="kickoff_predict_price", replace_existing=True)
+    sched.add_job(lambda: job_weekly_update(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=135)),
+                  id="kickoff_weekly_update", replace_existing=True)
+    logging.info("Kickoff jobs scheduled to run immediately after startup.")
+
     logging.info("Scheduler started")
     log_next_runs(sched)
 
@@ -280,7 +327,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 logging.warning("GUI failed to launch: %s", e)
 
     try:
-        # Keep process alive
         import time
         while True:
             time.sleep(3600)
