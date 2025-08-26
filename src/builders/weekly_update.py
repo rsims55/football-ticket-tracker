@@ -7,44 +7,79 @@ import os
 import json
 from datetime import datetime
 from typing import Optional, List, Dict
+from pathlib import Path
 
 import pandas as pd
 import re
 
 # --- Robust import path so this runs from anywhere ---
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))  # .../src
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
+CURRENT_DIR = Path(__file__).resolve().parent
+SRC_DIR = CURRENT_DIR.parent                 # .../src
+PROJ_DIR = SRC_DIR.parent                    # repo root
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from fetchers.schedule_fetcher import ScheduleFetcher
 from fetchers.rankings_fetcher import RankingsFetcher
 
 # ======================
-# Constants & Paths
+# Constants & Repo-locked Paths
 # ======================
 YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
 
-DATA_DIR = "data"
-WEEKLY_DIR = os.path.join(DATA_DIR, "weekly")
-ANNUAL_DIR = os.path.join(DATA_DIR, "annual")
-PERMANENT_DIR = os.path.join(DATA_DIR, "permanent")
-ALIAS_JSON = os.path.join(PERMANENT_DIR, "team_aliases.json")
+# Repo-locking flags (same behavior as daily_snapshot.py)
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
 
-os.makedirs(WEEKLY_DIR, exist_ok=True)
+def _under_repo(p: Path) -> bool:
+    try:
+        return p.resolve().is_relative_to(PROJ_DIR.resolve())
+    except AttributeError:
+        # Py<3.9 fallback
+        return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
 
-WEEKLY_SCHEDULE_OUT = os.path.join(WEEKLY_DIR, f"full_{YEAR}_schedule.csv")
+def _resolve_dir(env_value: Optional[str], default: Path) -> Path:
+    """Resolve a directory, honoring REPO_DATA_LOCK/ALLOW_ESCAPE."""
+    if REPO_DATA_LOCK or not env_value:
+        return default
+    p = Path(env_value).expanduser()
+    if _under_repo(p) or ALLOW_ESCAPE:
+        return p
+    return default
 
-# Candidate stadium files (first existing wins)
+# Base data dir (env only used if lock OFF and safe)
+DATA_DIR = _resolve_dir(os.getenv("DATA_DIR"), PROJ_DIR / "data")
+if not _under_repo(DATA_DIR) and not ALLOW_ESCAPE:
+    print(f"🚫 DATA_DIR resolved outside repo: {DATA_DIR} → forcing repo path")
+    DATA_DIR = PROJ_DIR / "data"
+
+WEEKLY_DIR    = DATA_DIR / "weekly"
+ANNUAL_DIR    = DATA_DIR / "annual"
+PERMANENT_DIR = DATA_DIR / "permanent"
+WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
+
+ALIAS_JSON = PERMANENT_DIR / "team_aliases.json"
+WEEKLY_SCHEDULE_OUT = WEEKLY_DIR / f"full_{YEAR}_schedule.csv"
+
+# Candidate stadium files (first existing wins; all under repo by default)
 STADIUM_CANDIDATES = [
-    os.path.join(ANNUAL_DIR, f"stadiums_{YEAR}.csv"),
-    os.path.join(DATA_DIR,     f"stadiums_{YEAR}.csv"),
+    ANNUAL_DIR / f"stadiums_{YEAR}.csv",
+    DATA_DIR   / f"stadiums_{YEAR}.csv",
 ]
+
+print("[weekly_update] Paths resolved:")
+print(f"  PROJ_DIR:            {PROJ_DIR}")
+print(f"  DATA_DIR:            {DATA_DIR}")
+print(f"  WEEKLY_DIR:          {WEEKLY_DIR}")
+print(f"  ANNUAL_DIR:          {ANNUAL_DIR}")
+print(f"  PERMANENT_DIR:       {PERMANENT_DIR}")
+print(f"  ALIAS_JSON:          {ALIAS_JSON}")
+print(f"  WEEKLY_SCHEDULE_OUT: {WEEKLY_SCHEDULE_OUT}")
 
 # ======================
 # Load alias map (required)
 # ======================
-if not os.path.exists(ALIAS_JSON):
+if not ALIAS_JSON.exists():
     raise FileNotFoundError(
         f"Alias map not found at {ALIAS_JSON}. "
         "Please create data/permanent/team_aliases.json (a dict of {'Incoming Name': 'Canonical Name'})."
@@ -74,9 +109,9 @@ def _pick_venue_column(df: pd.DataFrame) -> str:
     df["venue"] = pd.NA
     return "venue"
 
-def _first_existing_path(paths: List[str]) -> Optional[str]:
+def _first_existing_path(paths: List[Path]) -> Optional[Path]:
     for p in paths:
-        if os.path.exists(p):
+        if p.exists():
             return p
     return None
 
@@ -89,7 +124,7 @@ def _norm_key(s) -> str:
 # ======================
 # 1) Fetch schedule
 # ======================
-print("📅 Fetching schedule...")
+print("📅 Fetching schedule…")
 schedule_df = ScheduleFetcher(YEAR).fetch().copy()
 
 if "startDateEastern" not in schedule_df.columns:
@@ -102,7 +137,7 @@ schedule_df["awayTeam"] = schedule_df["awayTeam"].apply(_canon)
 # ======================
 # 2) Fetch rankings and merge (using canonicalized names on BOTH sides)
 # ======================
-print("📈 Fetching rankings...")
+print("📈 Fetching rankings…")
 rankings_df = RankingsFetcher(YEAR).fetch_and_load()
 
 if rankings_df is not None and not rankings_df.empty:
@@ -142,17 +177,17 @@ else:
 # ======================
 # 3) Stadium capacity merge (exact venue match, then school==homeTeam, then school==awayTeam)
 # ======================
-print("🏟️  Merging stadium capacities...")
+print("🏟️  Merging stadium capacities…")
 
 stadiums_path = _first_existing_path(STADIUM_CANDIDATES)
-if stadiums_path and os.path.exists(stadiums_path):
+if stadiums_path and stadiums_path.exists():
     stad = pd.read_csv(stadiums_path).copy()
 
     # Required columns
     if "stadium" not in stad.columns:
-        raise KeyError(f"{os.path.basename(stadiums_path)} is missing required 'stadium' column")
+        raise KeyError(f"{stadiums_path.name} is missing required 'stadium' column")
     if "capacity" not in stad.columns:
-        raise KeyError(f"{os.path.basename(stadiums_path)} is missing required 'capacity' column")
+        raise KeyError(f"{stadiums_path.name} is missing required 'capacity' column")
 
     # Canonicalize school for team-based matching
     if "school" in stad.columns:
@@ -164,7 +199,6 @@ if stadiums_path and os.path.exists(stadiums_path):
     venue_col = _pick_venue_column(schedule_df)
 
     # --- 3.1 Direct exact match: venue == stadium (case/whitespace-insensitive)
-    # Build a lookup from normalized stadium name -> capacity
     stad_lookup = dict(zip(stad["stadium"].map(_norm_key), stad["capacity"]))
     schedule_df["capacity"] = schedule_df[venue_col].map(lambda v: stad_lookup.get(_norm_key(v), pd.NA))
 
@@ -207,8 +241,17 @@ else:
     schedule_df["capacity"] = pd.NA
 
 # ======================
-# 4) Save outputs
+# 4) Save outputs (repo-locked)
 # ======================
-print("💾 Saving weekly schedule snapshot...")
+print("💾 Saving weekly schedule snapshot…")
 schedule_df.to_csv(WEEKLY_SCHEDULE_OUT, index=False)
 print(f"✅ Weekly schedule saved: {WEEKLY_SCHEDULE_OUT}")
+
+# Lightweight freshness/debug info
+try:
+    n = len(schedule_df)
+    date_min = pd.to_datetime(schedule_df.get("startDateEastern"), errors="coerce").min()
+    date_max = pd.to_datetime(schedule_df.get("startDateEastern"), errors="coerce").max()
+    print(f"[weekly_update] rows={n}, date_range={date_min.date() if pd.notnull(date_min) else 'NA'}→{date_max.date() if pd.notnull(date_max) else 'NA'}")
+except Exception as e:
+    print(f"[weekly_update] post-write summary failed: {e}")

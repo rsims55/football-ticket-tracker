@@ -1,4 +1,8 @@
+# src/modeling/train_price_model.py
+from __future__ import annotations
+
 import os
+from pathlib import Path
 import joblib
 import pandas as pd
 
@@ -10,8 +14,46 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestRegressor
 
-SNAPSHOT_PATH = "data/daily/price_snapshots.csv"
-MODEL_PATH = "models/ticket_price_model.pkl"
+# -----------------------------
+# Repo-locked paths (runs from anywhere)
+# -----------------------------
+_THIS = Path(__file__).resolve()
+SRC_DIR = _THIS.parents[2]         # .../src
+PROJ_DIR = SRC_DIR.parent          # repo root
+
+REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
+
+def _under_repo(p: Path) -> bool:
+    try:
+        return p.resolve().is_relative_to(PROJ_DIR.resolve())
+    except AttributeError:
+        return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
+
+# Resolve snapshot path
+_env_snap = os.getenv("SNAPSHOT_PATH")
+if REPO_DATA_LOCK or not _env_snap:
+    SNAPSHOT_PATH = PROJ_DIR / "data" / "daily" / "price_snapshots.csv"
+else:
+    SNAPSHOT_PATH = Path(_env_snap).expanduser()
+    if not _under_repo(SNAPSHOT_PATH) and not ALLOW_ESCAPE:
+        print(f"🚫 SNAPSHOT_PATH outside repo → {SNAPSHOT_PATH} ; forcing repo path")
+        SNAPSHOT_PATH = PROJ_DIR / "data" / "daily" / "price_snapshots.csv"
+
+# Resolve model path
+_env_model = os.getenv("MODEL_PATH")
+if REPO_DATA_LOCK or not _env_model:
+    MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
+else:
+    MODEL_PATH = Path(_env_model).expanduser()
+    if not _under_repo(MODEL_PATH) and not ALLOW_ESCAPE:
+        print(f"🚫 MODEL_PATH outside repo → {MODEL_PATH} ; forcing repo path")
+        MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
+
+print("[train_price_model] Paths resolved:")
+print(f"  PROJ_DIR:      {PROJ_DIR}")
+print(f"  SNAPSHOT_PATH: {SNAPSHOT_PATH}")
+print(f"  MODEL_PATH:    {MODEL_PATH}")
 
 # -----------------------------
 # Use conferences, not team names
@@ -25,29 +67,25 @@ NUMERIC_FEATURES = [
     "isRankedMatchup",
     "homeTeamRank",
     "awayTeamRank",
-    "week"
+    "week",
 ]
 CATEGORICAL_FEATURES = ["homeConference", "awayConference"]
 
 TARGET = "lowest_price"
 REQUIRED = NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]
 
-
 def _coerce_booleans(df, bool_cols=None):
     """
     Make boolean-like columns robust against NaN/strings/0/1 before casting.
     If bool_cols is not passed, it uses a default list.
+    (NaN-safe and accepts optional list.)
     """
     import numpy as np
     import pandas as pd
 
-    # Default list if none provided
     if bool_cols is None:
-        bool_cols = [
-            "neutral_site", "rivalry", "conference_game", "is_weeknight"
-        ]
+        bool_cols = ["neutral_site", "rivalry", "conference_game", "is_weeknight"]
 
-    # Keep only columns that actually exist
     bool_cols = [c for c in bool_cols if c in df.columns]
 
     truth_map = {
@@ -59,7 +97,7 @@ def _coerce_booleans(df, bool_cols=None):
         "y": True, "n": False,
         1: True, 0: False, "1": True, "0": False,
         "t": True, "f": False, "T": True, "F": False,
-        np.nan: np.nan
+        np.nan: np.nan,
     }
 
     for c in bool_cols:
@@ -70,8 +108,6 @@ def _coerce_booleans(df, bool_cols=None):
 
     return df
 
-
-
 def _coerce_numerics(df: pd.DataFrame, cols):
     """Coerce numerics; non-numeric -> NaN for imputation."""
     for c in cols:
@@ -79,9 +115,8 @@ def _coerce_numerics(df: pd.DataFrame, cols):
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
-
 def train_model():
-    if not os.path.exists(SNAPSHOT_PATH):
+    if not SNAPSHOT_PATH.exists():
         raise FileNotFoundError(f"Snapshot data not found at '{SNAPSHOT_PATH}'")
 
     df = pd.read_csv(SNAPSHOT_PATH)
@@ -121,11 +156,11 @@ def train_model():
         ("imputer", SimpleImputer(strategy="median")),
     ])
 
-    # Handle both old/new sklearn APIs for OneHotEncoder
+    # sklearn >=1.2 uses sparse_output; earlier uses sparse
     try:
-        ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)  # sklearn >= 1.2
+        ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     except TypeError:
-        ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)         # sklearn < 1.2
+        ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
 
     categorical_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -164,10 +199,9 @@ def train_model():
     print(f"Test MSE: {mse:.2f} | R²: {r2:.3f}")
 
     # Save the whole pipeline (encoder + model)
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipe, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
-
 
 if __name__ == "__main__":
     train_model()

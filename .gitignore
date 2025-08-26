@@ -66,4 +66,3 @@ packaging/windows/task/*.sch
 # Ignore only the permanent subfolder (machine-specific stuff)
 data/permanent/
 
-
