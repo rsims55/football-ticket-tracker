@@ -17,6 +17,11 @@ from apscheduler.triggers.cron import CronTrigger
 from platformdirs import user_log_dir
 from zoneinfo import ZoneInfo
 
+# ---------- Optional Sync Disable -------
+def _sync_disabled() -> bool:
+    return os.getenv("CFB_TIX_DISABLE_SYNC", "0") == "1"
+
+
 # ---------- Paths & logging ----------
 
 APP_NAME = "cfb-tix"
@@ -174,6 +179,9 @@ def do_sync(paths: Paths, label: str) -> None:
     Commit locally (if dirty) then try repo helper (src -> pkg), else fallback to plain git.
     This guarantees new artifacts under data/ (except data/permanent/) get committed + pushed.
     """
+    if _sync_disabled():
+        logging.info("[%s] sync skipped (CFB_TIX_DISABLE_SYNC=1)", label)
+        return
     committed = _commit_if_dirty(paths.repo_root)
     try:
         from src.cfb_tix.windows.data_sync import pull_then_push  # type: ignore
