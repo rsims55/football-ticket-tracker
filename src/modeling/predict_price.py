@@ -43,16 +43,36 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
 MODEL_PATH  = _resolve_file("MODEL_PATH",  Path("models") / "ticket_price_model.pkl")
 PRICE_PATH  = _resolve_file("PRICE_PATH",  Path("data") / "daily" / "price_snapshots.csv")
 OUTPUT_PATH = _resolve_file("OUTPUT_PATH", Path("data") / "predicted" / "predicted_prices_optimal.csv")
+MERGED_OUT  = _resolve_file("MERGED_OUT",  Path("data") / "predicted" / "predicted_with_context.csv")
 
 print("[predict_price] Paths resolved:")
 print(f"  PROJ_DIR:    {PROJ_DIR}")
 print(f"  MODEL_PATH:  {MODEL_PATH}")
 print(f"  PRICE_PATH:  {PRICE_PATH}")
 print(f"  OUTPUT_PATH: {OUTPUT_PATH}")
-
+print(f"  MERGED_OUT:  {MERGED_OUT}")
 
 # -----------------------------
-# Sim grid
+# Write safety (atomic + guard)
+# -----------------------------
+def _write_csv_atomic(df: pd.DataFrame, path: Path) -> None:
+    """Write CSV atomically to avoid partial/overwritten writes on Windows/OneDrive/AV."""
+    tmp = Path(str(path) + ".__tmp__")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, path)
+
+_FORBIDDEN = {
+    str(PRICE_PATH.resolve()),
+    str((PROJ_DIR / "data" / "daily" / "price_snapshots.csv").resolve()),
+}
+
+def _assert_not_snapshot(target: Path):
+    t = str(target.resolve())
+    assert t not in _FORBIDDEN, f"Refusing to overwrite snapshots CSV: {t}"
+
+# -----------------------------
+# Sim grid (unchanged)
 # -----------------------------
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 MAX_DAYS_OUT = 30
@@ -75,7 +95,7 @@ FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 # Minimum columns needed from snapshots
 MIN_REQUIRED_INPUT = [
     "event_id",
-    "date_local",                     # time_local optional
+    "date_local",  # time_local optional
     "homeConference",
     "awayConference",
     "capacity",
@@ -89,16 +109,9 @@ MIN_REQUIRED_INPUT = [
 ]
 
 def _coerce_booleans(df, bool_cols=None):
-    """
-    Normalize boolean-like columns with NaNs/strings/0/1 safely.
-    If bool_cols is None, use the default set used in this script.
-    """
-    import numpy as np
-    import pandas as pd
-
+    """Normalize boolean-like columns robustly."""
     if bool_cols is None:
         bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
-
     bool_cols = [c for c in bool_cols if c in df.columns]
 
     truth_map = {
@@ -116,7 +129,6 @@ def _coerce_booleans(df, bool_cols=None):
         if not pd.api.types.is_bool_dtype(s):
             s = s.map(truth_map).astype("boolean")
         df[c] = s.fillna(False).astype(bool)
-
     return df
 
 def _compose_start_datetime(row) -> pd.Timestamp:
@@ -158,41 +170,32 @@ def _prep_games_frame(df: pd.DataFrame) -> pd.DataFrame:
           .copy()
     )
 
-    # Ensure week is present and numeric (fallback 0 if NaN)
+    # Ensure week exists and is int
     if "week" in df_games.columns:
         df_games["week"] = pd.to_numeric(df_games["week"], errors="coerce").fillna(0).astype(int)
     else:
-        df_games["week"] = 0  # safety
+        df_games["week"] = 0
 
-    # Keep just what we need
     keep_cols = ["event_id", "startDateEastern"] + FEATURES
     keep_cols = [c for c in keep_cols if c in df_games.columns]
     return df_games[keep_cols]
 
 def _simulate_one_game(game_row: pd.Series, model) -> dict:
-    """Vectorized simulation for a single game: build a block of all (day, time) combos and predict once."""
+    """Choose best (day, time) combo by minimizing predicted price."""
     game_dt = pd.to_datetime(game_row["startDateEastern"])
     game_date = game_dt.date()
 
-    # Build simulation grid (days x times)
     days = np.arange(1, MAX_DAYS_OUT + 1, dtype=int)
     times = COLLECTION_TIMES
 
-    # Cartesian product
     sim_days = np.repeat(days, len(times))
     sim_times = np.tile(times, len(days))
 
-    # Base feature dict from the game row (constant across grid except days_until_game)
     base_feats = {f: game_row.get(f, None) for f in FEATURES}
-
-    # Build dataframe in one go
     sim_df = pd.DataFrame(base_feats, index=np.arange(len(sim_days)))
-    sim_df["days_until_game"] = sim_days  # override per row
+    sim_df["days_until_game"] = sim_days
 
-    # Predict in one call
-    preds = model.predict(sim_df)  # shape (len(sim_df),)
-
-    # Pick best
+    preds = model.predict(sim_df)
     best_idx = int(np.argmin(preds))
     best_price = float(preds[best_idx])
     best_delta = int(sim_days[best_idx])
@@ -205,7 +208,6 @@ def _simulate_one_game(game_row: pd.Series, model) -> dict:
         "event_id": game_row.get("event_id"),
         "startDateEastern": pd.to_datetime(game_row.get("startDateEastern")).isoformat(),
         "week": int(game_row.get("week")) if pd.notna(game_row.get("week")) else None,
-        # Keep conferences (no team names)
         "homeConference": game_row.get("homeConference"),
         "awayConference": game_row.get("awayConference"),
         "predicted_lowest_price": round(best_price, 2),
@@ -217,17 +219,25 @@ def main():
     if not PRICE_PATH.exists():
         raise FileNotFoundError(f"Snapshot CSV not found at '{PRICE_PATH}'")
 
+    # READ-ONLY
     price_df = pd.read_csv(PRICE_PATH)
     games_df = _prep_games_frame(price_df)
     model = _load_model()
 
-    # Run batched per game (fast and memory-safe)
     results = [_simulate_one_game(row, model) for _, row in games_df.iterrows()]
     out = pd.DataFrame(results)
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(OUTPUT_PATH, index=False)
+    # NEVER write to snapshots; assert safety and write atomically to /predicted
+    _assert_not_snapshot(OUTPUT_PATH)
+    _write_csv_atomic(out, OUTPUT_PATH)
     print(f"✅ Optimal purchase predictions saved to {OUTPUT_PATH}")
+
+    # Optional merged artifact for convenience (still read-only snapshot)
+    if "event_id" in price_df.columns:
+        merged = price_df.merge(out, on="event_id", how="left")
+        _assert_not_snapshot(MERGED_OUT)
+        _write_csv_atomic(merged, MERGED_OUT)
+        print(f"📝 Merged snapshot+predictions saved to {MERGED_OUT}")
 
 if __name__ == "__main__":
     main()
