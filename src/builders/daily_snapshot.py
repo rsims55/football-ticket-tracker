@@ -111,6 +111,12 @@ except Exception as e:
 # ---------------------------
 # Helpers
 # ---------------------------
+def _write_csv_atomic(df: pd.DataFrame, path: str) -> None:
+    """Write CSV atomically to avoid partial rewrites on Windows/OneDrive."""
+    tmp = f"{path}.__tmp__"
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, path)
+
 def _ensure_dir(path: str):
     d = os.path.dirname(path)
     if d:
@@ -222,7 +228,7 @@ def _slug_from_url(url: str) -> str:
 
 def _map_rows_to_snapshots(rows: List[Dict[str, Any]], now_et: datetime) -> pd.DataFrame:
     """Convert TickPickPricer rows to the base snapshot schema (no enrichment)."""
-    time_str = now_et.strftime("%H:%M")
+    time_str = now_et.strftime("%H:%M:%S")  # seconds precision to avoid same-minute overwrite
     date_str = now_et.strftime("%Y-%m-%d")
 
     recs = []
@@ -643,13 +649,13 @@ def log_price_snapshot():
             subset=[c for c in key_cols if c in combined.columns],
             keep="last",
         )
-        combined.to_csv(SNAPSHOT_PATH, index=False)
+        _write_csv_atomic(combined, SNAPSHOT_PATH)
         print(f"✅ Snapshot appended ({len(snap_all)} new rows). Total now: {len(combined)}")
         print(f"[daily_snapshot] write complete → {SNAPSHOT_PATH}")
         # freshness log
         _df = combined
     else:
-        snap_all.to_csv(SNAPSHOT_PATH, index=False)
+        _write_csv_atomic(snap_all, SNAPSHOT_PATH)
         print(f"✅ Snapshot saved ({len(snap_all)} rows) to {SNAPSHOT_PATH}")
         print(f"[daily_snapshot] write complete → {SNAPSHOT_PATH}")
         # freshness log
