@@ -19,8 +19,22 @@ from zoneinfo import ZoneInfo
 
 # ---------- Optional Sync Disable -------
 def _sync_disabled() -> bool:
-    return os.getenv("CFB_TIX_DISABLE_SYNC", "0") == "1"
-
+    """
+    Sync is DISABLED by default.
+    Enable it explicitly with CFB_TIX_ENABLE_SYNC=1, or disable with CFB_TIX_DISABLE_SYNC=1,
+    or by creating a sentinel file .cfb_tix.NOSYNC in the repo root.
+    """
+    if os.getenv("CFB_TIX_ENABLE_SYNC", "0") == "1":
+        return False
+    if os.getenv("CFB_TIX_DISABLE_SYNC", "1") == "1":
+        return True
+    try:
+        repo = detect_paths().repo_root
+        if (repo / ".cfb_tix.NOSYNC").exists():
+            return True
+    except Exception:
+        pass
+    return True
 
 # ---------- Paths & logging ----------
 
@@ -180,7 +194,7 @@ def do_sync(paths: Paths, label: str) -> None:
     This guarantees new artifacts under data/ (except data/permanent/) get committed + pushed.
     """
     if _sync_disabled():
-        logging.info("[%s] sync skipped (CFB_TIX_DISABLE_SYNC=1)", label)
+        logging.info("[%s] sync skipped (sync disabled by default; set CFB_TIX_ENABLE_SYNC=1 to allow)", label)
         return
     committed = _commit_if_dirty(paths.repo_root)
     try:

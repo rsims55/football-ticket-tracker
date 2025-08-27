@@ -12,6 +12,8 @@ from cfb_tix import daemon as d
 # Keep writes inside the repo by default
 os.environ.setdefault("REPO_DATA_LOCK", "1")
 os.environ.setdefault("REPO_ALLOW_NON_REPO_OUT", "0")
+# Disable any git/GitHub sync during manual runs
+os.environ.setdefault("CFB_TIX_DISABLE_SYNC", "1")
 
 # Detect standard paths (daemon knows the repo)
 p = d.detect_paths()
