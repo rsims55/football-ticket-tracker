@@ -43,14 +43,12 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
 MODEL_PATH  = _resolve_file("MODEL_PATH",  Path("models") / "ticket_price_model.pkl")
 PRICE_PATH  = _resolve_file("PRICE_PATH",  Path("data") / "daily" / "price_snapshots.csv")
 OUTPUT_PATH = _resolve_file("OUTPUT_PATH", Path("data") / "predicted" / "predicted_prices_optimal.csv")
-MERGED_OUT  = _resolve_file("MERGED_OUT",  Path("data") / "predicted" / "predicted_with_context.csv")
 
 print("[predict_price] Paths resolved:")
 print(f"  PROJ_DIR:    {PROJ_DIR}")
 print(f"  MODEL_PATH:  {MODEL_PATH}")
 print(f"  PRICE_PATH:  {PRICE_PATH}")
 print(f"  OUTPUT_PATH: {OUTPUT_PATH}")
-print(f"  MERGED_OUT:  {MERGED_OUT}")
 
 # -----------------------------
 # Write safety (atomic + guard)
@@ -231,13 +229,6 @@ def main():
     _assert_not_snapshot(OUTPUT_PATH)
     _write_csv_atomic(out, OUTPUT_PATH)
     print(f"✅ Optimal purchase predictions saved to {OUTPUT_PATH}")
-
-    # Optional merged artifact for convenience (still read-only snapshot)
-    if "event_id" in price_df.columns:
-        merged = price_df.merge(out, on="event_id", how="left")
-        _assert_not_snapshot(MERGED_OUT)
-        _write_csv_atomic(merged, MERGED_OUT)
-        print(f"📝 Merged snapshot+predictions saved to {MERGED_OUT}")
 
 if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QMessageBox, QListView, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QTimer
@@ -20,8 +20,7 @@ from matplotlib.ticker import MultipleLocator
 # Repo-locked paths (runs from anywhere)
 # -----------------------------
 _THIS = Path(__file__).resolve()
-SRC_DIR = _THIS.parents[1]          # .../src
-PROJ_DIR = SRC_DIR.parent           # repo root
+PROJ_DIR = _THIS.parents[2]  # .../repo root
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -41,8 +40,24 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
         return p
     return PROJ_DIR / default_rel
 
-PRED_PATH     = _resolve_file("PRED_PATH",    Path("data") / "predicted" / "predicted_prices_optimal.csv")
-SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH",Path("data") / "daily"     / "price_snapshots.csv")
+SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily/price_snapshots.csv"))
+PRED_PATH     = _resolve_file("OUTPUT_PATH",  Path("data/predicted/predicted_prices_optimal.csv"))
+MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_with_context.csv"))
+
+# -----------------------------
+# Status helpers (module-level)
+# -----------------------------
+def _fmt_mtime(p: Path) -> str:
+    try:
+        ts = p.stat().st_mtime
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    except FileNotFoundError:
+        return "missing"
+
+def get_status_text() -> str:
+    return f"Snapshots: {_fmt_mtime(SNAPSHOT_PATH)}   |   Predictions: {_fmt_mtime(PRED_PATH)}"
+
+# =========================================================
 
 class TicketApp(QMainWindow):
     def __init__(self):
@@ -53,6 +68,11 @@ class TicketApp(QMainWindow):
             QMainWindow { background-color: #f0f2f5; font-family: Arial; }
         """)
 
+        # state for live countdown / chart re-render
+        self.current_row = None
+        self.current_event_id = None
+        self.ax = None  # cached axes for smoother resize redraws
+
         try:
             self.snapshots = self.load_snapshot_data()
             self.df = self.load_and_merge_data()   # predictions + snapshots (by event_id)
@@ -60,17 +80,17 @@ class TicketApp(QMainWindow):
             QMessageBox.critical(self, "Startup Error", f"{e}")
             raise
 
-        # state for live countdown / chart re-render
-        self.current_row = None
-        self.current_event_id = None
-        self.ax = None  # cached axes for smoother resize redraws
-
         self.init_ui()
 
         # Live countdown timer (1s) — only updates countdown label, not whole details
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_countdown_live)
         self.timer.start(1000)
+
+        # Status auto-refresh (2s) — updates timestamps label only
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self.update_status_only)
+        self.status_timer.start(2000)
 
     # ---------------- Data loading ----------------
     def load_snapshot_data(self) -> pd.DataFrame:
@@ -96,32 +116,38 @@ class TicketApp(QMainWindow):
         return snaps
 
     def load_and_merge_data(self) -> pd.DataFrame:
-        if not PRED_PATH.exists():
-            raise FileNotFoundError(f"Could not find predictions CSV at '{PRED_PATH}'")
-        pred = pd.read_csv(PRED_PATH)
+        # prefer merged artifact if present (has snapshot context)
+        if MERGED_PATH.exists():
+            merged = pd.read_csv(MERGED_PATH)
+        else:
+            if not PRED_PATH.exists():
+                raise FileNotFoundError(f"Could not find predictions CSV at '{PRED_PATH}'")
+            pred = pd.read_csv(PRED_PATH)
+            if "startDateEastern" in pred.columns:
+                pred["startDateEastern"] = pd.to_datetime(pred["startDateEastern"], errors="coerce")
+            if "event_id" not in pred.columns:
+                raise KeyError("Predictions must contain 'event_id'.")
+            # join on snapshots for team names / schedule context if available
+            snaps = getattr(self, "snapshots", None)
+            if snaps is not None and "event_id" in snaps.columns:
+                merged = pred.merge(snaps, on="event_id", how="left", suffixes=("", "_snap"))
+                if "startDateEastern" not in merged and "startDateEastern_snap" in merged:
+                    merged["startDateEastern"] = merged["startDateEastern_snap"]
+            else:
+                merged = pred
 
-        if "startDateEastern" in pred.columns:
-            pred["startDateEastern"] = pd.to_datetime(pred["startDateEastern"], errors="coerce")
-
-        if "event_id" not in pred.columns or "event_id" not in self.snapshots.columns:
-            raise KeyError("Both predictions and snapshots must contain 'event_id' to merge.")
-
-        merged = pred.merge(
-            self.snapshots,
-            on="event_id",
-            how="left",
-            suffixes=("", "_snap")
-        )
-        if "startDateEastern" not in merged and "startDateEastern_snap" in merged:
-            merged["startDateEastern"] = merged["startDateEastern_snap"]
+        if "startDateEastern" in merged.columns:
+            merged["startDateEastern"] = pd.to_datetime(merged["startDateEastern"], errors="coerce")
 
         if "week" in merged.columns:
             merged["week"] = pd.to_numeric(merged["week"], errors="coerce").astype("Int64")
-        merged = merged.dropna(subset=["predicted_lowest_price"])
 
+        # ensure team columns exist for dropdowns
         for tcol in ("homeTeam", "awayTeam"):
             if tcol not in merged.columns:
                 merged[tcol] = pd.NA
+
+        merged = merged.dropna(subset=["predicted_lowest_price"])
         return merged
 
     # ---------------- UI ----------------
@@ -216,6 +242,21 @@ class TicketApp(QMainWindow):
         self.chart_canvas.setMinimumHeight(260)
         self.ax = self.chart_canvas.figure.add_subplot(111)
         container_layout.addWidget(self.chart_canvas, stretch=1)
+
+        # ---- Status bar (Last updated + Refresh) ----
+        status_bar = QWidget()
+        status_layout = QHBoxLayout()
+        status_layout.setContentsMargins(8, 4, 8, 8)
+        status_bar.setLayout(status_layout)
+
+        self.status_label = QLabel(get_status_text())
+        self.status_label.setAlignment(Qt.AlignLeft)
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.clicked.connect(self.reload_data_and_status)
+
+        status_layout.addWidget(self.status_label, stretch=1)
+        status_layout.addWidget(self.refresh_btn, stretch=0)
+        self.layout.addWidget(status_bar)
 
     # ----- Window resize: refresh chart ticks and redraw efficiently -----
     def resizeEvent(self, event):
@@ -449,6 +490,43 @@ class TicketApp(QMainWindow):
             html = f'<div style="color:#2e7d32;">Countdown to Optimal Ticket Price: {human}</div>'
         self.countdown_label.setText(html)
 
+    # ---------------- Reload + Status ----------------
+    def reload_data_and_status(self):
+        """Re-read CSVs from disk, rebuild dropdowns, keep current selection if possible."""
+        try:
+            self.snapshots = self.load_snapshot_data()
+            self.df = self.load_and_merge_data()
+        except Exception as e:
+            QMessageBox.critical(self, "Reload Error", f"{e}")
+            return
+
+        # Rebuild home team dropdown preserving selection if possible
+        prev_home = self.home_combo.currentText()
+        homes = sorted(self.df["homeTeam"].dropna().unique())
+
+        self.home_combo.blockSignals(True)
+        self.home_combo.clear()
+        self.home_combo.addItem("-- Select Home Team --")
+        self.home_combo.addItems(homes)
+        self.home_combo.blockSignals(False)
+
+        # Restore previous home if still present
+        if prev_home in homes:
+            idx = self.home_combo.findText(prev_home)
+            if idx >= 0:
+                self.home_combo.setCurrentIndex(idx)
+                self.update_away_teams()
+
+        # If an event is selected, re-render chart with fresh snapshots
+        if self.current_event_id is not None:
+            self.render_chart(self.current_event_id, reuse_axes=False)
+
+        # Update status label
+        self.update_status_only()
+
+    def update_status_only(self):
+        self.status_label.setText(get_status_text())
+
     # ---------- helpers reused above ----------
     def _parse_time_hhmm(self, t_str: str):
         if not t_str:
@@ -477,6 +555,8 @@ class TicketApp(QMainWindow):
         parts.append(f"{minutes}m")
         parts.append(f"{seconds}s")
         return sign + " ".join(parts)
+
+# =========================================================
 
 def main():
     app = QApplication(sys.argv)
