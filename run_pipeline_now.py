@@ -3,17 +3,25 @@ from __future__ import annotations
 import os, sys
 from pathlib import Path
 
+try:
+    from src.cfb_tix.daemon import detect_paths, do_sync   # source layout
+except Exception:
+    from cfb_tix.daemon import detect_paths, do_sync       # installed layout
+
 # --- Resolve repo + import daemon jobs ---
 ROOT = Path(__file__).resolve().parent
 SRC  = ROOT / "src"
 sys.path.insert(0, str(SRC))
 from cfb_tix import daemon as d
 
-# Keep writes inside the repo by default
-os.environ.setdefault("REPO_DATA_LOCK", "1")
-os.environ.setdefault("REPO_ALLOW_NON_REPO_OUT", "0")
-# Disable any git/GitHub sync during manual runs
-os.environ.setdefault("CFB_TIX_DISABLE_SYNC", "1")
+# Enable sync for this one call; scope and message set explicitly
+os.environ["CFB_TIX_ENABLE_SYNC"] = "1"                  # push-only path is enabled
+os.environ.setdefault("CFB_TIX_COMMIT_SCOPE", "data,models")
+os.environ["CFB_TIX_COMMIT_MESSAGE"] = "manual snapshot" # exact message you wanted
+os.environ["CFB_TIX_USE_RELEASE_SYNC"] = "0"             # never download/overwrite
+
+paths = detect_paths()
+do_sync(paths, "manual")
 
 # Detect standard paths (daemon knows the repo)
 p = d.detect_paths()
