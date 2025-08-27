@@ -1,3 +1,9 @@
+# TO USE (BASH)
+# cd "C:/Users/randi/GitHub Repos/football-ticket-tracker/football-ticket-tracker"
+# chmod +x make_zip.sh
+# ./make_zip.sh
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -23,6 +29,7 @@ EXCLUDES=(
   "*.pyc"
   "*.pyo"
   ".DS_Store"
+  "make_zip.sh"      # <— add this line
 )
 
 echo "📦 Creating: $OUT"
