@@ -110,15 +110,83 @@ def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     out, _ = proc.communicate()
     return proc.returncode, out
 
-def _commit_if_dirty(repo_root: Path) -> bool:
-    """Stage and commit tracked changes if any; return True if a commit was made."""
-    rc, out = _popen(["git", "status", "--porcelain"], cwd=repo_root)
-    if rc != 0 or not out.strip():
+# ---------- Safe push-only git helpers ----------
+
+def _run_git(args: list[str], cwd: Path, check: bool = True) -> tuple[int, str, str]:
+    proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}")
+    return proc.returncode, proc.stdout, proc.stderr
+
+def _detect_upstream(repo: Path) -> str | None:
+    try:
+        _, out, _ = _run_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=repo)
+        return out.strip()
+    except Exception:
+        return None
+
+def _commit_if_dirty(repo_root: Path, label: str, scope: list[str] | None = None) -> bool:
+    """
+    Stage and commit changes within 'scope' only (default: data/** and models/**).
+    Returns True if a commit was created.
+    """
+    scope = scope or ["data", "models"]
+    # Stage only whitelisted paths that exist
+    existing = [str((repo_root / p)) for p in scope if (repo_root / p).exists()]
+    if not existing:
         return False
-    _popen(["git", "add", "-A"], cwd=repo_root)
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    _popen(["git", "commit", "-m", f"automated snapshot sync ({ts})"], cwd=repo_root)
+
+    # Stage changes within scope
+    _run_git(["add", "--", *existing], cwd=repo_root, check=False)
+
+    # Check if anything staged
+    _, status, _ = _run_git(["status", "--porcelain"], cwd=repo_root, check=False)
+    if not status.strip():
+        return False
+
+    msg = f"automated snapshot sync ({label})"
+    _run_git(["commit", "-m", msg], cwd=repo_root, check=False)
     return True
+
+def _git_sync_push_only(repo: Path, label: str) -> None:
+    """
+    Push-only sync:
+      - fetch to inspect remote state
+      - if local is ahead: push
+      - if remote is ahead or diverged: SKIP (never pulling), log a warning
+    """
+    upstream = _detect_upstream(repo)
+    if not upstream:
+        logging.warning("[%s] No upstream tracking branch set; skipping push. (Run 'git push -u origin <branch>')", label)
+        return
+
+    _run_git(["fetch", "--quiet"], cwd=repo, check=False)
+
+    # Compare ahead/behind
+    try:
+        _, out, _ = _run_git(["rev-list", "--left-right", "--count", f"{upstream}...HEAD"], cwd=repo, check=False)
+        behind, ahead = [int(x) for x in out.strip().split()]
+    except Exception:
+        behind, ahead = 0, 0
+
+    if behind > 0 and ahead == 0:
+        logging.warning("[%s] Remote is ahead by %d commit(s). Push skipped (never pulling).", label, behind)
+        return
+    if behind > 0 and ahead > 0:
+        logging.warning("[%s] Branch diverged (ahead=%d, behind=%d). Push skipped (never pulling).", label, ahead, behind)
+        return
+    if ahead == 0:
+        logging.info("[%s] Nothing to push.", label)
+        return
+
+    try:
+        _run_git(["push"], cwd=repo, check=True)
+        logging.info("[%s] Pushed %d commit(s).", label, ahead)
+    except Exception as e:
+        logging.exception("[%s] Push failed: %s", label, e)
+        notify("CFB-Tix sync failed", "git push failed — see daemon log.")
+
+# ---------- child env ----------
 
 def _child_env_for_repo(paths: Paths) -> dict:
     """Environment for child scripts: repo-locked and with src on PYTHONPATH."""
@@ -149,70 +217,43 @@ def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int
         notify("CFB-Tix job failed", f"{script_rel}\n{e}")
         return 1
 
-# ---------- Git sync (prefer your data_sync; else fallback to plain git) ----------
-
-def _git_sync_safe(repo_root: Path) -> None:
-    """
-    Robust git sync:
-      - pull --rebase --autostash (handles unstaged changes cleanly)
-      - stage/commit any changes
-      - push (no-op if up-to-date)
-    Respects .gitignore.
-    """
-    def run(args: list[str]) -> tuple[int, str]:
-        rc, out = _popen(args, cwd=repo_root)
-        if rc != 0:
-            logging.warning("git %s failed (rc=%s)\n%s", " ".join(args), rc, out)
-        return rc, out
-
-    rc, _ = run(["git", "rev-parse", "--is-inside-work-tree"])
-    if rc != 0:
-        logging.info("Not a git repo; skipping sync.")
-        return
-
-    run(["git", "fetch", "--all"])
-    run(["git", "pull", "--rebase", "--autostash"])
-
-    rc, status = run(["git", "status", "--porcelain"])
-    if rc == 0 and status.strip():
-        run(["git", "add", "-A"])
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        rc, out = run(["git", "commit", "-m", f"automated snapshot sync ({ts})"])
-        if rc != 0:
-            logging.warning("git commit returned %s\n%s", rc, out)
-
-    rc, out = run(["git", "push"])
-    if rc != 0:
-        logging.error("git push failed:\n%s", out)
-        notify("CFB-Tix sync failed", "git push failed — see daemon log.")
-        raise RuntimeError("git push failed")
-    logging.info("✅ git sync complete.")
+# ---------- Sync orchestration (push-only; optional release sync guarded) ----------
 
 def do_sync(paths: Paths, label: str) -> None:
     """
-    Commit locally (if dirty) then try repo helper (src -> pkg), else fallback to plain git.
-    This guarantees new artifacts under data/ (except data/permanent/) get committed + pushed.
+    Push-only sync for daemon jobs.
+    Disabled by default unless CFB_TIX_ENABLE_SYNC=1 (or sentinel removed/var toggled).
+    Commits only whitelisted paths (default: data,models). Never pulls.
+    Optional GitHub Release asset sync can be enabled with CFB_TIX_USE_RELEASE_SYNC=1.
     """
     if _sync_disabled():
         logging.info("[%s] sync skipped (sync disabled by default; set CFB_TIX_ENABLE_SYNC=1 to allow)", label)
         return
-    committed = _commit_if_dirty(paths.repo_root)
-    try:
-        from src.cfb_tix.windows.data_sync import pull_then_push  # type: ignore
-        updated, pushed = pull_then_push(verbose=False)
-        logging.info("[%s] pull_then_push (src) -> updated=%s, pushed=%s, committed=%s",
-                     label, updated, pushed, committed)
-        return
-    except Exception as e1:
+
+    repo = paths.repo_root
+    scope_env = os.getenv("CFB_TIX_COMMIT_SCOPE", "data,models")
+    scope = [s.strip() for s in scope_env.split(",") if s.strip()]
+
+    # Commit scoped changes, if any
+    made_commit = _commit_if_dirty(repo, label, scope=scope)
+    if not made_commit:
+        logging.info("[%s] No changes to commit in scope: %s", label, scope)
+
+    # Optional: release asset sync (guarded)
+    if os.getenv("CFB_TIX_USE_RELEASE_SYNC", "0") == "1":
         try:
-            from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
+            # Prefer src path if available, otherwise package import
+            try:
+                from src.cfb_tix.windows.data_sync import pull_then_push  # type: ignore
+            except Exception:
+                from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
             updated, pushed = pull_then_push(verbose=False)
-            logging.info("[%s] pull_then_push (pkg) -> updated=%s, pushed=%s, committed=%s",
-                         label, updated, pushed, committed)
-            return
-        except Exception as e2:
-            logging.info("[%s] data_sync unavailable (%s / %s); using plain git.", label, e1, e2)
-            _git_sync_safe(paths.repo_root)
+            logging.info("[%s] release sync -> updated=%s, pushed=%s", label, updated, pushed)
+        except Exception as e:
+            logging.info("[%s] release sync unavailable or failed: %s", label, e)
+
+    # Push-only; never pull
+    _git_sync_push_only(repo, label)
 
 # ---------- jobs ----------
 
@@ -336,12 +377,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     setup_logging(paths.log_file)
     logging.info("CFB-Tix daemon starting up (root=%s)", paths.app_root)
 
-    # Initial pull to ensure we're up to date before first jobs
+    # No pulling at startup; respect push-only policy
+    logging.info("Initial sync phase respecting push-only policy.")
     try:
-        do_sync(paths, "initial_pull")
-        logging.info("Initial pull complete.")
+        do_sync(paths, "initial_sync")
     except Exception as e:
-        logging.info("Initial pull skipped/fallback failed: %s", e)
+        logging.info("Initial sync skipped/fallback failed: %s", e)
 
     # Coalesce late runs, prevent overlap, allow small grace
     sched = BackgroundScheduler(
