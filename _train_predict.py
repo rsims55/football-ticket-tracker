@@ -5,3 +5,4 @@ sys.path.insert(0, str(ROOT / "src"))
 from cfb_tix import daemon as d
 p = d.detect_paths()
 d.job_train_model(p)
+d.job_predict_price(p)
