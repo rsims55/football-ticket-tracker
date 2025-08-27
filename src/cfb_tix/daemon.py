@@ -136,15 +136,16 @@ def _commit_if_dirty(repo_root: Path, label: str, scope: list[str] | None = None
     if not existing:
         return False
 
-    # Stage changes within scope
     _run_git(["add", "--", *existing], cwd=repo_root, check=False)
 
-    # Check if anything staged
     _, status, _ = _run_git(["status", "--porcelain"], cwd=repo_root, check=False)
     if not status.strip():
         return False
 
-    msg = f"automated snapshot sync ({label})"
+    # NEW: allow a precise manual message override
+    custom = os.getenv("CFB_TIX_COMMIT_MESSAGE")
+    msg = custom if custom else f"automated snapshot sync ({label})"
+
     _run_git(["commit", "-m", msg], cwd=repo_root, check=False)
     return True
 
