@@ -674,7 +674,13 @@ def log_price_snapshot():
     if KEEP_COMBINED_EXPORTS:
         print(f"📝 Keeping temp files:\n  - {TMP_JSONL}\n  - {TMP_CSV}")
     else:
-        for p in (TMP_JSONL, TMP_CSV):
+        cleanup_targets = [TMP_JSONL, TMP_CSV]
+
+        # also nuke any stray .etag.json files in the daily dir
+        for f in Path(DAILY_DIR).glob("*.etag.json"):
+            cleanup_targets.append(str(f))
+
+        for p in cleanup_targets:
             try:
                 if os.path.exists(p):
                     os.remove(p)
