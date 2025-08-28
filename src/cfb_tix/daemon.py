@@ -84,6 +84,39 @@ def setup_logging(log_file: Path) -> None:
         fh.setFormatter(fmt)
         root.addHandler(fh)
 
+# ---------- single-instance lock ----------
+_LOCKFILE_PATH: Path | None = None
+
+def _acquire_lock(paths: Paths) -> bool:
+    """Prevent multiple daemon instances: create an exclusive lock file."""
+    global _LOCKFILE_PATH
+    lock_path = paths.logs_dir / "daemon.lock"
+    try:
+        # O_EXCL ensures failure if file already exists
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"{os.getpid()}\n")
+        _LOCKFILE_PATH = lock_path
+        logging.info("Acquired daemon lock: %s", lock_path)
+        return True
+    except FileExistsError:
+        logging.info("Another daemon instance appears to be running (lock present). Exiting.")
+        return False
+    except Exception as e:
+        logging.warning("Could not create lock file (%s); continuing without lock.", e)
+        return True  # fallback: don't block startup if filesystem oddity
+
+def _release_lock():
+    """Remove the lock file on shutdown."""
+    global _LOCKFILE_PATH
+    try:
+        if _LOCKFILE_PATH and _LOCKFILE_PATH.exists():
+            _LOCKFILE_PATH.unlink(missing_ok=True)
+            logging.info("Released daemon lock: %s", _LOCKFILE_PATH)
+    except Exception:
+        pass
+
+
 # ---------- helpers ----------
 
 def notify(title: str, msg: str) -> None:
@@ -378,6 +411,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     setup_logging(paths.log_file)
     logging.info("CFB-Tix daemon starting up (root=%s)", paths.app_root)
 
+    # Single-instance guard
+    if not _acquire_lock(paths):
+        return 0
+
     # No pulling at startup; respect push-only policy
     logging.info("Initial sync phase respecting push-only policy.")
     try:
@@ -431,7 +468,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        sched.shutdown(wait=False)
+        try:
+            sched.shutdown(wait=False)
+        except Exception:
+            pass
+        _release_lock()
+
     return 0
 
 if __name__ == "__main__":
