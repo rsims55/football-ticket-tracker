@@ -36,6 +36,10 @@ def _sync_disabled() -> bool:
         pass
     return True
 
+# >>> NEW: sync mode switch (default 'perjob', alternative 'twice_daily')
+def _sync_mode() -> str:
+    return os.getenv("CFB_TIX_SYNC_MODE", "perjob").strip().lower()
+
 # ---------- Paths & logging ----------
 
 APP_NAME = "cfb-tix"
@@ -116,7 +120,6 @@ def _release_lock():
     except Exception:
         pass
 
-
 # ---------- helpers ----------
 
 def notify(title: str, msg: str) -> None:
@@ -175,7 +178,7 @@ def _commit_if_dirty(repo_root: Path, label: str, scope: list[str] | None = None
     if not status.strip():
         return False
 
-    # NEW: allow a precise manual message override
+    # Allow exact manual message override
     custom = os.getenv("CFB_TIX_COMMIT_MESSAGE")
     msg = custom if custom else f"automated snapshot sync ({label})"
 
@@ -296,21 +299,30 @@ def job_daily_snapshot(paths: Paths) -> None:
     try:
         run_py_script("src/builders/daily_snapshot.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "daily_snapshot")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "daily_snapshot")
+        else:
+            logging.info("[daily_snapshot] per-job sync skipped (twice_daily mode)")
 
 def job_train_model(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/modeling/train_price_model.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "train_model")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "train_model")
+        else:
+            logging.info("[train_model] per-job sync skipped (twice_daily mode)")
 
 def job_predict_price(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/modeling/predict_price.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "predict_price")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "predict_price")
+        else:
+            logging.info("[predict_price] per-job sync skipped (twice_daily mode)")
 
 def job_weekly_update(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
@@ -324,20 +336,33 @@ def job_weekly_update(paths: Paths) -> None:
             # Last resort (older report generator)
             run_py_script("src/reports/generate_weekly_report.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "weekly_update")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "weekly_update")
+        else:
+            logging.info("[weekly_update] per-job sync skipped (twice_daily mode)")
 
 def job_annual_setup(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/builders/annual_setup.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "annual_setup")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "annual_setup")
+        else:
+            logging.info("[annual_setup] per-job sync skipped (twice_daily mode)")
 
 def job_daily_pull_push(paths: Paths) -> None:
     try:
         do_sync(paths, "daily_pull_push")
     except Exception as e:
         logging.warning("Daily pull/push failed: %s", e)
+
+# >>> NEW: evening push job
+def job_evening_pull_push(paths: Paths) -> None:
+    try:
+        do_sync(paths, "evening_pull_push")
+    except Exception as e:
+        logging.warning("Evening pull/push failed: %s", e)
 
 def job_hourly_sync(paths: Paths) -> None:
     try:
@@ -351,11 +376,17 @@ def job_evaluate_predictions(paths: Paths) -> None:
     try:
         run_py_script("src/modeling/evaluate_predictions.py", paths.app_root, env=env)
     finally:
-        do_sync(paths, "evaluate_predictions")
+        if _sync_mode() == "perjob":
+            do_sync(paths, "evaluate_predictions")
+        else:
+            logging.info("[evaluate_predictions] per-job sync skipped (twice_daily mode)")
 
 # ---------- main ----------
 
 def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
+    mode = _sync_mode()
+    logging.info("Scheduling with sync mode: %s", mode)
+
     # 00:00, 06:00, 12:00, 18:00
     sched.add_job(lambda: job_daily_snapshot(paths),
                   CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
@@ -385,15 +416,21 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(month=5, day=1, hour=5, minute=0, timezone=TZ),
                   id="job_annual_setup", name="job_annual_setup", replace_existing=True)
 
-    # Daily GH sync at 07:10
-    sched.add_job(lambda: job_daily_pull_push(paths),
-                  CronTrigger(hour=7, minute=10, timezone=TZ),
-                  id="job_daily_pull_push", name="job_daily_pull_push", replace_existing=True)
-
-    # Hourly safety sync (quarter past)
-    sched.add_job(lambda: job_hourly_sync(paths),
-                  CronTrigger(minute=15, timezone=TZ),
-                  id="job_hourly_sync", name="job_hourly_sync", replace_existing=True)
+    # >>> Push scheduling depends on mode:
+    if mode == "twice_daily":
+        # Morning GH push at 07:10
+        sched.add_job(lambda: job_daily_pull_push(paths),
+                      CronTrigger(hour=7, minute=10, timezone=TZ),
+                      id="job_daily_pull_push", name="job_daily_pull_push", replace_existing=True)
+        # Evening GH push at 19:10
+        sched.add_job(lambda: job_evening_pull_push(paths),
+                      CronTrigger(hour=19, minute=10, timezone=TZ),
+                      id="job_evening_pull_push", name="job_evening_pull_push", replace_existing=True)
+    else:
+        # Per-job push mode: keep an hourly safety push (quarter past)
+        sched.add_job(lambda: job_hourly_sync(paths),
+                      CronTrigger(minute=15, timezone=TZ),
+                      id="job_hourly_sync", name="job_hourly_sync", replace_existing=True)
 
 def log_next_runs(sched: BackgroundScheduler) -> None:
     for j in sched.get_jobs():
@@ -415,12 +452,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not _acquire_lock(paths):
         return 0
 
-    # No pulling at startup; respect push-only policy
-    logging.info("Initial sync phase respecting push-only policy.")
-    try:
-        do_sync(paths, "initial_sync")
-    except Exception as e:
-        logging.info("Initial sync skipped/fallback failed: %s", e)
+    # >>> Initial push behavior depends on mode
+    mode = _sync_mode()
+    logging.info("Sync mode: %s", mode)
+    if mode == "perjob":
+        logging.info("Initial sync phase (perjob mode).")
+        try:
+            do_sync(paths, "initial_sync")
+        except Exception as e:
+            logging.info("Initial sync skipped/fallback failed: %s", e)
+    else:
+        logging.info("Initial sync skipped (twice_daily mode).")
 
     # Coalesce late runs, prevent overlap, allow small grace
     sched = BackgroundScheduler(
