@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import json
+import re 
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, Set
@@ -360,8 +361,18 @@ def _prepare_snapshots_for_join(snap: pd.DataFrame) -> pd.DataFrame:
     df = snap.copy()
     df["snap_idx"] = df.index
     df["date_key"] = pd.to_datetime(df["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
-    df["home_key"] = df["home_team_guess"].map(_normalize_team_name)
-    df["away_key"] = df["away_team_guess"].map(_normalize_team_name)
+
+    # Prefer fixed homeTeam/awayTeam; fallback to guess columns if needed
+    def _pick_norm(src_primary: str, src_fallback: str) -> pd.Series:
+        primary = df[src_primary] if src_primary in df.columns else pd.Series([""] * len(df), index=df.index)
+        primary_norm = primary.fillna("").map(_normalize_team_name)
+        if src_fallback in df.columns:
+            fallback_norm = df[src_fallback].fillna("").map(_normalize_team_name)
+            return primary_norm.where(primary_norm.astype(bool), fallback_norm)
+        return primary_norm
+
+    df["home_key"] = _pick_norm("homeTeam", "home_team_guess")
+    df["away_key"] = _pick_norm("awayTeam", "away_team_guess")
     return df
 
 def _choose_rivalry_columns(df: pd.DataFrame) -> Optional[Tuple[str, str]]:
@@ -438,6 +449,123 @@ def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]])
     snap["isRivalry"] = snap["isRivalry"].astype(bool)
     return snap
 
+# ---------------------------
+# Title cleanup + alias + matchup fixes (no new columns)
+# ---------------------------
+
+ALIASES_PATH = os.path.join(PROJ_DIR, "data", "permanent", "team_aliases.json")
+
+def _load_team_aliases() -> Dict[str, str]:
+    try:
+        with open(ALIASES_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            print(f"⚠️ team_aliases.json is not an object: {ALIASES_PATH}")
+            return {}
+        return {str(k).strip().lower(): str(v).strip()
+                for k, v in data.items()
+                if isinstance(k, str) and isinstance(v, str)}
+    except FileNotFoundError:
+        print(f"ℹ️ No team_aliases.json found at {ALIASES_PATH}")
+        return {}
+    except Exception as e:
+        print(f"⚠️ Failed to read team_aliases.json: {e}")
+        return {}
+
+def _clean_event_title(title: Optional[str]) -> Optional[str]:
+    if not isinstance(title, str):
+        return title
+    t = title.strip()
+    if ":" in t:
+        right = t.split(":", 1)[1].strip()
+        if right:
+            return right
+    return t
+
+# Match " vs " or " vs. " with ANY casing, flexible spacing, and NBSPs
+_VS_RE = re.compile(r'\s+vs\.?\s+', flags=re.IGNORECASE)
+
+def _split_matchup(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Prefer 'X vs Y' => (home=X, away=Y).
+    Robust to:
+      - 'Vs' / 'VS' / 'vs.'
+      - non-breaking spaces
+      - extra punctuation/spaces around team names
+    """
+    if not isinstance(text, str):
+        return (None, None)
+    # Normalize non-breaking spaces and stray dashes
+    t = text.replace('\u00A0', ' ').strip()
+    parts = _VS_RE.split(t, maxsplit=1)
+    if len(parts) == 2:
+        left = parts[0].strip(" \t-–—")
+        right = parts[1].strip(" \t-–—")
+        if left and right:
+            return (left, right)
+    return (None, None)
+
+def _canonicalize_if_aliased(name: Optional[str], aliases: Dict[str, str]) -> Optional[str]:
+    if not isinstance(name, str):
+        return name
+    key = name.strip().lower()
+    return aliases.get(key, name.strip())
+
+def _apply_title_and_alias_fixes(snap: pd.DataFrame) -> pd.DataFrame:
+    """
+    - Clean 'title' (drop prefix before ':').
+    - If homeTeam/awayTeam exist, fill only their blanks from 'X vs Y' and apply aliases.
+    - Else, if guess columns exist, fill only their blanks and apply aliases.
+    - NEVER create new columns.
+    """
+    if snap.empty:
+        return snap
+    df = snap.copy()
+    aliases = _load_team_aliases()
+
+    if "title" in df.columns:
+        df["title"] = df["title"].map(_clean_event_title)
+
+    def _needs_fill(x) -> bool:
+        return (not isinstance(x, str)) or (x.strip() == "")
+
+    # Helper to produce inferred values from title without writing anything yet
+    def _infer_pair_from_title(row):
+        ih, ia = _split_matchup(row.get("title") or "")
+        return ih, ia
+
+    if ("homeTeam" in df.columns) or ("awayTeam" in df.columns):
+        # Work on homeTeam
+        if "homeTeam" in df.columns:
+            inferred_home = df.apply(lambda r: _infer_pair_from_title(r)[0], axis=1)
+            mask = df["homeTeam"].isna() | (df["homeTeam"].astype(str).str.strip() == "")
+            df.loc[mask, "homeTeam"] = inferred_home[mask]
+            df["homeTeam"] = df["homeTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+
+        # Work on awayTeam
+        if "awayTeam" in df.columns:
+            inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
+            mask = df["awayTeam"].isna() | (df["awayTeam"].astype(str).str.strip() == "")
+            df.loc[mask, "awayTeam"] = inferred_away[mask]
+            df["awayTeam"] = df["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+
+    elif ("home_team_guess" in df.columns) or ("away_team_guess" in df.columns):
+        # Fall back to fixing the guess columns (common pre-enrichment)
+        if "home_team_guess" in df.columns:
+            inferred_home = df.apply(lambda r: _infer_pair_from_title(r)[0], axis=1)
+            mask = df["home_team_guess"].isna() | (df["home_team_guess"].astype(str).str.strip() == "")
+            df.loc[mask, "home_team_guess"] = inferred_home[mask]
+            df["home_team_guess"] = df["home_team_guess"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+
+        if "away_team_guess" in df.columns:
+            inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
+            mask = df["away_team_guess"].isna() | (df["away_team_guess"].astype(str).str.strip() == "")
+            df.loc[mask, "away_team_guess"] = inferred_away[mask]
+            df["away_team_guess"] = df["away_team_guess"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+
+    return df
+
+
 def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     if snap.empty:
         return snap
@@ -488,6 +616,101 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
             a, b = f"{col}_dir", f"{col}_flip"
             out[col] = matched.apply(lambda r, a=a, b=b: pick_pair(r, a, b), axis=1)
         snap = snap.merge(out, left_index=True, right_on="snap_idx", how="left").drop(columns=["snap_idx"])
+
+        # --- Backfill home/away strictly from the title (no new columns) ---
+        _VS_RE = re.compile(r'\s+vs\.?\s+', flags=re.IGNORECASE)
+
+        def _clean_title_local(t):
+            if not isinstance(t, str):
+                return t
+            t = t.replace('\u00A0', ' ').strip()  # normalize NBSPs
+            if ":" in t:
+                right = t.split(":", 1)[1].strip()  # keep only after colon
+                if right:
+                    t = right
+            return t
+
+        def _part_from_title(t, idx):
+            t = _clean_title_local(t)
+            if not isinstance(t, str):
+                return None
+            parts = _VS_RE.split(t, maxsplit=1)  # split on vs / Vs. / VS. with flexible spacing
+            if len(parts) == 2:
+                side = parts[idx].strip(" \t-–—")
+                return side if side else None
+            return None
+
+        for col, idx in (("homeTeam", 0), ("awayTeam", 1)):
+            if col in snap.columns and "title" in snap.columns:
+                mask = snap[col].isna() | (snap[col].astype(str).str.strip() == "")
+                parsed = snap["title"].apply(lambda s: _part_from_title(s, idx))
+                fill = mask & parsed.notna() & (parsed.astype(str).str.strip() != "")
+                snap.loc[fill, col] = parsed[fill]
+
+    # --- Second-chance enrichment using newly backfilled home/away + date ---
+    cols_to_carry = [
+        "homeTeam","awayTeam","stadium","capacity","neutralSite","conferenceGame",
+        "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
+        "homeConference","awayConference","week"
+    ]
+
+    # Build temp keys without leaving extra columns behind
+    tmp = snap.copy()
+    tmp["snap_idx2"] = tmp.index
+    tmp["date_key"]   = pd.to_datetime(tmp["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
+    tmp["home_key_new"] = tmp.get("homeTeam", pd.Series([""]*len(tmp), index=tmp.index)).fillna("").map(_normalize_team_name)
+    tmp["away_key_new"] = tmp.get("awayTeam", pd.Series([""]*len(tmp), index=tmp.index)).fillna("").map(_normalize_team_name)
+
+    sched_pre = _prepare_schedule_for_join(sched)
+
+    # direct (home vs away)
+    m1b = tmp.merge(sched_pre, how="left", on="date_key", suffixes=("", "_sched"))
+    m1b = m1b[(m1b["home_key_new"] == m1b["home_key_sched"]) & (m1b["away_key_new"] == m1b["away_key_sched"])].copy()
+    m1b = m1b.sort_values("snap_idx2").drop_duplicates(subset=["snap_idx2"], keep="first")
+
+    # flipped (away vs home)
+    sched_flip = sched_pre.rename(columns={
+        "home_key_sched": "away_key_sched",
+        "away_key_sched": "home_key_sched",
+        "homeTeam": "awayTeam",
+        "awayTeam": "homeTeam",
+        "homeConference": "awayConference",
+        "awayConference": "homeConference",
+        "homeTeamRank": "awayTeamRank",
+        "awayTeamRank": "homeTeamRank",
+    })
+    m2b = tmp.merge(sched_flip, how="left", on="date_key", suffixes=("", "_sched"))
+    m2b = m2b[(m2b["home_key_new"] == m2b["home_key_sched"]) & (m2b["away_key_new"] == m2b["away_key_sched"])].copy()
+    m2b = m2b.sort_values("snap_idx2").drop_duplicates(subset=["snap_idx2"], keep="first")
+
+    # build overlay preferring direct over flipped
+    overlay = pd.merge(
+        m1b[["snap_idx2"] + [c for c in cols_to_carry if c in m1b.columns]],
+        m2b[["snap_idx2"] + [c for c in cols_to_carry if c in m2b.columns]],
+        on="snap_idx2", how="outer", suffixes=("_dir","_flip")
+    )
+
+    def _pick(row, col):
+        a = row.get(f"{col}_dir")
+        b = row.get(f"{col}_flip")
+        return a if pd.notna(a) else b
+
+    over = pd.DataFrame({"snap_idx2": overlay["snap_idx2"]})
+    for col in cols_to_carry:
+        if f"{col}_dir" in overlay.columns or f"{col}_flip" in overlay.columns:
+            over[col] = overlay.apply(lambda r, c=col: _pick(r, c), axis=1)
+    over = over.set_index("snap_idx2")
+
+    # Fill ONLY where missing/blank (never create new columns)
+    for col in cols_to_carry:
+        if col in snap.columns and col in over.columns:
+            newvals = over[col].reindex(snap.index)
+            if pd.api.types.is_numeric_dtype(snap[col]):
+                mask = snap[col].isna() & newvals.notna()
+            else:
+                mask = (snap[col].isna() | (snap[col].astype(str).str.strip() == "")) & newvals.notna()
+            snap.loc[mask, col] = newvals[mask]
+
     rivalry_pairs = _load_rivalries()
     snap = _mark_rivalries(snap, rivalry_pairs)
     if "capacity" in snap.columns:
@@ -614,7 +837,9 @@ def log_price_snapshot():
     if snap_all.empty:
         print("⚠️ Temp CSV is empty after reading. Exiting.")
         return
-
+    
+    # Normalize titles, infer missing home/away from title, and apply team aliases (no new columns)
+    snap_all = _apply_title_and_alias_fixes(snap_all)
     snap_all = _enrich_with_schedule_and_stadiums(snap_all)
 
     # Append/dedupe within same minute per (offer_url or event_id)
@@ -626,21 +851,21 @@ def log_price_snapshot():
         key_cols.append("event_id")
     key_cols.extend(["date_collected", "time_collected"])
 
-    # Ensure missing team info is filled (tolerate different column names)
-    def _ensure_col(df, target, candidates, default):
-        src = next((c for c in candidates if c in df.columns), None)
+    # Ensure missing team info is filled only if those columns ALREADY exist (do not create new columns)
+    def _ensure_col_existing(df, target, candidates):
         if target not in df.columns:
-            df[target] = df[src] if src else default
-        else:
-            if src is not None and df[target].isna().all():
-                df[target] = df[src]
-        df[target] = df[target].fillna(default)
+            return df
+        src = next((c for c in candidates if c in df.columns), None)
+        if src is not None:
+            # fill only NaNs/empties
+            needs = df[target].isna() | (df[target].astype(str).str.strip() == "")
+            df.loc[needs, target] = df.loc[needs, src]
         return df
 
-    snap_all = _ensure_col(snap_all, "home_team_name", ["home_team_name","homeTeam","home_team","team_name"], "FBS Team")
-    snap_all = _ensure_col(snap_all, "away_team_name", ["away_team_name","awayTeam","away_team"], "FCS Opponent")
-    snap_all = _ensure_col(snap_all, "home_team_slug", ["home_team_slug","home_slug","homeTeamSlug","team_slug"], "fbs-team")
-    snap_all = _ensure_col(snap_all, "away_team_slug", ["away_team_slug","away_slug","awayTeamSlug"], "fcs-opponent")
+    snap_all = _ensure_col_existing(snap_all, "homeTeam", ["home_team_name","homeTeam","home_team","team_name"])
+    snap_all = _ensure_col_existing(snap_all, "awayTeam", ["away_team_name","awayTeam","away_team"])
+    # do NOT touch slugs unless they already exist:
+    snap_all = _ensure_col_existing(snap_all, "team_slug", ["home_team_slug","home_slug","homeTeamSlug","team_slug"])
 
     if os.path.exists(SNAPSHOT_PATH):
         existing = pd.read_csv(SNAPSHOT_PATH)

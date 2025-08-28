@@ -1,322 +1,438 @@
 # src/fetchers/rankings_fetcher.py
 from __future__ import annotations
 
-import os
-import re
+import os, re
 from datetime import datetime
-from typing import List, Optional, Tuple, Any
+from typing import Optional, List, Tuple, Dict
 
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup, Tag
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.getenv("CFD_API_KEY")
 
-# Ensure weekly output dir exists
 WEEKLY_DIR = os.path.join("data", "weekly")
 os.makedirs(WEEKLY_DIR, exist_ok=True)
+
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+      "AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/124.0 Safari/537.36")
+DEBUG = os.getenv("RANKINGS_DEBUG", "0") == "1"
 
 
 class RankingsFetcher:
     """
-    Preference order:
-      1) Wikipedia (current year): latest populated weekly Team/School column (AP preferred)
-      2) Wikipedia (prior year): last populated weekly Team/School column
-      3) CFBD API (current year, latest week) – Playoff -> AP -> Coaches
-      4) CFBD API (prior year, latest week)
+    Wikipedia-only strict priority:
+      1) Current CFP (#CFP_rankings / variants)
+      2) Current AP  (#AP_Poll / variants)
+      3) Prior   CFP
+      4) Prior   AP
 
-    Returns DataFrame with ['rank', 'school'] and writes a CSV in data/weekly/.
+    Exposes:
+      - fetch_current_then_prior_cfp_ap() -> DataFrame | None
+      - self.source -> 'wiki:CFP' | 'wiki:AP'
+      - self.source_year -> int
     """
+
+    SECTION_IDS: Dict[str, List[str]] = {
+        "CFP": ["CFP_rankings", "College_Football_Playoff_rankings", "CFP_rankings_2"],
+        "AP":  ["AP_Poll", "AP_poll", "AP_Top_25"],
+    }
+
+    POLL_NAME = {"CFP": "CFP", "AP": "AP"}
 
     def __init__(self, year: Optional[int] = None):
         self.year = year or datetime.now().year
-        self.api_key = API_KEY
-        self.file_path: Optional[str] = None
+        self.source: Optional[str] = None
+        self.source_year: Optional[int] = None
 
-    # -----------------------------
-    # Public entry
-    # -----------------------------
-    def fetch_and_load(self) -> Optional[pd.DataFrame]:
-        # 1) Wikipedia current year
-        df = self._fetch_wiki_latest(self.year)
-        if df is not None:
-            return df
+    # -------- Public API --------
+    def fetch_current_then_prior_cfp_ap(self) -> Optional[pd.DataFrame]:
+        """
+        Try in order:
+          (year, CFP) → (year, AP) → (year-1, CFP) → (year-1, AP)
+        Returns the first parsed ranking table as a normalized DataFrame.
+        """
+        order = [
+            (self.year, "CFP"),
+            (self.year, "AP"),
+            (self.year - 1, "CFP"),
+            (self.year - 1, "AP"),
+        ]
+        if DEBUG:
+            print("📈 Fetching latest rankings (Wikipedia only; CFP→AP, current→prior)…")
 
-        # 2) Wikipedia prior year
-        df = self._fetch_wiki_latest(self.year - 1)
-        if df is not None:
-            return df
-
-        # 3) CFBD API current year
-        wk = self.get_latest_week(self.year)
-        if wk:
-            df = self._fetch_api_rankings(self.year, wk)
-            if df is not None:
+        for y, label in order:
+            df = self._fetch_year_label(y, label)
+            if self._ok(df):
+                # stamp source + season (use the year we actually fetched)
+                self.source, self.source_year = f"wiki:{label}", y
+                df = df.copy()
+                df["season"] = y
+                self._write_artifact(df, y)
                 return df
-
-        # 4) CFBD API prior year
-        wk_prev = self.get_latest_week(self.year - 1)
-        if wk_prev:
-            df = self._fetch_api_rankings(self.year - 1, wk_prev)
-            if df is not None:
-                return df
-
         return None
 
-    # -----------------------------
-    # Wikipedia
-    # -----------------------------
-    def _fetch_wiki_latest(self, year: int) -> Optional[pd.DataFrame]:
-        """
-        Load https://en.wikipedia.org/wiki/{year}_NCAA_Division_I_FBS_football_rankings,
-        find AP-like (preferred) or Coaches weekly table, pick rightmost populated
-        Team/School column, return ['rank','school'] or None.
-        """
+    # -------- Internals --------
+    def _fetch_year_label(self, year: int, label: str) -> Optional[pd.DataFrame]:
+        soup = self._get_soup(year)
+        if soup is None:
+            return None
+
+        # 1) Section-targeted: scan ALL wikitables inside the section until the NEXT <h2>
+        for sid in self.SECTION_IDS.get(label, []):
+            df = self._parse_section_scan_wikitables(soup, sid, prefer_label=label)
+            if self._ok(df):
+                if DEBUG:
+                    print(f"[rankings] {year}/{label} via id='{sid}' → {len(df)} rows")
+                df = df.copy()
+                df["poll"] = self.POLL_NAME.get(label, label)
+                return df
+
+        # 2) Label-aware page-wide fallback
+        df = self._page_wide_best_table(soup, prefer_label=label)
+        if self._ok(df):
+            if DEBUG:
+                print(f"[rankings] {year}/{label} via page-wide fallback → {len(df)} rows")
+            df = df.copy()
+            df["poll"] = self.POLL_NAME.get(label, label)
+            return df
+
+        if DEBUG:
+            print(f"[rankings] {year}/{label} → not found")
+        return None
+
+    def _get_soup(self, year: int) -> Optional[BeautifulSoup]:
         url = f"https://en.wikipedia.org/wiki/{year}_NCAA_Division_I_FBS_football_rankings"
         try:
-            tables = pd.read_html(url)  # type: ignore[arg-type]
-        except Exception:
-            return None
+            # Optional local override for testing saved HTML (e.g., data/weekly/wiki_2025.html)
+            local = os.getenv("RANKINGS_HTML_OVERRIDE", "").strip()
+            if local and os.path.exists(local):
+                if DEBUG:
+                    print(f"[rankings] using local HTML override: {local}")
+                with open(local, "r", encoding="utf-8") as f:
+                    html = f.read()
+            else:
+                r = requests.get(url, headers={"User-Agent": UA}, timeout=30)
+                r.raise_for_status()
+                html = r.text
 
-        candidates: List[pd.DataFrame] = []
-        for t in tables:
-            df = t.copy()
-
-            # Try to find a viable (rank, team) pair; store attrs so we can sort by width/AP-likeness later
-            pair = self._find_rank_and_latest_team_col(df)
-            if pair is None:
-                continue
-            rank_col, team_col, team_col_pos = pair
-            df.attrs["__rank_col__"] = rank_col
-            df.attrs["__team_col__"] = team_col
-            df.attrs["__team_col_pos__"] = team_col_pos
-            candidates.append(df)
-
-        if not candidates:
-            return None
-
-        # Prefer wider tables – AP is usually wider
-        candidates.sort(key=lambda d: len(d.columns), reverse=True)
-
-        # Prefer AP-like tables first (heuristic)
-        ap_like = [d for d in candidates if self._looks_like_ap(d)]
-        ap_ids = {id(x) for x in ap_like}
-        others = [d for d in candidates if id(d) not in ap_ids]
-        ordered = ap_like + others
-
-        for df in ordered:
-            rank_col = df.attrs["__rank_col__"]
-            team_col = df.attrs["__team_col__"]
-            out = df[[rank_col, team_col]].copy()
-            out.columns = ["rank", "school"]
-            out = self._clean_rankings_df(out)
-            if out is not None and not out.empty:
-                fname = os.path.join(WEEKLY_DIR, f"wiki_rankings_{year}.csv")
+            if DEBUG and not local:
+                out = os.path.join(WEEKLY_DIR, f"wiki_{year}.html")
                 try:
-                    out.to_csv(fname, index=False)
-                    self.file_path = fname
-                except Exception:
-                    pass
-                return out
-
-        return None
-
-    def _looks_like_ap(self, df: pd.DataFrame) -> bool:
-        # Heuristic: AP weekly tables often have many "Week" columns and "Preseason"
-        cols = [self._col_to_str(c).lower() for c in df.columns]
-        has_pre = any("preseason" in c for c in cols)
-        weekish = sum(1 for c in cols if "week" in c) >= 3
-        return has_pre and weekish
-
-    # -------- core detection for wiki tables --------
-    def _find_rank_and_latest_team_col(self, df: pd.DataFrame) -> Optional[Tuple[Any, Any, int]]:
-        """
-        Return (rank_col, team_col, team_col_pos) if we can identify a proper pair.
-        Strategy:
-          * Flatten columns to simple strings for scanning, but keep original labels.
-          * Identify all columns whose header includes 'Team' or 'School' (case-insensitive),
-            and which contain many team-like strings (>=15 rows).
-          * Choose the rightmost such column (latest week).
-          * Pair it with the nearest rank-ish column (header contains 'Rank' or '#'),
-            preferably to its immediate left; otherwise first column.
-        """
-        # Build flat names and mapping to original labels
-        flat_cols = [self._col_to_str(c) for c in df.columns]
-        col_map_flat_to_orig = {fc: orig for fc, orig in zip(flat_cols, df.columns)}
-
-        # Potential team columns (by header)
-        header_team_cands = [
-            i for i, name in enumerate(flat_cols)
-            if re.search(r"\b(team|school)\b", name, re.I)
-        ]
-
-        # If no obvious "team/school" in header, fall back to content-based scan
-        content_team_cands = []
-        if not header_team_cands:
-            for i, c in enumerate(df.columns):
-                s = df[c].astype(str).str.strip()
-                team_count = s.apply(self._is_teamlike).sum()
-                if team_count >= 15:
-                    content_team_cands.append(i)
-
-        team_cands = header_team_cands or content_team_cands
-        if not team_cands:
+                    with open(out, "w", encoding="utf-8") as f:
+                        f.write(html)
+                    print(f"[rankings] saved HTML → {out}")
+                except Exception as e:
+                    print(f"[rankings] could not write HTML: {e}")
+            return BeautifulSoup(html, "lxml")
+        except Exception as e:
+            if DEBUG:
+                print(f"[rankings] fetch failed for {year}: {e}")
             return None
 
-        # Rightmost viable team column that isn't clearly metadata (points/prev/record/votes/etc.)
-        bad_hdr = re.compile(r"(points|prev|previous|record|votes|trend|movement|conf|conference|note|rv)", re.I)
-        best_idx: Optional[int] = None
-        for i in reversed(team_cands):
-            name = flat_cols[i]
-            if bad_hdr.search(name):
+    # ---- Section scan: walk siblings until next <h2>; DO NOT stop at <h3> ----
+    def _parse_section_scan_wikitables(
+        self, soup: BeautifulSoup, section_id: str, prefer_label: str
+    ) -> Optional[pd.DataFrame]:
+        anchor = soup.find(id=section_id)
+        if anchor is None:
+            return None
+
+        heading = anchor if anchor.name in ("h2", "h3") else anchor.find_parent(["h2", "h3"]) or anchor
+
+        node = heading.next_sibling
+        tried = 0
+        while node is not None:
+            if isinstance(node, Tag) and node.name == "h2":
+                break
+            if isinstance(node, Tag):
+                # direct table
+                if node.name == "table" and "wikitable" in (node.get("class") or []):
+                    tried += 1
+                    week_num, poll_date = self._meta_for_table(node, prefer_label)
+                    df = self._parse_rank_table(node, week_num, poll_date, prefer_label)
+                    if self._ok(df):
+                        return df
+                # nested tables inside wrappers
+                for tbl in node.find_all("table", class_="wikitable"):
+                    tried += 1
+                    week_num, poll_date = self._meta_for_table(tbl, prefer_label)
+                    df = self._parse_rank_table(tbl, week_num, poll_date, prefer_label)
+                    if self._ok(df):
+                        return df
+            node = node.next_sibling
+
+        if DEBUG and tried:
+            print(f"[rankings] section '{section_id}' scanned {tried} wikitables → none parsed")
+        return None
+
+    # ---- Label-aware page-wide fallback (prevents AP being mis-tagged as CFP) ----
+    def _page_wide_best_table(self, soup: BeautifulSoup, prefer_label: str) -> Optional[pd.DataFrame]:
+        for tbl in soup.find_all("table", class_="wikitable"):
+            probe, n = self._try_table_quick(tbl)
+            if probe is None:
                 continue
-            # Content check: avoid numeric columns posing as team
-            s = df[df.columns[i]].astype(str).str.strip()
-            team_count = s.apply(self._is_teamlike).sum()
-            if team_count >= 15:
-                best_idx = i
-                break
 
-        if best_idx is None:
-            return None
+            head_text = self._nearest_heading_text(tbl).lower()
+            is_cfp = ("cfp" in head_text) or ("playoff" in head_text)
+            ap_col_idx = self._ap_preseason_col_index(tbl)
+            is_ap = (" ap" in f" {head_text} ") or (ap_col_idx >= 1)
 
-        team_col_orig = df.columns[best_idx]
+            if prefer_label == "CFP" and not is_cfp:
+                continue
+            if prefer_label == "AP" and not is_ap:
+                continue
 
-        # Find a rank-ish column to pair with (prefer a rank column to the left; else first column)
-        rank_idx = None
-        rank_hdr = re.compile(r"(rank|^#\s*$)", re.I)
-        for j in range(best_idx - 1, -1, -1):
-            if rank_hdr.search(flat_cols[j]):
-                rank_idx = j
-                break
-        if rank_idx is None:
-            # fall back to first column if it looks like rankish numbers 1..25
-            if len(df.columns) > 0:
-                rank_idx = 0
+            week_num, poll_date = self._meta_for_table(tbl, prefer_label)
+            return self._parse_rank_table(tbl, week_num, poll_date, prefer_label)
 
-        rank_col_orig = df.columns[rank_idx] if rank_idx is not None else None
-        if rank_col_orig is None:
-            return None
-
-        return (rank_col_orig, team_col_orig, best_idx)
-
-    @staticmethod
-    def _col_to_str(c: Any) -> str:
-        """Turn a possibly-MultiIndex column label into a readable string."""
-        if isinstance(c, tuple):
-            parts = [str(x) for x in c if str(x) != "nan"]
-            return " | ".join(parts).strip()
-        return str(c)
-
-    @staticmethod
-    def _is_teamlike(s: str) -> bool:
-        if not s:
-            return False
-        sl = str(s).strip().lower()
-        if sl in {"nan", "—", "-", "nr"}:
-            return False
-        # Reject pure numbers
-        if sl.isdigit():
-            return False
-        # Reject obvious records/points patterns
-        if re.match(r"^\(?\d{1,2}-\d{1,2}\)?$", sl):
-            return False
-        if re.match(r"^\d{1,4}(\.\d+)?$", sl):  # points, etc.
-            return False
-        # Looks like text (team name)
-        return True
-
-    # -----------------------------
-    # CFBD API (fallback)
-    # -----------------------------
-    def get_latest_week(self, year: int) -> Optional[int]:
-        url = f"https://api.collegefootballdata.com/games?year={year}"
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        try:
-            resp = requests.get(url, headers=headers, timeout=20)
-            if resp.status_code == 200:
-                games = resp.json()
-                weeks = {g.get("week") for g in games if g.get("week") is not None}
-                return max(weeks) if weeks else None
-        except Exception:
-            return None
         return None
 
-    def _fetch_api_rankings(self, year: int, week: int) -> Optional[pd.DataFrame]:
-        url = f"https://api.collegefootballdata.com/rankings?year={year}&seasonType=regular&week={week}"
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        try:
-            resp = requests.get(url, headers=headers, timeout=20)
-        except Exception:
+    # ---- Heading helpers ----
+    def _nearest_heading_text(self, node: Tag) -> str:
+        cur = node
+        while cur and cur.previous_sibling:
+            cur = cur.previous_sibling
+            if isinstance(cur, Tag) and cur.name in ("h2", "h3"):
+                return cur.get_text(" ", strip=True)
+        body = node.find_parent("body") if node else None
+        h1 = body.find("h1") if body else None
+        return h1.get_text(" ", strip=True) if h1 else ""
+
+    def _meta_for_table(self, tbl: Tag, prefer_label: str) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Derive (week_num, poll_date) from the nearest heading, when possible.
+        - Preseason → week 0
+        - 'Week N'  → week N
+        """
+        txt = self._nearest_heading_text(tbl)
+        week_num: Optional[int] = None
+        poll_date: Optional[str] = None
+
+        if txt:
+            if re.search(r"preseason", txt, re.IGNORECASE):
+                week_num = 0
+            else:
+                m_week = re.search(r"week\s*(\d+)", txt, re.IGNORECASE)
+                if m_week:
+                    week_num = int(m_week.group(1))
+
+            m_date = re.search(
+                r"\((January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\)",
+                txt
+            )
+            if m_date:
+                poll_date = m_date.group(0).strip("()")
+
+        return week_num, poll_date
+
+    # ---- AP matrix helper (choose 'Preseason' column explicitly) ----
+    def _ap_preseason_col_index(self, table: Tag) -> int:
+        """
+        For AP matrix tables (header has 'Preseason', 'Week 1', ...),
+        return the absolute column index for the 'Preseason' column.
+        If not found, return -1.
+        """
+        thead = table.find("thead")
+        header_row = None
+        if thead:
+            header_row = thead.find("tr")
+        if not header_row:
+            tbody = table.find("tbody") or table
+            rows = tbody.find_all("tr")
+            if rows:
+                for r in rows:
+                    ths = r.find_all("th")
+                    if len(ths) >= 3:  # rank + many week headers
+                        header_row = r
+                        break
+        if not header_row:
+            return -1
+
+        headers = header_row.find_all(["th", "td"])
+        for idx, h in enumerate(headers):
+            t = h.get_text(" ", strip=True).lower()
+            if "preseason" in t:
+                return idx
+        return -1
+
+    # ---- Table parsers ----
+    def _parse_rank_table(
+        self, table: Tag, week_num: Optional[int], poll_date: Optional[str], prefer_label: str
+    ) -> Optional[pd.DataFrame]:
+        """
+        Parse rows where the first cell is a numeric rank (accept '1' or '1.')
+        and the chosen column contains the team (may include '(##)' FP votes).
+        """
+        tbody = table.find("tbody") or table
+        rows = tbody.find_all("tr")
+        out: List[dict] = []
+
+        # Detect AP matrix header once per table
+        ap_col = None
+        if prefer_label == "AP":
+            ap_col = getattr(table, "_ap_pre_col", None)
+            if ap_col is None:
+                ap_col = self._ap_preseason_col_index(table)
+                setattr(table, "_ap_pre_col", ap_col)
+
+        # If heading didn't carry 'Preseason', but this is an AP matrix and we're using the
+        # 'Preseason' column, force week = 0 as requested.
+        if prefer_label == "AP" and week_num is None and ap_col is not None and ap_col >= 1:
+            week_num = 0
+
+        for tr in rows:
+            cells = tr.find_all(["th", "td"])  # allow nested
+            if not cells:
+                continue
+
+            rtxt_raw = cells[0].get_text(" ", strip=True)
+            m = re.search(r"(\d+)", rtxt_raw)  # accept '1.' too
+            if not m:
+                continue
+            rtxt = int(m.group(1))
+
+            # pick the team cell
+            team_cell = None
+            if ap_col is not None and ap_col >= 1 and ap_col < len(cells):
+                team_cell = cells[ap_col]
+            else:
+                for c in cells[1:]:
+                    t = c.get_text(" ", strip=True)
+                    if t:
+                        team_cell = c
+                        break
+            if team_cell is None:
+                continue
+
+            raw_team = team_cell.get_text(" ", strip=True)
+            fpv = self._extract_first_place_votes(raw_team)
+            team = self._clean_team(raw_team)
+            if not team:
+                continue
+
+            out.append({"rank": rtxt, "school": team, "first_place_votes": fpv})
+            if len(out) >= 25:
+                break
+
+        if not out:
             return None
 
-        if resp.status_code != 200:
+        df = pd.DataFrame(out)
+        df = self._clean_df(df)
+        if df is None:
             return None
 
-        data = resp.json()
-        if not data:
-            return None
+        # metadata (poll stamped later; season stamped in fetcher)
+        if week_num is not None:
+            df["week"] = int(week_num)
+        if poll_date:
+            try:
+                df["poll_date"] = pd.to_datetime(poll_date).dt.date.astype(str)
+            except Exception:
+                df["poll_date"] = poll_date
+        return df
 
-        polls = data[0].get("polls", [])
-        preferred = ["Playoff Committee Rankings", "AP Top 25", "Coaches Poll"]
-        normalized = {str(p.get("poll", "")).strip().lower(): p for p in polls}
+    def _extract_first_place_votes(self, s: str) -> int:
+        m = re.search(r"\((\d{1,3})\)", s)
+        if m and not re.search(r"\([A-Z]{2}\)", s):
+            try:
+                return int(m.group(1))
+            except Exception:
+                return 0
+        return 0
 
-        for name in preferred:
-            key = name.strip().lower()
-            if key in normalized:
-                ranks = normalized[key].get("ranks", [])
-                df = pd.DataFrame(ranks)
-                df = self._clean_rankings_df(df)
-                if df is not None and not df.empty:
-                    fname = os.path.join(WEEKLY_DIR, f"rankings_week{week}_{year}.csv")
-                    try:
-                        df.to_csv(fname, index=False)
-                        self.file_path = fname
-                    except Exception:
-                        pass
-                    return df
-        return None
+    def _try_table_quick(self, table: Tag) -> Tuple[Optional[pd.DataFrame], int]:
+        tbody = table.find("tbody") or table
+        rows = tbody.find_all("tr")
+        out: List[dict] = []
 
-    # -----------------------------
-    # Utilities
-    # -----------------------------
-    def _clean_rankings_df(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
+        ap_col = self._ap_preseason_col_index(table)
+
+        for tr in rows:
+            cells = tr.find_all(["th", "td"])
+            if not cells:
+                continue
+
+            rtxt_raw = cells[0].get_text(" ", strip=True)
+            m = re.search(r"(\d+)", rtxt_raw)
+            if not m:
+                continue
+
+            team_cell = None
+            if ap_col >= 1 and ap_col < len(cells):
+                team_cell = cells[ap_col]
+            else:
+                for c in cells[1:]:
+                    t = c.get_text(" ", strip=True)
+                    if t:
+                        team_cell = c
+                        break
+            if team_cell is None:
+                continue
+
+            team = self._clean_team(team_cell.get_text(" ", strip=True))
+            if not team:
+                continue
+
+            out.append({"rank": int(m.group(1)), "school": team})
+            if len(out) >= 25:
+                break
+
+        if len(out) >= 15:
+            return self._clean_df(pd.DataFrame(out)), len(out)
+        return None, 0
+
+    # ---- Cleaning ----
+    def _clean_team(self, s: str) -> str:
+        s = re.sub(r"\[.*?\]", "", s)                  # remove footnotes like [1]
+        s = re.sub(r"\(\s*\d+(?:-\d+)?\s*\)", "", s)   # remove (25) or (10-2) — keep (FL) etc.
+        s = s.replace("—", " ").replace("–", " ")
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    def _clean_df(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
         if df is None or df.empty:
             return None
-
-        # Normalize column names
         df = df.rename(columns={
             "RK": "rank", "Rank": "rank", "#": "rank",
-            "TEAM": "school", "School": "school", "Team": "school", "team": "school",
+            "TEAM": "school", "Team": "school", "School": "school", "team": "school",
         })
-
-        # If we still don't have 'rank'/'school', try basic fallback
         if "rank" not in df.columns:
-            first = df.columns[0]
-            df = df.rename(columns={first: "rank"})
-        if "school" not in df.columns:
-            if len(df.columns) >= 2:
-                df = df.rename(columns={df.columns[1]: "school"})
+            df = df.rename(columns={df.columns[0]: "rank"})
+        if "school" not in df.columns and len(df.columns) >= 2:
+            df = df.rename(columns={df.columns[1]: "school"})
+        if "first_place_votes" not in df.columns:
+            df["first_place_votes"] = 0
 
-        df = df[["rank", "school"]].copy()
-
-        # Coerce rank to int
+        df = df[["rank", "school", "first_place_votes"]].copy()
         df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
         df = df.dropna(subset=["rank"])
         df["rank"] = df["rank"].astype(int)
-
-        # Clean school text
-        def clean_school(s: str) -> str:
-            s = re.sub(r"\[.*?\]", "", str(s))            # footnotes
-            s = re.sub(r"\(.*?\)", "", s)                 # parentheses
-            s = s.replace("—", " ").replace("–", " ")
-            s = re.sub(r"\s+", " ", s).strip()
-            return s
-
-        df["school"] = df["school"].astype(str).map(clean_school)
+        df["school"] = df["school"].astype(str)
         df = df[df["school"].str.len() > 0]
+        return df.sort_values("rank").head(25).reset_index(drop=True)
 
-        # Keep top 25 typical length (works even if table had more rows)
-        df = df.sort_values("rank").head(25).reset_index(drop=True)
-        return df
+    def _ok(self, df: Optional[pd.DataFrame]) -> bool:
+        return df is not None and not df.empty and {"rank", "school"}.issubset(df.columns)
+
+    def _write_artifact(self, df: pd.DataFrame, year: int) -> None:
+        poll = (self.source or "").split(":")[-1] if self.source else "AP"
+        out = os.path.join(WEEKLY_DIR, f"wiki_rankings_{year}_{poll}.csv")
+        try:
+            df = df.copy()
+            df["poll"] = poll  # stamp final poll name
+            # Ensure columns; 'week' is numeric (0 for Preseason if present)
+            cols = ["season", "poll", "week", "poll_date", "rank", "school", "first_place_votes"]
+            for c in cols:
+                if c not in df.columns:
+                    df[c] = None
+            df = df[cols]
+            df.to_csv(out, index=False, encoding="utf-8")
+            if DEBUG:
+                print(f"[rankings] wrote artifact → {out} ({len(df)} rows)")
+        except Exception:
+            if DEBUG:
+                import traceback; traceback.print_exc()
