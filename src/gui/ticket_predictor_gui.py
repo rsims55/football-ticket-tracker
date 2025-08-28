@@ -1,4 +1,4 @@
-# src/gui/ticket_predictor_gui.py
+# src/gui/ticket_predictor_gui.py — Step 2: robust snapshot timestamps + numeric coercion
 from __future__ import annotations
 
 import sys
@@ -47,6 +47,7 @@ MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_wit
 # -----------------------------
 # Status helpers (module-level)
 # -----------------------------
+
 def _fmt_mtime(p: Path) -> str:
     try:
         ts = p.stat().st_mtime
@@ -93,22 +94,55 @@ class TicketApp(QMainWindow):
         self.status_timer.start(2000)
 
     # ---------------- Data loading ----------------
+    def _infer_collected_dt(self, snaps: pd.DataFrame) -> pd.Series:
+        """Best-effort timestamp for when the snapshot row was taken.
+        Tries several columns; falls back to date-only at midnight if no time is present.
+        """
+        # 1) Full datetime candidates
+        for c in ["collected_at", "snapshot_datetime", "retrieved_at", "scraped_at", "collected_dt"]:
+            if c in snaps.columns:
+                ts = pd.to_datetime(snaps[c], errors="coerce")
+                if ts.notna().any():
+                    return ts
+        # 2) Combine date_collected + time candidates
+        time_cand = next((c for c in ["time_collected", "collection_time", "snapshot_time", "time_pulled"] if c in snaps.columns), None)
+        if "date_collected" in snaps.columns and time_cand:
+            ts = pd.to_datetime(
+                snaps["date_collected"].astype(str).str.strip() + " " + snaps[time_cand].astype(str).str.strip(),
+                errors="coerce"
+            )
+            if ts.notna().any():
+                return ts
+        # 3) Fallback to date only (midnight)
+        if "date_collected" in snaps.columns:
+            ts = pd.to_datetime(snaps["date_collected"], errors="coerce")
+            if ts.notna().any():
+                return ts
+        # 4) Give up: return all NaT
+        return pd.Series(pd.NaT, index=snaps.index)
+
     def load_snapshot_data(self) -> pd.DataFrame:
         if not SNAPSHOT_PATH.exists():
             raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}'")
         snaps = pd.read_csv(SNAPSHOT_PATH)
 
-        if {"date_collected", "time_collected"}.issubset(snaps.columns):
-            snaps["collected_dt"] = pd.to_datetime(
-                snaps["date_collected"].astype(str) + " " + snaps["time_collected"].astype(str),
-                errors="coerce"
-            )
-        else:
-            snaps["collected_dt"] = pd.NaT
+        # Ensure numeric lowest_price so we don't drop valid 0/strings later
+        snaps["lowest_price"] = pd.to_numeric(snaps.get("lowest_price"), errors="coerce")
 
-        if "startDateEastern" not in snaps.columns and "date_local" in snaps.columns:
-            snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"], errors="coerce")
+        # Build collected_dt robustly (today's rows with only date will still appear at 00:00)
+        snaps["collected_dt"] = self._infer_collected_dt(snaps)
 
+        # Fallback: try to build startDateEastern from date_local/time_local if missing
+        if "startDateEastern" not in snaps.columns:
+            if "date_local" in snaps.columns:
+                if "time_local" in snaps.columns:
+                    snaps["startDateEastern"] = pd.to_datetime(
+                        snaps["date_local"].astype(str) + " " + snaps["time_local"].astype(str), errors="coerce"
+                    )
+                else:
+                    snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"], errors="coerce")
+
+        # Team column sanity for dropdowns
         if "homeTeam" not in snaps.columns and "home_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"home_team_guess": "homeTeam"})
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
@@ -434,24 +468,43 @@ class TicketApp(QMainWindow):
             ax = self.chart_canvas.figure.add_subplot(111)
             self.ax = ax  # cache for future resizes
 
-        snap_filtered = self.snapshots[self.snapshots["event_id"] == event_id].dropna(
-            subset=["collected_dt", "lowest_price"], how="any"
-        )
+        # Use numeric price and robust collected_dt so today is included even if time is missing
+        snap_filtered = self.snapshots[self.snapshots.get("event_id").astype(str) == str(event_id)].copy()
+        snap_filtered["lowest_price"] = pd.to_numeric(snap_filtered.get("lowest_price"), errors="coerce")
+        snap_filtered = snap_filtered.dropna(subset=["collected_dt", "lowest_price"], how="any")
 
         if snap_filtered.empty:
             ax.set_title("No snapshot data available")
         else:
             snap_filtered = snap_filtered.sort_values("collected_dt")
-            ax.plot(snap_filtered["collected_dt"], snap_filtered["lowest_price"], label="Lowest Price", linewidth=2)
+            ax.plot(snap_filtered["collected_dt"], snap_filtered["lowest_price"], marker="o", linewidth=1.8, label="Lowest Price")
+
+            # pin x-axis to first/last snapshot timestamp
+            dt_min = snap_filtered["collected_dt"].min()
+            dt_max = snap_filtered["collected_dt"].max()
+            if pd.notna(dt_min) and pd.notna(dt_max):
+                if dt_min == dt_max:
+                    dt_min = dt_min - pd.Timedelta(hours=6)
+                    dt_max = dt_max + pd.Timedelta(hours=6)
+                ax.set_xlim(dt_min, dt_max)
+                ax.margins(x=0)
 
             ax.set_title("Price Trend Over Time")
             ax.set_xlabel("Date")
             ax.set_ylabel("Price ($)")
             ax.legend()
 
-            # adaptive date axis
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d %H:%M'))
+            # date ticks: days major, 00/06/12/18 minor
+            try:
+                ax.xaxis.set_major_locator(mdates.DayLocator())
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+                ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[0,6,12,18]))
+                ax.grid(True, which='major', axis='x', alpha=0.25)
+                ax.grid(True, which='minor', axis='x', alpha=0.08)
+            except Exception:
+                ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d %H:%M'))
+
             ax.tick_params(axis='x', rotation=45)
 
             # dynamic Y-axis tick step

@@ -1,9 +1,14 @@
+# =============================
+# FILE: src/modeling/train_price_model.py
+# PURPOSE: Add time-of-day feature (collectionSlot) so optimal times vary
+# =============================
 from __future__ import annotations
 
 import os
 from pathlib import Path
 import joblib
 import pandas as pd
+import numpy as np
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
@@ -56,7 +61,50 @@ print(f"  SNAPSHOT_PATH: {SNAPSHOT_PATH}")
 print(f"  MODEL_PATH:    {MODEL_PATH}")
 
 # -----------------------------
-# Use conferences, not team names
+# Time-of-day slot derivation (NEW)
+# -----------------------------
+SLOT_LABELS = ["00:00", "06:00", "12:00", "18:00"]
+
+def _nearest_6h_slot(ts) -> str:
+    if pd.isna(ts):
+        return np.nan
+    t = pd.to_datetime(ts, errors="coerce")
+    if pd.isna(t):
+        return np.nan
+    minutes = t.hour * 60 + t.minute
+    idx = int(np.round(minutes / 360.0)) % 4
+    return SLOT_LABELS[idx]
+
+def _ensure_collection_slot(df: pd.DataFrame) -> pd.DataFrame:
+    """Populate df['collectionSlot'] from any available timestamp/time columns.
+    Priority:
+      1) 'collected_at' or 'snapshot_datetime' (datetime)
+      2) 'time_collected' / 'collection_time' / 'snapshot_time' (time)
+      3) 'date_collected' + 'time_local' (fallback)
+    If none are parseable, fill with '12:00'.
+    """
+    cand_dt = [c for c in ["collected_at", "snapshot_datetime"] if c in df.columns]
+    cand_t  = [c for c in ["time_collected", "collection_time", "snapshot_time"] if c in df.columns]
+
+    slot = None
+    if cand_dt:
+        slot = df[cand_dt[0]].apply(_nearest_6h_slot)
+    elif cand_t:
+        slot = pd.to_datetime("1970-01-01 " + df[cand_t[0]].astype(str), errors="coerce").apply(_nearest_6h_slot)
+    elif "date_collected" in df.columns and "time_local" in df.columns:
+        combo = df["date_collected"].astype(str).str.strip() + " " + df["time_local"].astype(str).str.strip()
+        slot = pd.to_datetime(combo, errors="coerce").apply(_nearest_6h_slot)
+
+    if slot is not None:
+        df["collectionSlot"] = slot
+    else:
+        df["collectionSlot"] = "12:00"
+
+    df["collectionSlot"] = df["collectionSlot"].fillna("12:00")
+    return df
+
+# -----------------------------
+# Features
 # -----------------------------
 NUMERIC_FEATURES = [
     "days_until_game",
@@ -69,10 +117,11 @@ NUMERIC_FEATURES = [
     "awayTeamRank",
     "week",
 ]
-CATEGORICAL_FEATURES = ["homeConference", "awayConference"]
+CATEGORICAL_FEATURES = ["homeConference", "awayConference", "collectionSlot"]  # NEW
 
 TARGET = "lowest_price"
-REQUIRED = NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]
+# REQUIRED: do not include derived 'collectionSlot'
+REQUIRED = NUMERIC_FEATURES + ["homeConference", "awayConference", TARGET]
 
 def _coerce_booleans(df, bool_cols=None):
     """
@@ -121,7 +170,10 @@ def train_model():
 
     df = pd.read_csv(SNAPSHOT_PATH)
 
-    # Schema check
+    # Derive collectionSlot BEFORE schema check (NEW)
+    df = _ensure_collection_slot(df)
+
+    # Schema check (without collectionSlot)
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         raise ValueError(
@@ -137,8 +189,8 @@ def train_model():
         df, ["days_until_game", "capacity", "homeTeamRank", "awayTeamRank"]
     )
 
-    # Keep only relevant cols
-    df = df[REQUIRED].copy()
+    # Keep only relevant cols (includes derived collectionSlot via CATEGORICAL_FEATURES)
+    df = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]].copy()
 
     # Drop rows with missing target
     before = len(df)
@@ -151,12 +203,11 @@ def train_model():
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df[TARGET]
 
-    # Preprocessing: imputers + one-hot for conferences
+    # Preprocessing: imputers + one-hot for conferences + time slot
     numeric_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="median")),
     ])
 
-    # sklearn >=1.2 uses sparse_output; earlier uses sparse
     try:
         ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     except TypeError:

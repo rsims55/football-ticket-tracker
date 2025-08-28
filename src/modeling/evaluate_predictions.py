@@ -1,3 +1,12 @@
+# =============================
+# FILE: src/modeling/evaluate_predictions.py
+# PURPOSE: Evaluate predicted optimal prices vs. actual lowest snapshot prices.
+#          Enhancements:
+#            • Robust numeric coercion
+#            • Event-ID–based joining & de-dup
+#            • Carry-through of predictor columns (optimal_source/date/time)
+#            • Percent-error logging and optional retraining trigger
+# =============================
 from __future__ import annotations
 
 import os
@@ -13,6 +22,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 # -----------------------------
 # Repo-locked paths (runs from anywhere)
 # -----------------------------
+
 def _find_repo_root(start: Path) -> Path:
     cur = start
     for p in [cur] + list(cur.parents):
@@ -27,11 +37,13 @@ SRC_DIR  = PROJ_DIR / "src"
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
 
+
 def _under_repo(p: Path) -> bool:
     try:
         return p.resolve().is_relative_to(PROJ_DIR.resolve())
     except AttributeError:
         return str(p.resolve()).startswith(str(PROJ_DIR.resolve()))
+
 
 def _resolve_file(env_name: str, default_rel: Path) -> Path:
     env_val = os.getenv(env_name)
@@ -42,6 +54,7 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
         return p
     print(f"🚫 {env_name} outside repo → {p} ; forcing repo path")
     return PROJ_DIR / default_rel
+
 
 PREDICTIONS_PATH = _resolve_file("PREDICTIONS_PATH", Path("data") / "predicted" / "predicted_prices_optimal.csv")
 SNAPSHOTS_PATH   = _resolve_file("SNAPSHOTS_PATH",   Path("data") / "daily"     / "price_snapshots.csv")
@@ -58,8 +71,10 @@ print(f"  MERGED_OUTPUT:    {MERGED_OUTPUT}")
 print(f"  TRAIN_SCRIPT:     {TRAIN_SCRIPT}")
 
 
-PERCENT_ERROR_THRESHOLD = 0.05  # 5%
-ERROR_FRACTION_TRIGGER = 0.5    # Retrain if >50% of games exceed threshold
+# Error thresholds
+PERCENT_ERROR_THRESHOLD = float(os.getenv("EVAL_PERCENT_ERROR_THRESHOLD", 0.05))  # default 5%
+ERROR_FRACTION_TRIGGER  = float(os.getenv("EVAL_ERROR_FRACTION_TRIGGER", 0.5))    # retrain if >50% exceed threshold
+
 
 def _compose_start_datetime(row) -> pd.Timestamp:
     """Combine date_local and (optional) time_local into Timestamp."""
@@ -67,6 +82,12 @@ def _compose_start_datetime(row) -> pd.Timestamp:
     time_str = str(row.get("time_local", "")).strip()
     dt_str = f"{date_str} {time_str}" if time_str and time_str.lower() != "nan" else date_str
     return pd.to_datetime(dt_str, errors="coerce")
+
+
+def _coerce_numeric_col(df: pd.DataFrame, col: str) -> pd.Series:
+    s = pd.to_numeric(df.get(col), errors="coerce")
+    return s
+
 
 def evaluate_predictions():
     # Existence checks
@@ -77,14 +98,22 @@ def evaluate_predictions():
     pred_df = pd.read_csv(PREDICTIONS_PATH)
     snap_df = pd.read_csv(SNAPSHOTS_PATH)
 
-    # Parse datetimes
+    # Basic sanity: event_id should exist in both for clean evaluation
+    if "event_id" not in pred_df.columns:
+        print("❌ 'event_id' missing from predictions; cannot evaluate reliably.")
+        return
+    if "event_id" not in snap_df.columns:
+        print("❌ 'event_id' missing from snapshots; cannot evaluate reliably.")
+        return
+
+    # Parse datetimes (game start)
     pred_df["startDateEastern"] = pd.to_datetime(pred_df.get("startDateEastern"), errors="coerce")
     if "startDateEastern" not in snap_df.columns:
         snap_df["startDateEastern"] = snap_df.apply(_compose_start_datetime, axis=1)
     else:
         snap_df["startDateEastern"] = pd.to_datetime(snap_df["startDateEastern"], errors="coerce")
 
-    # Only evaluate completed games (midnight cutoff local system time)
+    # Filter to completed games (midnight local)
     today = pd.Timestamp.today().normalize()
     pred_df = pred_df[pred_df["startDateEastern"].notna() & (pred_df["startDateEastern"] < today)]
     snap_df = snap_df[snap_df["startDateEastern"].notna() & (snap_df["startDateEastern"] < today)]
@@ -93,103 +122,89 @@ def evaluate_predictions():
         print("⚠️ No completed games to evaluate yet.")
         return
 
-    # Build actuals from snapshots
-    if "event_id" in snap_df.columns:
-        actual_df = (
-            snap_df.groupby("event_id", as_index=False)
-                   .agg(actual_lowest_price=("lowest_price", "min"))
-        )
-    else:
-        # Fallback join by teams+date if event_id isn't available
-        actual_df = (
-            snap_df.assign(startDateEasternDate=snap_df["startDateEastern"].dt.date)
-                   .groupby(["homeTeam", "awayTeam", "startDateEasternDate"], as_index=False)
-                   .agg(actual_lowest_price=("lowest_price", "min"))
-                   .rename(columns={"startDateEasternDate": "startDateEastern"})
-        )
+    # Build actuals from snapshots (min observed price per event)
+    snap_df["lowest_price_num"] = _coerce_numeric_col(snap_df, "lowest_price")
+    actual_df = (
+        snap_df.dropna(subset=["lowest_price_num"]) \
+               .groupby("event_id", as_index=False) \
+               .agg(actual_lowest_price=("lowest_price_num", "min"))
+    )
 
-    # Align predictions for join
+    # Align predictions
     pred_df = pred_df.copy()
-    pred_df["startDateEasternDate"] = pred_df["startDateEastern"].dt.date
+    pred_df["predicted_lowest_price_num"] = _coerce_numeric_col(pred_df, "predicted_lowest_price")
 
-    if "event_id" in pred_df.columns and "event_id" in actual_df.columns:
-        merged = pd.merge(pred_df, actual_df, on="event_id", how="inner")
-    else:
-        merged = pd.merge(
-            pred_df,
-            actual_df,
-            left_on=["homeTeam", "awayTeam", "startDateEasternDate"],
-            right_on=["homeTeam", "awayTeam", "startDateEastern"],
-            how="inner",
-        )
-        merged.drop(columns=["startDateEastern"], inplace=True)
-        merged.rename(columns={"startDateEasternDate": "startDateEastern"}, inplace=True)
+    merged = pd.merge(pred_df, actual_df, on="event_id", how="inner")
 
     if merged.empty:
         print("⚠️ No new completed games to evaluate.")
         return
 
-    # Remove already-evaluated games
+    # Remove already-evaluated games (prefer event_id-based dedup)
     if ERROR_LOG_PATH.exists():
-        existing_log = pd.read_csv(ERROR_LOG_PATH)
-        if "event_id" in merged.columns and "event_id" in existing_log.columns:
-            existing_keys = set(existing_log["event_id"].dropna().astype(str))
-            merged = merged[~merged["event_id"].astype(str).isin(existing_keys)]
-        else:
-            existing_keys = set(
-                zip(
-                    existing_log.get("homeTeam", pd.Series(dtype=str)),
-                    existing_log.get("awayTeam", pd.Series(dtype=str)),
-                    pd.to_datetime(existing_log.get("startDateEastern", pd.Series(dtype=str)), errors="coerce").dt.date,
-                )
-            )
-            merged["key"] = list(
-                zip(
-                    merged.get("homeTeam", pd.Series(dtype=str)),
-                    merged.get("awayTeam", pd.Series(dtype=str)),
-                    merged.get("startDateEastern", pd.Series(dtype="datetime64[ns]")),
-                )
-            )
-            merged = merged[~merged["key"].isin(existing_keys)]
-            merged.drop(columns=["key"], inplace=True, errors="ignore")
+        try:
+            existing_log = pd.read_csv(ERROR_LOG_PATH)
+            if "event_id" in existing_log.columns:
+                done_ids = set(existing_log["event_id"].dropna().astype(str))
+                merged = merged[~merged["event_id"].astype(str).isin(done_ids)]
+        except Exception as e:
+            print(f"⚠️ Could not read prior log for dedup: {e}")
 
     if merged.empty:
         print("ℹ️ All completed games already evaluated.")
         return
 
-    # Calculate errors
-    merged["abs_error"] = np.abs(merged["predicted_lowest_price"] - merged["actual_lowest_price"])
+    # Errors & metrics
+    merged = merged.dropna(subset=["predicted_lowest_price_num", "actual_lowest_price"]).copy()
+    if merged.empty:
+        print("⚠️ Nothing to score after numeric coercion.")
+        return
+
+    merged["abs_error"] = (merged["predicted_lowest_price_num"] - merged["actual_lowest_price"]).abs()
     merged["percent_error"] = np.where(
         merged["actual_lowest_price"] > 0,
         merged["abs_error"] / merged["actual_lowest_price"],
         np.nan,
     )
-    mae = mean_absolute_error(merged["actual_lowest_price"], merged["predicted_lowest_price"])
-    rmse = mean_squared_error(merged["actual_lowest_price"], merged["predicted_lowest_price"], squared=False)
+
+    mae  = mean_absolute_error(merged["actual_lowest_price"], merged["predicted_lowest_price_num"])
+    rmse = mean_squared_error(merged["actual_lowest_price"], merged["predicted_lowest_price_num"], squared=False)
 
     print(f"✅ Evaluated {len(merged)} new games — MAE: ${mae:.2f}, RMSE: ${rmse:.2f}")
 
-    # Save merged eval results
-    MERGED_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(MERGED_OUTPUT, index=False)
-
-    # Append to log
-    merged["timestamp"] = datetime.now().isoformat()
-    summary_log = merged[
-        [
-            "timestamp",
-            "homeTeam",
-            "awayTeam",
-            "startDateEastern",
-            "predicted_lowest_price",
-            "actual_lowest_price",
-            "abs_error",
-            "percent_error",
-        ]
+    # Save merged_eval_results with helpful columns preserved
+    keep_cols = [
+        "event_id", "startDateEastern", "week",
+        "homeConference", "awayConference",
+        "predicted_lowest_price", "predicted_lowest_price_num",
+        "optimal_source", "optimal_purchase_date", "optimal_purchase_time",
+        "actual_lowest_price", "abs_error", "percent_error",
     ]
+    for c in keep_cols:
+        if c not in merged.columns:
+            merged[c] = pd.NA
+
+    MERGED_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    merged[keep_cols].to_csv(MERGED_OUTPUT, index=False)
+
+    # Append summary to ERROR_LOG_PATH (use event_id for future dedup)
+    merged["timestamp"] = datetime.now().isoformat()
+    summary_cols = [
+        "timestamp", "event_id", "startDateEastern", "week",
+        "homeConference", "awayConference",
+        "predicted_lowest_price_num", "actual_lowest_price",
+        "abs_error", "percent_error", "optimal_source",
+        "optimal_purchase_date", "optimal_purchase_time",
+    ]
+    summary_log = merged[summary_cols].copy()
+
     if ERROR_LOG_PATH.exists():
-        existing = pd.read_csv(ERROR_LOG_PATH)
-        full_log = pd.concat([existing, summary_log], ignore_index=True)
+        try:
+            existing = pd.read_csv(ERROR_LOG_PATH)
+            full_log = pd.concat([existing, summary_log], ignore_index=True)
+        except Exception as e:
+            print(f"⚠️ Could not append to prior log ({e}); rewriting log.")
+            full_log = summary_log
     else:
         full_log = summary_log
 
@@ -200,11 +215,18 @@ def evaluate_predictions():
     # CI-based retraining trigger
     error_fraction = (merged["percent_error"] > PERCENT_ERROR_THRESHOLD).mean()
     if error_fraction > ERROR_FRACTION_TRIGGER:
-        print(f"⚠️ {error_fraction:.0%} of games exceed {int(PERCENT_ERROR_THRESHOLD*100)}% error — retraining model.")
-        # Use the same interpreter and an absolute path to the script
-        subprocess.run([sys.executable, str(TRAIN_SCRIPT)], check=True)
+        print(
+            f"⚠️ {error_fraction:.0%} of games exceed {int(PERCENT_ERROR_THRESHOLD*100)}% error — retraining model."
+        )
+        try:
+            subprocess.run([sys.executable, str(TRAIN_SCRIPT)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Retrain failed: {e}")
     else:
-        print(f"✅ Only {error_fraction:.0%} of games exceeded {int(PERCENT_ERROR_THRESHOLD*100)}% error — no retraining needed.")
+        print(
+            f"✅ Only {error_fraction:.0%} of games exceeded {int(PERCENT_ERROR_THRESHOLD*100)}% error — no retraining needed."
+        )
+
 
 if __name__ == "__main__":
     evaluate_predictions()
