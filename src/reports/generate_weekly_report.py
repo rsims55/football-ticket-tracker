@@ -83,47 +83,111 @@ def get_recent_evaluations(window_days: int = WEEK_WINDOW_DAYS) -> pd.DataFrame:
     return recent
 
 
-def get_feature_importance() -> str:
+def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
     """
-    Returns a markdown list of feature importances.
-    - Uses model.feature_names_in_ if available (sklearn >=1.0+)
-    - Otherwise falls back to your known training feature list
+    Returns (markdown_text, weak_features_list).
+    Handles:
+      - Pipeline(ColumnTransformer(...), RandomForestRegressor)
+      - Bare RandomForestRegressor with feature_names_in_
+    Produces:
+      - Expanded top-K transformed features
+      - Aggregated importances by original input column (sum over one-hot levels)
     """
     if not os.path.exists(MODEL_PATH):
-        return "❌ Model file not found."
+        return "❌ Model file not found.", []
 
     try:
         model = joblib.load(MODEL_PATH)
     except Exception as e:
-        return f"❌ Failed to load model: {e}"
+        return f"❌ Failed to load model: {e}", []
 
-    # Fallback static feature list that mirrors your training setup
-    fallback_features = [
-        "days_until_game", "capacity", "neutralSite", "conferenceGame",
-        "isRivalry", "isRankedMatchup", "homeTeamRank", "awayTeamRank",
-        # If you added these recently, they’ll render if present in the model:
-        "weekNumber", "dayOfWeek", "kickoffHour"
+    # --- unwrap pipeline if present ---
+    from sklearn.pipeline import Pipeline
+    from sklearn.compose import ColumnTransformer
+    from sklearn.preprocessing import OneHotEncoder
+
+    preprocessor = None
+    estimator = model
+    feature_names_expanded = None
+
+    if isinstance(model, Pipeline):
+        # try to locate final estimator and a preprocessor
+        estimator = getattr(model, "steps", [(-1, model)])[-1][1]
+        for _, step in model.steps:
+            if hasattr(step, "get_feature_names_out"):
+                preprocessor = step
+                break
+            if isinstance(step, ColumnTransformer):
+                preprocessor = step
+
+    # we need a tree-based estimator with feature_importances_
+    importances = getattr(estimator, "feature_importances_", None)
+    if importances is None:
+        return "❌ Model does not expose feature_importances_.", []
+
+    importances = np.asarray(importances)
+
+    # --- expanded feature names from preprocessor if available ---
+    if preprocessor is not None and hasattr(preprocessor, "get_feature_names_out"):
+        try:
+            feature_names_expanded = preprocessor.get_feature_names_out()
+        except Exception:
+            feature_names_expanded = None
+
+    if feature_names_expanded is None:
+        # fall back to feature_names_in_ if lengths match, else generic names
+        if hasattr(estimator, "feature_names_in_") and len(estimator.feature_names_in_) == len(importances):
+            feature_names_expanded = estimator.feature_names_in_
+        else:
+            feature_names_expanded = np.array([f"feature_{i}" for i in range(len(importances))])
+
+    # Length guard
+    n = min(len(feature_names_expanded), len(importances))
+    feature_names_expanded = np.asarray(feature_names_expanded[:n], dtype=str)
+    importances = importances[:n]
+
+    # --- build expanded (top-K) markdown ---
+    order = np.argsort(importances)[::-1]
+    top_idx = order[:top_k]
+    lines_expanded = [
+        _humanize_feature(feature_names_expanded[i], importances[i])
+        for i in top_idx
     ]
 
-    # Pull importances safely
-    importances = getattr(model, "feature_importances_", None)
-    if importances is None:
-        return "❌ Model does not expose feature_importances_ (not a tree-based model?)."
 
-    # Feature names if present; else fallback
-    if hasattr(model, "feature_names_in_"):
-        features = list(model.feature_names_in_)
-    else:
-        features = fallback_features[: len(importances)]
+    # --- aggregate to original columns (sum one-hot levels) ---
+    # Heuristic mapping: ColumnTransformer usually yields names like "onehot__col_value"
+    # or "remainder__col". We map back to `col` by:
+    #   1) strip "<prefix>__" (anything before the first "__")
+    #   2) for one-hot, split from the RIGHT on "_" once: "col_value" -> base "col"
+    # This preserves columns that already include "_" in their names.
+    base_map = {}
+    for name, imp in zip(feature_names_expanded, importances):
+        # 1) remove transformer prefix
+        base = name.split("__", 1)[-1]
+        # 2) collapse one-hot suffix to base column
+        if "_" in base:
+            # rsplit once; if it's not one-hot, this still leaves base intact in most cases
+            base = base.rsplit("_", 1)[0]
+        base_map[base] = base_map.get(base, 0.0) + float(imp)
 
-    # Prefix or trim to align lengths
-    n = min(len(features), len(importances))
-    features = features[:n]
-    importances = np.asarray(importances[:n])
+    # Sort aggregated importances
+    agg_items = sorted(base_map.items(), key=lambda x: x[1], reverse=True)
+    lines_agg = [f"- {k}: {v:.4f}" for k, v in agg_items[:top_k]]
 
-    order = np.argsort(importances)[::-1]
-    lines = [f"- {features[i]} (importance: {importances[i]:.3f})" for i in order]
-    return "\n".join(lines)
+    # Identify weak/orphan features (importance < 0.01 after aggregation)
+    weak_features = [k for k, v in agg_items if v < 0.01]
+
+    # Compose markdown section
+    md = []
+    md.append("### Top Transformed Features (expanded)")
+    md.extend(lines_expanded if lines_expanded else ["(none)"])
+    md.append("\n### Aggregated by Original Column")
+    md.extend(lines_agg if lines_agg else ["(none)"])
+    if weak_features:
+        md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak_features[:20]))
+
+    return "\n".join(md), weak_features
 
 
 def _safe_rmse(df: pd.DataFrame) -> float:
@@ -144,6 +208,25 @@ def _format_currency(x) -> str:
         return f"${float(x):.2f}"
     except Exception:
         return ""
+    
+def _humanize_feature(name: str, importance: float) -> str:
+    # Strip transformers like "num__" or "cat__"
+    if "__" in name:
+        prefix, base = name.split("__", 1)
+    else:
+        prefix, base = "", name
+
+    if prefix == "num":
+        return f"- {base.replace('_',' ')} was important, contributing {importance:.1%} to predictions."
+    elif prefix == "cat":
+        # split conference features nicely
+        if "Conference_" in base:
+            col, val = base.split("_", 1)
+            return f"- Teams from the {val} {col.replace('Conference','conference').lower()} mattered, contributing {importance:.1%}."
+        else:
+            return f"- {base.replace('_',' ')} category influenced predictions (~{importance:.1%})."
+    else:
+        return f"- {base.replace('_',' ')} influenced predictions (~{importance:.1%})."
 
 
 def build_report() -> str:
@@ -159,7 +242,8 @@ def build_report() -> str:
     # Section 1: Feature Importance
     # -----------------------
     report.append("## 🔍 Best Predictors of Ticket Price\n")
-    report.append(get_feature_importance() + "\n")
+    fi_text, weak_features = get_feature_importance()
+    report.append(fi_text + "\n")
 
     # -----------------------
     # Section 2: Accuracy (Past Week)
@@ -229,6 +313,13 @@ def build_report() -> str:
         report.append("- Consider adding: team momentum (last 2–3 games), previous-week result diff, rivalry strength score, and weather (temp/precip).")
         report.append("- Explore time-of-day effects more granularly (hour buckets) and weekday/weekend splits.")
         report.append("- Check stadium capacity normalization (capacity vs. sold % if/when available).\n")
+
+        # Flag near-zero-importance features
+        if weak_features:
+            report.append(
+                "- Near-zero importance this week (may be unrelated): "
+                + ", ".join(sorted(set(weak_features))[:20])
+            )
 
     # -----------------------
     # Write report file
