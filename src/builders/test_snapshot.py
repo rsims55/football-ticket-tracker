@@ -584,26 +584,32 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         if f"{col}_dir" in matched.columns or f"{col}_flip" in matched.columns:
             overlay[col] = matched.apply(lambda r, c=col: pick(r, c), axis=1)
 
-    # Merge overlay back, only filling missing values
-    snap = snap.merge(overlay, left_index=True, right_on="snap_idx", how="left")
+    # --- Fill from overlay without merging; align by snap.index ---
+    # Make sure target columns exist so we can fill them
     for col in cols_to_carry:
-        if col in snap.columns and col+"_x" in snap.columns and col+"_y" in snap.columns:
-            # normalize suffixes when pandas made _x/_y
-            snap[col] = snap[col+"_x"]
-            snap.drop([col+"_x", col+"_y"], axis=1, inplace=True)
+        if col not in snap.columns:
+            snap[col] = pd.NA
 
-        if col in overlay.columns:
-            newvals = snap[col].copy()
-            filled = snap[col].copy()
-            if col in snap.columns:
-                if pd.api.types.is_numeric_dtype(snap[col]):
-                    mask = snap[col].isna() & snap[col].isna()  # placeholder to keep shape
-                else:
-                    mask = (snap[col].isna() | (snap[col].astype(str).str.strip() == ""))
-                # Better: compute mask against overlay’s provided values:
-                ov = overlay.set_index("snap_idx")[col].reindex(snap["snap_idx"])
-                mask = ((snap[col].isna()) | (snap[col].astype(str).str.strip() == "")) & ov.notna()
-                snap.loc[mask, col] = ov[mask]
+    # overlay is keyed by snap_idx (which equals the original snap.index used to build snap_pre)
+    ov_idx = overlay.set_index("snap_idx")
+
+    for col in cols_to_carry:
+        if col not in ov_idx.columns:
+            continue
+        # Map overlay values to snap by its index → perfectly aligned 1:1
+        ov = snap.index.to_series().map(ov_idx[col])
+
+        # Fill only where snap is missing/blank AND overlay has a value
+        if pd.api.types.is_numeric_dtype(snap[col]):
+            need = snap[col].isna()
+        else:
+            need = snap[col].isna() | (snap[col].astype(str).str.strip() == "")
+
+        has = ov.notna()
+        mask = need & has
+
+        # Use .values on RHS to avoid any residual index alignment surprises
+        snap.loc[mask, col] = ov[mask].values
 
     # Backfill home/away strictly from "title" if still missing (keeps existing values)
     def _clean_title_local(t):
@@ -777,6 +783,9 @@ def log_price_snapshot():
     # Enrich with schedule/stadiums/ranks & rivalries
     snap_all = _enrich_with_schedule_and_stadiums(snap_all)
 
+    WEEKLY_SCHEDULE_PATH = os.path.join(PROJ_DIR, "data", "weekly", f"full_{YEAR}_schedule.csv")
+    snap_all = fallback_fill_unmatched_snapshots(snap_all, WEEKLY_SCHEDULE_PATH)
+
     # Append/dedupe within same minute per (offer_url or event_id)
     _ensure_dir(SNAPSHOT_PATH)
     key_cols: List[str] = []
@@ -826,6 +835,249 @@ def log_price_snapshot():
                     print(f"🧹 Removed temp file: {p}")
             except Exception as e:
                 print(f"⚠️ Could not delete temp file {p}: {e}")
+
+# ---------------------------
+# Fallback matcher: fill stubborn unmatched rows
+# ---------------------------
+from math import exp
+
+_FM_STOP = {"university","state","college","the","of","and","at","football","st","saint"}
+
+def _fm_norm(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    x = s.lower()
+    x = x.replace("&", " and ")
+    for ch in "/.,-()[]{}'’":
+        x = x.replace(ch, " ")
+    toks = [t for t in x.split() if t and t not in _FM_STOP]
+    return " ".join(toks)
+
+def _fm_tokens(s: str) -> set[str]:
+    return set(_fm_norm(s).split()) if isinstance(s, str) else set()
+
+def _fm_split_title(title: str) -> tuple[str|None, str|None]:
+    if not isinstance(title, str) or not title.strip():
+        return (None, None)
+    t = title.strip()
+    if ":" in t:
+        t = t.split(":", 1)[1].strip() or t
+    t = t.replace("\u00A0", " ")
+    m = re.split(r"\s+vs\.?\s+", t, flags=re.IGNORECASE, maxsplit=1)
+    if len(m) == 2:
+        left, right = m[0].strip(" \t-–—"), m[1].strip(" \t-–—")
+        return (left or None, right or None)
+    return (None, None)
+
+def _fm_to_time(dt_like) -> Optional[pd.Timestamp]:
+    if pd.isna(dt_like):
+        return None
+    try:
+        return pd.to_datetime(dt_like, errors="coerce")
+    except Exception:
+        return None
+
+def _fm_row_is_matched(row: pd.Series) -> bool:
+    # "Matched enough" means we got week and either stadium or conferences (tweak if you prefer stricter)
+    has_week = pd.notna(row.get("week"))
+    has_site = pd.notna(row.get("stadium")) or pd.notna(row.get("homeConference")) or pd.notna(row.get("awayConference"))
+    return bool(has_week and has_site)
+
+def _fm_score(snapshot_row: pd.Series, cand: pd.Series) -> tuple[float, bool, dict]:
+    """
+    Return (score, flipped, parts) where flipped=True if away/home orientation fits better.
+    Score components:
+      - team/title token overlap (heavier)
+      - time proximity (lighter)
+    """
+    # Snapshot tokens
+    sh = _fm_tokens(snapshot_row.get("homeTeam", ""))
+    sa = _fm_tokens(snapshot_row.get("awayTeam", ""))
+    th, ta = _fm_split_title(snapshot_row.get("title", "") or "")
+    th = _fm_tokens(th or "")
+    ta = _fm_tokens(ta or "")
+    # Schedule tokens
+    ch = _fm_tokens(cand.get("homeTeam", ""))
+    ca = _fm_tokens(cand.get("awayTeam", ""))
+
+    def jacc(a: set, b: set) -> float:
+        if not a and not b:
+            return 0.0
+        return len(a & b) / max(1, len(a | b))
+
+    # direct match (home→home, away→away)
+    s_h_direct = max(jacc(sh, ch), jacc(th, ch))
+    s_a_direct = max(jacc(sa, ca), jacc(ta, ca))
+    direct = (s_h_direct + s_a_direct) / 2.0
+
+    # flipped match (home→away, away→home)
+    s_h_flip = max(jacc(sh, ca), jacc(th, ca))
+    s_a_flip = max(jacc(sa, ch), jacc(ta, ch))
+    flip = (s_h_flip + s_a_flip) / 2.0
+
+    flipped = flip > direct
+    team_score = max(direct, flip)  # 0..1
+
+    # time proximity (minutes). Prefer closer, but keep it a small weight.
+    t_snap_date = _fm_to_time(snapshot_row.get("date_local"))
+    t_snap_time = snapshot_row.get("time_local")
+    if isinstance(t_snap_time, str) and t_snap_time.strip():
+        # combine date_local + time_local if time is given as HH:MM (local)
+        try:
+            t_snap = pd.to_datetime(f"{str(t_snap_date.date())} {t_snap_time}", errors="coerce")
+        except Exception:
+            t_snap = t_snap_date
+    else:
+        t_snap = t_snap_date
+
+    t_sched = _fm_to_time(cand.get("startDateEastern"))
+    time_score = 0.0
+    if t_snap is not None and t_sched is not None:
+        try:
+            delta_min = abs((t_sched - t_snap).total_seconds()) / 60.0
+            # 0 min -> 1.0 ; 60 min -> ~0.37 ; 180 min -> ~0.05
+            time_score = exp(-delta_min / 60.0)
+        except Exception:
+            time_score = 0.0
+
+    # weights: teams dominate
+    score = 0.85 * team_score + 0.15 * time_score
+    parts = {
+        "team_score": round(team_score, 4),
+        "time_score": round(time_score, 4),
+        "direct": round(direct, 4),
+        "flip": round(flip, 4),
+    }
+    return score, flipped, parts
+
+def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
+    """
+    Heuristic pass for the last stubborn rows:
+      1) If per-date there is exactly one unmatched snap and exactly one unused schedule row → assign.
+      2) Else choose closest match by token overlap (+ light time proximity).
+    Only fills missing values; never overwrites non-null fields.
+    """
+    if snap.empty:
+        return snap.copy()
+
+    # --- Load schedule with minimal normalization/columns ---
+    if not os.path.exists(schedule_csv_path):
+        print(f"[fallback] schedule not found: {schedule_csv_path}")
+        return snap.copy()
+
+    sched = pd.read_csv(schedule_csv_path)
+    # harmonize required columns
+    rename_try = {
+        "startDateEastern": ["startDateEastern", "start_date_eastern", "startDate", "game_date", "date_local"],
+        "homeTeam": ["homeTeam", "home_team", "home"],
+        "awayTeam": ["awayTeam", "away_team", "away"],
+    }
+    for canon, cands in rename_try.items():
+        if canon not in sched.columns:
+            for c in cands:
+                if c in sched.columns:
+                    sched = sched.rename(columns={c: canon})
+                    break
+    if not {"startDateEastern","homeTeam","awayTeam"}.issubset(sched.columns):
+        print("[fallback] schedule missing required columns after rename attempt")
+        return snap.copy()
+
+    optional = ["week","stadium","capacity","neutralSite","conferenceGame",
+                "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
+                "homeConference","awayConference"]
+    for c in optional:
+        if c not in sched.columns:
+            sched[c] = pd.NA
+
+    sched["startDateEastern"] = pd.to_datetime(sched["startDateEastern"], errors="coerce")
+    sched["date_key"] = sched["startDateEastern"].dt.strftime("%Y-%m-%d")
+    sched["__sched_id"] = sched.index  # stable id for "used" tracking
+
+    # Build date keys on snapshots
+    out = snap.copy()
+    out["date_key"] = pd.to_datetime(out["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    # Which schedule rows are already "used"? If a snapshot clearly matches (both teams tokens equal), mark used.
+    used_sched_ids: set[int] = set()
+    for _, r in out.iterrows():
+        if pd.isna(r.get("date_key")):
+            continue
+        sh, sa = _fm_tokens(r.get("homeTeam", "")), _fm_tokens(r.get("awayTeam", ""))
+        if not sh or not sa:
+            continue
+        cand = sched[(sched["date_key"] == r["date_key"])]
+        if cand.empty:
+            continue
+        # try direct
+        m_direct = cand[(cand["homeTeam"].map(_fm_tokens) == sh) & (cand["awayTeam"].map(_fm_tokens) == sa)]
+        m_flip   = cand[(cand["homeTeam"].map(_fm_tokens) == sa) & (cand["awayTeam"].map(_fm_tokens) == sh)]
+        m = m_direct if not m_direct.empty else m_flip
+        if not m.empty:
+            used_sched_ids.add(int(m.iloc[0]["__sched_id"]))
+
+    # Helper to fill from a schedule row into a snapshot row (only missing fields)
+    carry_cols = ["week","stadium","capacity","neutralSite","conferenceGame",
+                  "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
+                  "homeConference","awayConference","homeTeam","awayTeam"]
+    def _apply_fill(row: pd.Series, cand: pd.Series, flipped: bool) -> pd.Series:
+        # choose home/away orientation
+        src_home, src_away = cand["homeTeam"], cand["awayTeam"]
+        if flipped:
+            src_home, src_away = cand["awayTeam"], cand["homeTeam"]
+
+        for col in carry_cols:
+            if col in ("homeTeam","awayTeam"):
+                src = src_home if col == "homeTeam" else src_away
+            else:
+                src = cand.get(col)
+            if col not in row.index:
+                continue
+            if pd.isna(row[col]) or (isinstance(row[col], str) and row[col].strip() == ""):
+                row[col] = src
+        return row
+
+    # Pass 1: per-date unique remainder
+    for date_key, group_idx in out.groupby("date_key").groups.items():
+        idxs = list(group_idx)
+        if not idxs:
+            continue
+        g = out.loc[idxs]
+
+        # snap needing fill
+        need_mask = ~g.apply(_fm_row_is_matched, axis=1)
+        need_ids = list(g[need_mask].index)
+
+        # sched candidates not already used
+        sched_cands = sched[(sched["date_key"] == date_key) & (~sched["__sched_id"].isin(used_sched_ids))]
+
+        if len(need_ids) == 1 and len(sched_cands) == 1:
+            i = need_ids[0]
+            out.loc[i] = _apply_fill(out.loc[i], sched_cands.iloc[0], flipped=False)
+            used_sched_ids.add(int(sched_cands.iloc[0]["__sched_id"]))
+
+    # Pass 2: closest-match scoring for anything still unmatched
+    still_need = out[~out.apply(_fm_row_is_matched, axis=1)].index.tolist()
+    for i in still_need:
+        r = out.loc[i]
+        if pd.isna(r.get("date_key")):
+            continue
+        cands = sched[(sched["date_key"] == r["date_key"]) & (~sched["__sched_id"].isin(used_sched_ids))]
+        if cands.empty:
+            continue
+        # score each candidate
+        scored = []
+        for _, c in cands.iterrows():
+            score, flipped, _parts = _fm_score(r, c)
+            scored.append((score, flipped, c))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        best = scored[0]
+        out.loc[i] = _apply_fill(r, best[2], flipped=best[1])
+        used_sched_ids.add(int(best[2]["__sched_id"]))
+
+    # Clean up
+    out.drop(columns=["date_key"], inplace=True, errors="ignore")
+    return out
+
 
 if __name__ == "__main__":
     log_price_snapshot()

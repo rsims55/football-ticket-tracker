@@ -1,5 +1,13 @@
 [
     {
+        "slug": "penn-state-nittany-lions-football",
+        "url": "https://www.tickpick.com/ncaa-football/penn-state-nittany-lions-football-tickets/"
+    },
+    {
+        "slug": "arkansas-razorbacks-football",
+        "url": "https://www.tickpick.com/ncaa-football/arkansas-razorbacks-football-tickets/"
+    },
+    {
         "slug": "boston-college-eagles-football",
         "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"
     },
