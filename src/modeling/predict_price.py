@@ -188,26 +188,6 @@ def _build_snapshot_ts(df: pd.DataFrame) -> pd.Series:
 
     return ts
 
-
-def _observed_min_for_event(price_df: pd.DataFrame, event_id) -> tuple[float | None, pd.Timestamp | None]:
-    sub = price_df[price_df.get("event_id").astype(str) == str(event_id)].copy()
-    if sub.empty:
-        return None, None
-
-    # coerce price and drop NAs
-    sub["lowest_price_num"] = pd.to_numeric(sub.get("lowest_price"), errors="coerce")
-    sub = sub.dropna(subset=["lowest_price_num"])  # must have a numeric price
-    if sub.empty:
-        return None, None
-
-    # build snapshot ts to recover date/time of observed min
-    sub["snapshot_ts"] = _build_snapshot_ts(sub)
-
-    # find idx of min price (first occurrence if ties)
-    idx = sub["lowest_price_num"].idxmin()
-    row = sub.loc[idx]
-    return float(row["lowest_price_num"]), pd.to_datetime(row.get("snapshot_ts"), errors="coerce")
-
 # -----------------------------
 # Prep games
 # -----------------------------
@@ -271,25 +251,10 @@ def _simulate_one_game(game_row: pd.Series, model, price_df_all: pd.DataFrame) -
 
     best_date_model = game_date - timedelta(days=best_delta)
 
-    # Observed minimum override logic
-    obs_price, obs_ts = _observed_min_for_event(price_df_all, game_row.get("event_id"))
-
-    if obs_price is not None and (np.isnan(best_price_model) or obs_price <= best_price_model):
-        # Prefer observed if it is lower or equal
-        use_price = round(float(obs_price), 2)
-        if pd.isna(obs_ts):
-            # if we cannot recover a timestamp, keep the model's time but observed price
-            use_date = best_date_model.isoformat()
-            use_time = best_time_str
-        else:
-            use_date = pd.to_datetime(obs_ts).date().isoformat()
-            use_time = pd.to_datetime(obs_ts).strftime("%H:%M")
-        source = "observed"
-    else:
-        use_price = round(best_price_model, 2)
-        use_date = best_date_model.isoformat()
-        use_time = best_time_str
-        source = "model"
+    use_price = round(best_price_model, 2)
+    use_date = best_date_model.isoformat()
+    use_time = best_time_str
+    source = "model"
 
     return {
         "event_id": game_row.get("event_id"),
