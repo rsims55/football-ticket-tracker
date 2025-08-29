@@ -199,8 +199,21 @@ def evaluate_predictions():
         np.nan,
     )
 
-    mae  = mean_absolute_error(merged["actual_lowest_price"], merged["predicted_lowest_price_num"])
-    rmse = mean_squared_error(merged["actual_lowest_price"], merged["predicted_lowest_price_num"], squared=False)
+    # Errors & metrics
+    mae = mean_absolute_error(
+        merged["actual_lowest_price"], merged["predicted_lowest_price_num"]
+    )
+    try:
+        # Newer scikit-learn (has `squared` kwarg)
+        rmse = mean_squared_error(
+            merged["actual_lowest_price"], merged["predicted_lowest_price_num"], squared=False
+        )
+    except TypeError:
+        # Older scikit-learn: no `squared` kwarg → compute RMSE manually
+        rmse = float(np.sqrt(mean_squared_error(
+            merged["actual_lowest_price"], merged["predicted_lowest_price_num"]
+        )))
+
 
     print(f"✅ Evaluated {len(merged)} new kicked-off games — MAE: ${mae:.2f}, RMSE: ${rmse:.2f}")
 
