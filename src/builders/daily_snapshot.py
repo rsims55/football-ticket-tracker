@@ -842,6 +842,17 @@ def log_price_snapshot():
     snap_all = _apply_title_and_alias_fixes(snap_all)
     snap_all = _enrich_with_schedule_and_stadiums(snap_all)
 
+    # ⏰ NEW: filter out games whose kickoff has already passed
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if "startDateEastern" in snap_all.columns:
+        snap_all["startDateEastern"] = pd.to_datetime(snap_all["startDateEastern"], errors="coerce")
+        mask_known  = snap_all["startDateEastern"].notna()
+        mask_future = snap_all["startDateEastern"] >= now_et  # includes equality at kickoff
+        snap_all = pd.concat([
+            snap_all[ mask_known &  mask_future],
+            snap_all[~mask_known]  # keep rows with no kickoff time
+        ], ignore_index=True)
+
     # Append/dedupe within same minute per (offer_url or event_id)
     _ensure_dir(SNAPSHOT_PATH)
     key_cols: List[str] = []
