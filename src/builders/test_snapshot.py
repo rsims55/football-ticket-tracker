@@ -877,11 +877,14 @@ def _fm_to_time(dt_like) -> Optional[pd.Timestamp]:
     except Exception:
         return None
 
-def _fm_row_is_matched(row: pd.Series) -> bool:
-    # "Matched enough" means we got week and either stadium or conferences (tweak if you prefer stricter)
-    has_week = pd.notna(row.get("week"))
-    has_site = pd.notna(row.get("stadium")) or pd.notna(row.get("homeConference")) or pd.notna(row.get("awayConference"))
-    return bool(has_week and has_site)
+def _fm_row_is_matched(row):
+    # Consider matched if we have teams plus ANY enriched signal
+    has_teams = isinstance(row.get("homeTeam"), str) and row["homeTeam"].strip() \
+                and isinstance(row.get("awayTeam"), str) and row["awayTeam"].strip()
+    enriched_cols = ["week","stadium","homeConference","awayConference",
+                     "neutralSite","conferenceGame","homeTeamRank","awayTeamRank","capacity"]
+    has_enrichment = any((c in row.index) and pd.notna(row.get(c)) and str(row.get(c)).strip() != "" for c in enriched_cols)
+    return bool(has_teams and has_enrichment)
 
 def _fm_score(snapshot_row: pd.Series, cand: pd.Series) -> tuple[float, bool, dict]:
     """
