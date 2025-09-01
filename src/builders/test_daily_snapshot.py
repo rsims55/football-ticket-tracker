@@ -1,4 +1,3 @@
-# src/builders/test_daily_snapshot.py
 #!/usr/bin/env python3
 from __future__ import annotations
 
@@ -17,28 +16,29 @@ import pandas as pd
 # Paths & imports so this runs from anywhere
 # ---------------------------
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))        # .../src
-PROJ_DIR = os.path.abspath(os.path.join(SRC_DIR, ".."))           # project root
+SRC_DIR     = os.path.abspath(os.path.join(CURRENT_DIR, ".."))      # .../src
+PROJ_DIR    = os.path.abspath(os.path.join(SRC_DIR, ".."))          # repo root
 for p in (SRC_DIR, PROJ_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
 TIMEZONE = ZoneInfo("America/New_York")
-YEAR = int(os.getenv("SEASON_YEAR", datetime.now(TIMEZONE).year))
+YEAR     = int(os.getenv("SEASON_YEAR", datetime.now(TIMEZONE).year))
 
 # ---------------------------
 # Output config (FORCE repo paths by default)
 # ---------------------------
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
+
 _env_daily = os.getenv("DAILY_DIR")
 _env_snap  = os.getenv("SNAPSHOT_PATH")
 
 if REPO_DATA_LOCK:
-    DAILY_DIR = os.path.join(PROJ_DIR, "data", "daily")
+    DAILY_DIR     = os.path.join(PROJ_DIR, "data", "daily")
     SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
 else:
-    DAILY_DIR = _env_daily or os.path.join(PROJ_DIR, "data", "daily")
-    SNAPSHOT_PATH = _env_snap or os.path.join(DAILY_DIR, "price_snapshots.csv")
+    DAILY_DIR     = _env_daily or os.path.join(PROJ_DIR, "data", "daily")
+    SNAPSHOT_PATH = _env_snap  or os.path.join(DAILY_DIR, "price_snapshots.csv")
 
 if REPO_DATA_LOCK and (_env_daily or _env_snap):
     print("⚠️  REPO_DATA_LOCK=1 -> ignoring DAILY_DIR/SNAPSHOT_PATH env and writing to repo paths only.")
@@ -51,48 +51,46 @@ def _under_repo(p: str) -> bool:
         rp, rroot = Path(p).resolve(), Path(PROJ_DIR).resolve()
         return str(rp).startswith(str(rroot))
 
-if not _under_repo(DAILY_DIR) or not _under_repo(SNAPSHOT_PATH):
-    if not ALLOW_ESCAPE:
-        print(f"🚫 Output resolved outside repo:\n  DAILY_DIR={DAILY_DIR}\n  SNAPSHOT={SNAPSHOT_PATH}\n  PROJ_DIR={PROJ_DIR}")
-        print("    Forcing repo-relative paths. Set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
-        DAILY_DIR = os.path.join(PROJ_DIR, "data", "daily")
-        SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
+if (not _under_repo(DAILY_DIR) or not _under_repo(SNAPSHOT_PATH)) and not ALLOW_ESCAPE:
+    print(f"🚫 Output resolved outside repo:\n  DAILY_DIR={DAILY_DIR}\n  SNAPSHOT={SNAPSHOT_PATH}\n  PROJ_DIR={PROJ_DIR}")
+    print("    Forcing repo-relative paths. Set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
+    DAILY_DIR     = os.path.join(PROJ_DIR, "data", "daily")
+    SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
 
 os.makedirs(DAILY_DIR, exist_ok=True)
+
 KEEP_COMBINED_EXPORTS = os.getenv("KEEP_COMBINED_EXPORTS", "0") == "1"
 
 # ---------------------------
-# Team list config
+# Team list config (from second script)
 # ---------------------------
 TEAMS_JSON_PATH = os.getenv(
     "TEAMS_JSON_PATH",
-    os.path.join(PROJ_DIR, "data", "permanent", "tickpick_teams.txt")
+    os.path.join(PROJ_DIR, "data", "permanent", "tickpick_teams.txt"),
 )
-# TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))  # 0 (or negative) means "all teams"
+# TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))  # 0 -> all
 TEAMS_LIMIT = 3
 
-# Collection windows (can be enforced by setting ALWAYS_RUN_DAILY=0)
-COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
-ALWAYS_RUN_DAILY = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
+COLLECTION_TIMES   = ["06:00", "12:00", "18:00", "00:00"]
+ALWAYS_RUN_DAILY   = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
 
-# Politeness and caching for TickPickPricer
-TP_POLITE_LOW = int(os.getenv("TP_POLITE_LOW", "1"))
+# Politeness/caching for TickPickPricer
+TP_POLITE_LOW  = int(os.getenv("TP_POLITE_LOW", "1"))
 TP_POLITE_HIGH = int(os.getenv("TP_POLITE_HIGH", "2"))
-TP_RETRIES = int(os.getenv("TP_RETRIES", "3"))
-TP_TIMEOUT = int(os.getenv("TP_TIMEOUT", "25"))
-TP_USE_CACHE = os.getenv("TP_USE_CACHE", "0") == "1"
-TP_CACHE_DIR = os.getenv("TP_CACHE_DIR", os.path.join(PROJ_DIR, "data", "_cache_tickpick_html"))
-TP_VERBOSE = os.getenv("TP_VERBOSE", "0") == "1"
+TP_RETRIES     = int(os.getenv("TP_RETRIES", "3"))
+TP_TIMEOUT     = int(os.getenv("TP_TIMEOUT", "25"))
+TP_USE_CACHE   = os.getenv("TP_USE_CACHE", "0") == "1"
+TP_CACHE_DIR   = os.getenv("TP_CACHE_DIR", os.path.join(PROJ_DIR, "data", "_cache_tickpick_html"))
+TP_VERBOSE     = os.getenv("TP_VERBOSE", "0") == "1"
 
-# Delete TickPickPricer exports after use
 DELETE_TP_EXPORTS = os.getenv("DELETE_TP_EXPORTS", "1") == "1"
 
-# Paths for enrichment sources
+# Enrichment sources
 WEEKLY_SCHEDULE_PATH = os.path.join(PROJ_DIR, "data", "weekly", f"full_{YEAR}_schedule.csv")
-RIVALRIES_PATH = os.path.join(PROJ_DIR, "data", "annual", f"rivalries_{YEAR}.csv")
+RIVALRIES_PATH       = os.path.join(PROJ_DIR, "data", "annual", f"rivalries_{YEAR}.csv")
 
 # ---------------------------
-# Import your working TickPickPricer
+# Import working TickPickPricer
 # ---------------------------
 try:
     from scrapers.tickpick_pricer import TickPickPricer
@@ -100,7 +98,7 @@ except Exception as e:
     raise ImportError(f"Could not import scrapers.tickpick_pricer: {e!r}")
 
 # ---------------------------
-# Helpers
+# IO helpers
 # ---------------------------
 def _write_csv_atomic(df: pd.DataFrame, path: str) -> None:
     tmp = f"{path}.__tmp__"
@@ -112,67 +110,61 @@ def _ensure_dir(path: str):
     if d:
         os.makedirs(d, exist_ok=True)
 
+# ---------------------------
+# Teams loading (from second script; no hardcoded list)
+# ---------------------------
 def _read_json_array(path: str) -> Optional[List[dict]]:
-    """Read either a JSON array or JSON-Lines file into a list of dicts."""
     if not os.path.exists(path):
-        print(f"⚠️  Teams file does not exist: {path}")
+        print(f"⚠️ Teams file does not exist: {path}")
         return None
     try:
         with open(path, "r", encoding="utf-8") as f:
             txt = f.read().strip()
         if not txt:
-            print(f"⚠️  Teams file is empty: {path}")
+            print(f"⚠️ Teams file is empty: {path}")
             return None
+        # JSON array?
         if txt.lstrip().startswith("["):
             try:
                 data = json.loads(txt)
-                if isinstance(data, list):
-                    return data
-                print("⚠️  Expected a JSON array at top-level.")
-                return None
+                return data if isinstance(data, list) else None
             except Exception as e:
-                print(f"⚠️  JSON array parse error: {e}")
+                print(f"⚠️ JSON array parse error: {e}")
                 return None
+        # JSONL
         items: List[dict] = []
         with open(path, "r", encoding="utf-8") as f:
             for ln, line in enumerate(f, start=1):
-                line = line.strip()
-                if not line:
+                s = line.strip()
+                if not s:
                     continue
                 try:
-                    obj = json.loads(line)
+                    obj = json.loads(s)
                     if isinstance(obj, dict):
                         items.append(obj)
-                    else:
-                        print(f"⚠️  Line {ln} is not a JSON object; skipping.")
                 except Exception as e:
-                    print(f"⚠️  JSON-Lines parse error at line {ln}: {e}")
+                    print(f"⚠️ JSON-Lines parse error at line {ln}: {e}")
                     return None
-        return items if items else None
+        return items or None
     except Exception as e:
-        print(f"⚠️  Failed to read {path}: {e}")
+        print(f"⚠️ Failed to read {path}: {e}")
         return None
 
 def _load_teams_list() -> List[Dict[str, str]]:
-    """
-    Load team slugs/urls from TEAMS_JSON_PATH (.txt or .json).
-    Accepts JSON array or JSON-Lines.
-    Respects TEAMS_LIMIT (0 => all).
-    """
+    """Load team slugs/urls from TEAMS_JSON_PATH (.txt or .json). Respects TEAMS_LIMIT."""
     data = _read_json_array(TEAMS_JSON_PATH)
-
     if data is None and TEAMS_JSON_PATH.endswith(".txt"):
         alt = TEAMS_JSON_PATH[:-4] + ".json"
         if os.path.exists(alt):
-            print(f"ℹ️  Trying alternate teams file: {alt}")
+            print(f"ℹ️ Trying alternate teams file: {alt}")
             data = _read_json_array(alt)
 
     if data:
         out: List[Dict[str, str]] = []
-        bad_count = 0
+        bad = 0
         for item in data:
             if isinstance(item, dict):
-                url = item.get("url")
+                url  = item.get("url")
                 slug = item.get("slug")
                 if not slug and isinstance(url, str):
                     tail = url.rstrip("/").split("/")[-1]
@@ -180,33 +172,24 @@ def _load_teams_list() -> List[Dict[str, str]]:
                 if slug and url:
                     out.append({"slug": slug, "url": url})
                 else:
-                    bad_count += 1
+                    bad += 1
             else:
-                bad_count += 1
-        if bad_count:
-            print(f"ℹ️  Skipped {bad_count} invalid rows in teams file.")
+                bad += 1
+        if bad:
+            print(f"ℹ️ Skipped {bad} invalid rows in teams file.")
         if out:
-            if TEAMS_LIMIT and TEAMS_LIMIT > 0:
-                print(f"📄 Loaded {len(out)} teams from file; using first {TEAMS_LIMIT}.")
+            if TEAMS_LIMIT > 0:
+                print(f"📄 Loaded {len(out)} teams; using first {TEAMS_LIMIT}.")
                 return out[:TEAMS_LIMIT]
-            print(f"📄 Loaded {len(out)} teams from file; using ALL.")
+            print(f"📄 Loaded {len(out)} teams; using ALL.")
             return out
-        else:
-            print("⚠️  Teams file contained no valid {slug,url} entries.")
 
-    fallback = [
-        {"slug": "boston-college-eagles-football",
-         "url": "https://www.tickpick.com/ncaa-football/boston-college-eagles-football-tickets/"},
-        {"slug": "california-golden-bears-football",
-         "url": "https://www.tickpick.com/ncaa-football/california-golden-bears-football-tickets/"},
-        {"slug": "clemson-tigers-football",
-         "url": "https://www.tickpick.com/ncaa-football/clemson-tigers-football-tickets/"},
-    ]
-    print("🚨 Falling back to built-in 3-team list (teams file missing or invalid JSON).")
-    if TEAMS_LIMIT and TEAMS_LIMIT > 0:
-        return fallback[:TEAMS_LIMIT]
-    return fallback
+    print("⚠️ Teams file contained no valid {slug,url} entries.")
+    return []
 
+# ---------------------------
+# Raw→snapshot mapping
+# ---------------------------
 def _titleize_from_url(url: str) -> str:
     tail = url.rstrip("/").split("/")[-1]
     tail = tail.replace("-tickets", "").replace("-", " ")
@@ -217,23 +200,19 @@ def _slug_from_url(url: str) -> str:
     return tail.replace("-tickets", "")
 
 def _map_rows_to_snapshots(rows: List[Dict[str, Any]], now_et: datetime) -> pd.DataFrame:
-    """Convert TickPickPricer rows to the base snapshot schema (no enrichment)."""
-    time_str = now_et.strftime("%H:%M:%S")  # seconds precision to avoid same-minute overwrite
+    time_str = now_et.strftime("%H:%M:%S")
     date_str = now_et.strftime("%Y-%m-%d")
-
     recs = []
     for r in rows:
         team_url = r.get("source_team_url")
         team_slug = _slug_from_url(team_url) if team_url else None
         team_name = _titleize_from_url(team_url) if team_url else None
-
         recs.append({
             "team_slug": team_slug,
             "team_name": team_name,
             "team_url": team_url,
             "event_id": r.get("event_id"),
             "title": r.get("title"),
-            # Keep guesses TEMPORARILY for matching; we drop them before saving final
             "home_team_guess": r.get("home_team_guess"),
             "away_team_guess": r.get("away_team_guess"),
             "date_local": r.get("date_local"),
@@ -246,7 +225,6 @@ def _map_rows_to_snapshots(rows: List[Dict[str, Any]], now_et: datetime) -> pd.D
             "date_collected": date_str,
             "time_collected": time_str,
         })
-
     df = pd.DataFrame.from_records(recs) if recs else pd.DataFrame()
     for c in ("lowest_price", "highest_price", "average_price"):
         if c in df.columns:
@@ -269,14 +247,15 @@ def _cleanup_pricer_exports(paths: Dict[str, str]) -> None:
 
 # ---------------------------
 # Matching & enrichment helpers
+#   • Rankings logic: carry from the matched schedule row only
+#   • Matching logic: from first script (direct+flipped, title backfill, second pass, single-side unique)
 # ---------------------------
 _STOPWORDS = {"university","state","college","the","of","and","at","football","st","saint"}
 
 def _normalize_team_name(s: Optional[str]) -> str:
     if not isinstance(s, str):
         return ""
-    x = s.lower()
-    x = x.replace("&", " and ")
+    x = s.lower().replace("&", " and ")
     for ch in "/.,-()[]{}'’":
         x = x.replace(ch, " ")
     toks = [t for t in x.split() if t and t not in _STOPWORDS]
@@ -300,7 +279,6 @@ def _load_schedule() -> Optional[pd.DataFrame]:
         "homeTeam":         ["homeTeam", "home_team", "home"],
         "awayTeam":         ["awayTeam", "away_team", "away"],
     }
-
     rename_dict: Dict[str, str] = {}
     for canon, cands in required_map.items():
         src = pick(cands)
@@ -310,21 +288,19 @@ def _load_schedule() -> Optional[pd.DataFrame]:
         if src != canon:
             rename_dict[src] = canon
 
-    # Include lots of aliases for rank columns
     optional_map = {
-        "stadium":          ["stadium", "venue", "venue_name", "stadium_name", "site"],
-        "capacity":         ["capacity", "cap", "max_capacity"],
-        "neutralSite":      ["neutralSite", "neutral_site", "neutral"],
-        "conferenceGame":   ["conferenceGame", "conference_game", "isConferenceGame", "conference"],
-        "isRivalry":        ["isRivalry", "is_rivalry", "rivalry"],
-        "isRankedMatchup":  ["isRankedMatchup", "is_ranked_matchup", "ranked_matchup"],
-        "homeTeamRank":     ["homeTeamRank", "home_rank", "homeRank", "home_team_rank", "rank_home", "homeAPRank", "home_ap_rank"],
-        "awayTeamRank":     ["awayTeamRank", "away_rank", "awayRank", "away_team_rank", "rank_away", "awayAPRank", "away_ap_rank"],
-        "homeConference":   ["homeConference", "home_conference", "home_conf", "home_conf_name"],
-        "awayConference":   ["awayConference", "away_conference", "away_conf", "away_conf_name"],
-        "week":             ["week", "game_week", "week_num", "week_number"],
+        "stadium":         ["stadium", "venue", "venue_name", "stadium_name", "site"],
+        "capacity":        ["capacity", "cap", "max_capacity"],
+        "neutralSite":     ["neutralSite", "neutral_site", "neutral"],
+        "conferenceGame":  ["conferenceGame", "conference_game", "isConferenceGame", "conference"],
+        "isRivalry":       ["isRivalry", "is_rivalry", "rivalry"],
+        "isRankedMatchup": ["isRankedMatchup", "is_ranked_matchup", "ranked_matchup"],
+        "homeTeamRank":    ["homeTeamRank", "home_rank", "homeRank", "home_team_rank", "homeAPRank", "home_ap_rank"],
+        "awayTeamRank":    ["awayTeamRank", "away_rank", "awayRank", "away_team_rank", "awayAPRank", "away_ap_rank"],
+        "homeConference":  ["homeConference", "home_conference", "home_conf", "home_conf_name"],
+        "awayConference":  ["awayConference", "away_conference", "away_conf", "away_conf_name"],
+        "week":            ["week", "game_week", "week_num", "week_number"],
     }
-
     for canon, cands in optional_map.items():
         src = pick(cands)
         if src and src != canon:
@@ -333,55 +309,22 @@ def _load_schedule() -> Optional[pd.DataFrame]:
     if rename_dict:
         df = df.rename(columns=rename_dict)
 
-    # Ensure optional columns exist
     for canon in optional_map.keys():
         if canon not in df.columns:
             df[canon] = pd.NA
 
-    # Parse kickoff to datetime (tz-naive is fine; we never export this)
     df["startDateEastern"] = pd.to_datetime(df["startDateEastern"], errors="coerce")
 
-    # ---------- NEW: extract ranks from team names & backfill row-by-row ----------
-    # Matches "#9 Texas", "No. 12 Texas", "Rank 3 Texas", "(12) Texas"
-    _rank_re = re.compile(r"(?:^|\b)(?:#|no\.?|rank)\s*(\d{1,2})\b|\((\d{1,2})\)", re.IGNORECASE)
-
-    def _extract_rank(name: Any) -> Tuple[str, Optional[int]]:
-        if not isinstance(name, str):
-            return ("", None)
-        m = _rank_re.search(name)
-        rank = int(m.group(1) or m.group(2)) if m else None
-        cleaned = _rank_re.sub("", name).strip()
-        cleaned = re.sub(r"\s{2,}", " ", cleaned)
-        return (cleaned, rank)
-
-    # Clean names and fill ranks wherever missing
-    if "homeTeam" in df.columns:
-        h_clean, h_rank = zip(*df["homeTeam"].map(_extract_rank))
-        df["homeTeam"] = pd.Series(h_clean, index=df.index).where(df["homeTeam"].notna(), df["homeTeam"])
-        h_rank = pd.to_numeric(pd.Series(h_rank, index=df.index), errors="coerce").astype("Int64")
-        if "homeTeamRank" not in df.columns:
-            df["homeTeamRank"] = pd.NA
-        needs = df["homeTeamRank"].isna()
-        df.loc[needs, "homeTeamRank"] = h_rank[needs]
-
-    if "awayTeam" in df.columns:
-        a_clean, a_rank = zip(*df["awayTeam"].map(_extract_rank))
-        df["awayTeam"] = pd.Series(a_clean, index=df.index).where(df["awayTeam"].notna(), df["awayTeam"])
-        a_rank = pd.to_numeric(pd.Series(a_rank, index=df.index), errors="coerce").astype("Int64")
-        if "awayTeamRank" not in df.columns:
-            df["awayTeamRank"] = pd.NA
-        needs = df["awayTeamRank"].isna()
-        df.loc[needs, "awayTeamRank"] = a_rank[needs]
-
-    # Ensure ranks are Int64
-    df["homeTeamRank"] = pd.to_numeric(df["homeTeamRank"], errors="coerce").astype("Int64")
-    df["awayTeamRank"] = pd.to_numeric(df["awayTeamRank"], errors="coerce").astype("Int64")
+    if "homeTeamRank" in df.columns:
+        df["homeTeamRank"] = pd.to_numeric(df["homeTeamRank"], errors="coerce").astype("Int64")
+    if "awayTeamRank" in df.columns:
+        df["awayTeamRank"] = pd.to_numeric(df["awayTeamRank"], errors="coerce").astype("Int64")
 
     return df
 
 def _prepare_schedule_for_join(sched: pd.DataFrame) -> pd.DataFrame:
     df = sched.copy()
-    df["date_key"] = pd.to_datetime(df["startDateEastern"], errors="coerce").dt.strftime("%Y-%m-%d")
+    df["date_key"]       = pd.to_datetime(df["startDateEastern"], errors="coerce").dt.strftime("%Y-%m-%d")
     df["home_key_sched"] = df["homeTeam"].map(_normalize_team_name)
     df["away_key_sched"] = df["awayTeam"].map(_normalize_team_name)
     return df
@@ -391,9 +334,8 @@ def _prepare_snapshots_for_join(snap: pd.DataFrame) -> pd.DataFrame:
     df["snap_idx"] = df.index
     df["date_key"] = pd.to_datetime(df["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
 
-    # Prefer fixed homeTeam/awayTeam; fallback to guess columns if needed
     def _pick_norm(src_primary: str, src_fallback: str) -> pd.Series:
-        primary = df[src_primary] if src_primary in df.columns else pd.Series([""] * len(df), index=df.index)
+        primary      = df[src_primary] if src_primary in df.columns else pd.Series([""] * len(df), index=df.index)
         primary_norm = primary.fillna("").map(_normalize_team_name)
         if src_fallback in df.columns:
             fallback_norm = df[src_fallback].fillna("").map(_normalize_team_name)
@@ -448,32 +390,24 @@ def _load_rivalries() -> Optional[Set[frozenset]]:
     return pairs
 
 def _mark_rivalries(snap: pd.DataFrame, rivalry_pairs: Optional[Set[frozenset]]) -> pd.DataFrame:
-    """Set isRivalry boolean by checking (home, away) pair against rivalry_pairs (order-agnostic)."""
     if snap.empty:
         snap["isRivalry"] = False
         return snap
-
     if not rivalry_pairs:
         if "isRivalry" not in snap.columns:
             snap["isRivalry"] = False
         return snap
-
     home_series = snap["homeTeam"] if "homeTeam" in snap.columns else pd.Series([""] * len(snap), index=snap.index)
     away_series = snap["awayTeam"] if "awayTeam" in snap.columns else pd.Series([""] * len(snap), index=snap.index)
-
     home_norm = home_series.fillna("").map(_normalize_team_name)
     away_norm = away_series.fillna("").map(_normalize_team_name)
-
     def is_rival(h: str, a: str) -> bool:
         return bool(h and a and (frozenset({h, a}) in rivalry_pairs))
-
     snap["isRivalry"] = [is_rival(h, a) for h, a in zip(home_norm, away_norm)]
     snap["isRivalry"] = snap["isRivalry"].astype(bool)
     return snap
 
-# ---------------------------
-# Title cleanup + alias + matchup fixes (no new columns)
-# ---------------------------
+# ---- Title cleanup + aliases ----
 ALIASES_PATH = os.path.join(PROJ_DIR, "data", "permanent", "team_aliases.json")
 
 def _load_team_aliases() -> Dict[str, str]:
@@ -483,22 +417,16 @@ def _load_team_aliases() -> Dict[str, str]:
         if not isinstance(data, dict):
             print(f"⚠️ team_aliases.json is not an object: {ALIASES_PATH}")
             return {}
-        # Support multi-key entries separated by "|"
-        aliases: Dict[str, str] = {}
-        for k, v in data.items():
-            if not isinstance(k, str) or not isinstance(v, str):
-                continue
-            for part in re.split(r"\|", k):
-                key = " ".join(part.strip().lower().split())
-                if key:
-                    aliases[key] = v.strip()
-        return aliases
+        return {str(k).strip().lower(): str(v).strip() for k, v in data.items()
+                if isinstance(k, str) and isinstance(v, str)}
     except FileNotFoundError:
         print(f"ℹ️ No team_aliases.json found at {ALIASES_PATH}")
         return {}
     except Exception as e:
         print(f"⚠️ Failed to read team_aliases.json: {e}")
         return {}
+
+_MATCHUP_SPLIT_RE = re.compile(r"\s+(?:vs\.?|v\.?|at)\s+", flags=re.IGNORECASE)
 
 def _clean_event_title(title: Optional[str]) -> Optional[str]:
     if not isinstance(title, str):
@@ -510,16 +438,13 @@ def _clean_event_title(title: Optional[str]) -> Optional[str]:
             return right
     return t
 
-# Accept "vs", "vs.", "v.", and "at" just in case
-_MATCH_RE = re.compile(r"\s+(?:vs\.?|v\.?|at)\s+", flags=re.IGNORECASE)
-
 def _split_matchup(text: str) -> Tuple[Optional[str], Optional[str]]:
     if not isinstance(text, str):
         return (None, None)
     t = text.replace("\u00A0", " ").strip()
-    parts = _MATCH_RE.split(t, maxsplit=1)
+    parts = _MATCHUP_SPLIT_RE.split(t, maxsplit=1)
     if len(parts) == 2:
-        left = parts[0].strip(" \t-–—")
+        left  = parts[0].strip(" \t-–—")
         right = parts[1].strip(" \t-–—")
         if left and right:
             return (left, right)
@@ -550,20 +475,17 @@ def _apply_title_and_alias_fixes(snap: pd.DataFrame) -> pd.DataFrame:
             mask = df["homeTeam"].isna() | (df["homeTeam"].astype(str).str.strip() == "")
             df.loc[mask, "homeTeam"] = inferred_home[mask]
             df["homeTeam"] = df["homeTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
-
         if "awayTeam" in df.columns:
             inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
             mask = df["awayTeam"].isna() | (df["awayTeam"].astype(str).str.strip() == "")
             df.loc[mask, "awayTeam"] = inferred_away[mask]
             df["awayTeam"] = df["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
-
     elif ("home_team_guess" in df.columns) or ("away_team_guess" in df.columns):
         if "home_team_guess" in df.columns:
             inferred_home = df.apply(lambda r: _infer_pair_from_title(r)[0], axis=1)
             mask = df["home_team_guess"].isna() | (df["home_team_guess"].astype(str).str.strip() == "")
             df.loc[mask, "home_team_guess"] = inferred_home[mask]
             df["home_team_guess"] = df["home_team_guess"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
-
         if "away_team_guess" in df.columns:
             inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
             mask = df["away_team_guess"].isna() | (df["away_team_guess"].astype(str).str.strip() == "")
@@ -572,76 +494,24 @@ def _apply_title_and_alias_fixes(snap: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-# ---------------------------
-# Enrichment (incl. rank carry/derive)
-# ---------------------------
-def _prepare_schedule_for_join(sched: pd.DataFrame) -> pd.DataFrame:
-    df = sched.copy()
-    df["date_key"] = pd.to_datetime(df["startDateEastern"], errors="coerce").dt.strftime("%Y-%m-%d")
-    df["home_key_sched"] = df["homeTeam"].map(_normalize_team_name)
-    df["away_key_sched"] = df["awayTeam"].map(_normalize_team_name)
-    return df
+# ---- Matching overlays ----
+def _safe_fill_blank_column(snap: pd.DataFrame, col: str, newvals: pd.Series) -> None:
+    if col not in snap.columns or newvals is None:
+        return
+    nv = newvals.reindex(snap.index)
+    if pd.api.types.is_numeric_dtype(snap[col]):
+        nv    = pd.to_numeric(nv, errors="coerce")
+        needs = snap[col].isna() & nv.notna()
+    else:
+        needs = (snap[col].isna() | (snap[col].astype(str).str.strip() == "")) & nv.notna()
+    if needs.any():
+        snap.loc[needs, col] = nv[needs]
 
-def _prepare_snapshots_for_join(snap: pd.DataFrame) -> pd.DataFrame:
-    df = snap.copy()
-    df["snap_idx"] = df.index
-    df["date_key"] = pd.to_datetime(df["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
-
-    def _pick_norm(src_primary: str, src_fallback: str) -> pd.Series:
-        primary = df[src_primary] if src_primary in df.columns else pd.Series([""] * len(df), index=df.index)
-        primary_norm = primary.fillna("").map(_normalize_team_name)
-        if src_fallback in df.columns:
-            fallback_norm = df[src_fallback].fillna("").map(_normalize_team_name)
-            return primary_norm.where(primary_norm.astype(bool), fallback_norm)
-        return primary_norm
-
-    df["home_key"] = _pick_norm("homeTeam", "home_team_guess")
-    df["away_key"] = _pick_norm("awayTeam", "away_team_guess")
-    return df
-
-def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
-    if snap.empty:
-        return snap
-
-    # relative days
-    snap["days_until_game"] = (
-        pd.to_datetime(snap["date_local"], errors="coerce") -
-        pd.to_datetime(snap["date_collected"], errors="coerce")
-    ).dt.days
-
-    sched = _load_schedule()
-    cols_to_carry = [
-        "homeTeam","awayTeam","stadium","capacity","neutralSite","conferenceGame",
-        "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
-        "homeConference","awayConference","week"
-    ]
-
-    if sched is None or sched.empty:
-        # ensure columns exist even without schedule
-        for col in cols_to_carry:
-            if col not in snap.columns:
-                snap[col] = pd.NA
-        # keep types sane
-        for rk in ("homeTeamRank","awayTeamRank"):
-            if rk in snap.columns:
-                snap[rk] = pd.to_numeric(snap[rk], errors="coerce").astype("Int64")
-        if "capacity" in snap.columns:
-            snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
-        # rivalry default
-        rivalry_pairs = _load_rivalries()
-        snap = _mark_rivalries(snap, rivalry_pairs)
-        return snap
-
-    # ---------- matching ----------
-    sched_pre = _prepare_schedule_for_join(sched)
-    snap_pre  = _prepare_snapshots_for_join(snap)
-
-    # direct
+def _overlay_from_exact_matches(snap_pre: pd.DataFrame, sched_pre: pd.DataFrame, cols_to_carry: List[str]) -> pd.DataFrame:
     m1 = snap_pre.merge(sched_pre, how="left", on="date_key", suffixes=("", "_sched"))
     m1 = m1[(m1["home_key"] == m1["home_key_sched"]) & (m1["away_key"] == m1["away_key_sched"])].copy()
     m1 = m1.sort_values(["snap_idx"]).drop_duplicates(subset=["snap_idx"], keep="first")
 
-    # flipped
     sched_flip = sched_pre.rename(columns={
         "home_key_sched": "away_key_sched",
         "away_key_sched": "home_key_sched",
@@ -656,29 +526,150 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     m2 = m2[(m2["home_key"] == m2["home_key_sched"]) & (m2["away_key"] == m2["away_key_sched"])].copy()
     m2 = m2.sort_values(["snap_idx"]).drop_duplicates(subset=["snap_idx"], keep="first")
 
-    # overlay: prefer direct, then flipped
     matched = pd.merge(
         m1[["snap_idx"] + [c for c in cols_to_carry if c in m1.columns]],
         m2[["snap_idx"] + [c for c in cols_to_carry if c in m2.columns]],
-        on="snap_idx", how="outer", suffixes=("_dir","_flip"),
+        on="snap_idx", how="outer", suffixes=("_dir", "_flip"),
     )
-    def _pick(row, col):
-        a, b = row.get(f"{col}_dir"), row.get(f"{col}_flip")
-        return a if pd.notna(a) else b
-    overlay = pd.DataFrame({"snap_idx": matched["snap_idx"]})
+
+    def pick(row, a, b):
+        return row.get(a) if pd.notna(row.get(a)) else row.get(b)
+
+    over = pd.DataFrame({"snap_idx": matched["snap_idx"]})
     for col in cols_to_carry:
-        overlay[col] = matched.apply(lambda r, c=col: _pick(r, c), axis=1)
+        a, b = f"{col}_dir", f"{col}_flip"
+        over[col] = matched.apply(lambda r, a=a, b=b: pick(r, a, b), axis=1)
+    return over.set_index("snap_idx")
 
-    # attach overlay by index
-    snap = snap.merge(overlay, left_index=True, right_on="snap_idx", how="left")
-    snap = snap.drop(columns=["snap_idx"])
+def _overlay_from_single_side_unique(
+    snap_pre: pd.DataFrame,
+    sched_pre: pd.DataFrame,
+    cols_to_carry: List[str],
+) -> pd.DataFrame:
+    """
+    Single-side-unique fallback with ORIENTATION AWARENESS.
+    If the unique schedule candidate is flipped relative to the snapshot,
+    flip all directional columns (home/away, ranks, conferences) before returning.
+    """
+    flip_map = {
+        "home_key_sched": "away_key_sched",
+        "away_key_sched": "home_key_sched",
+        "homeTeam": "awayTeam",
+        "awayTeam": "homeTeam",
+        "homeConference": "awayConference",
+        "awayConference": "homeConference",
+        "homeTeamRank": "awayTeamRank",
+        "awayTeamRank": "homeTeamRank",
+        "week": "week",
+        "stadium": "stadium",
+        "capacity": "capacity",
+        "neutralSite": "neutralSite",
+        "conferenceGame": "conferenceGame",
+        "isRivalry": "isRivalry",
+        "isRankedMatchup": "isRankedMatchup",
+        "startDateEastern": "startDateEastern",
+    }
 
-    # ---------- backfill home/away from title if still blank (no new cols) ----------
+    by_date = {d: g for d, g in sched_pre.groupby("date_key")}
+    rows = []
+
+    for _, r in snap_pre.iterrows():
+        d = r.get("date_key")
+        if not isinstance(d, str) or d not in by_date:
+            continue
+
+        day = by_date[d]
+        hk = (r.get("home_key") or "").strip()
+        ak = (r.get("away_key") or "").strip()
+
+        cands = pd.DataFrame()
+        if hk:
+            cands = pd.concat([cands, day[(day["home_key_sched"] == hk) | (day["away_key_sched"] == hk)]])
+        if ak:
+            cands = pd.concat([cands, day[(day["home_key_sched"] == ak) | (day["away_key_sched"] == ak)]])
+        cands = cands.drop_duplicates()
+
+        if len(cands) != 1:
+            continue
+
+        srow = cands.iloc[0]
+
+        # Orientation: prefer full-pair checks; fall back to single-key
+        direct = (hk and ak and hk == srow.get("home_key_sched") and ak == srow.get("away_key_sched")) \
+                 or (hk and not ak and hk == srow.get("home_key_sched")) \
+                 or (ak and not hk and ak == srow.get("away_key_sched"))
+        flipped = (hk and ak and hk == srow.get("away_key_sched") and ak == srow.get("home_key_sched")) \
+                  or (hk and not ak and hk == srow.get("away_key_sched")) \
+                  or (ak and not hk and ak == srow.get("home_key_sched"))
+
+        if not direct and not flipped:
+            continue
+
+        use_flip = flipped and not direct
+
+        val: Dict[str, Any] = {"snap_idx": r["snap_idx"]}
+        for c in cols_to_carry:
+            if c not in srow.index:
+                continue
+            if use_flip and c in flip_map:
+                val[c] = srow.get(flip_map[c])
+            else:
+                val[c] = srow.get(c)
+
+        rows.append(val)
+
+    if not rows:
+        return pd.DataFrame(columns=["snap_idx"] + cols_to_carry).set_index("snap_idx")
+
+    over = pd.DataFrame(rows).set_index("snap_idx")
+    return over
+
+# ---------------------------
+# Enrichment (matching from first script; ranking carry-through from schedule row)
+# ---------------------------
+def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
+    if snap.empty:
+        return snap
+
+    # ---------- basic derived fields ----------
+    snap["days_until_game"] = (
+        pd.to_datetime(snap["date_local"], errors="coerce") -
+        pd.to_datetime(snap["date_collected"], errors="coerce")
+    ).dt.days
+
+    # ---------- load schedule ----------
+    sched = _load_schedule()
+    # carry EVERYTHING you need from the exact matched schedule row
+    cols_to_carry = [
+        "homeTeam","awayTeam","stadium","capacity","neutralSite","conferenceGame",
+        "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
+        "homeConference","awayConference","week","startDateEastern",
+    ]
+
+    if sched is None or sched.empty:
+        for col in cols_to_carry:
+            if col not in snap.columns:
+                snap[col] = pd.NA
+        return snap
+
+    # ---------- prep keys ----------
+    sched_pre = _prepare_schedule_for_join(sched)
+    snap_pre  = _prepare_snapshots_for_join(snap)
+
+    # ---------- pass 1: exact pair (direct + flipped) ----------
+    exact_overlay = _overlay_from_exact_matches(snap_pre, sched_pre, cols_to_carry)
+    for col in cols_to_carry:
+        if col in exact_overlay.columns:
+            if col not in snap.columns:
+                snap[col] = pd.NA
+            _safe_fill_blank_column(snap, col, exact_overlay[col])
+
+    # ---------- backfill home/away from title if still blank ----------
     def _part_from_title(t: Optional[str], idx: int) -> Optional[str]:
         if not isinstance(t, str):
             return None
         t = _clean_event_title(t)
-        parts = _MATCH_RE.split(t, maxsplit=1)
+        parts = _MATCHUP_SPLIT_RE.split(t, maxsplit=1) if isinstance(t, str) else []
         if len(parts) == 2:
             side = parts[idx].strip(" \t-–—")
             return side if side else None
@@ -686,67 +677,49 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
 
     for col, idx in (("homeTeam", 0), ("awayTeam", 1)):
         if col in snap.columns and "title" in snap.columns:
-            mask = snap[col].isna() | (snap[col].astype(str).str.strip() == "")
+            mask   = snap[col].isna() | (snap[col].astype(str).str.strip() == "")
             parsed = snap["title"].apply(lambda s: _part_from_title(s, idx))
-            fill = mask & parsed.notna() & (parsed.astype(str).str.strip() != "")
+            fill   = mask & parsed.notna() & (parsed.astype(str).str.strip() != "")
             snap.loc[fill, col] = parsed[fill]
 
-    # ---------- coalesce: ONLY fill blanks from overlay ----------
-    for col in cols_to_carry:
-        if col not in snap.columns:
-            snap[col] = pd.NA
-        if pd.api.types.is_numeric_dtype(snap[col]):
-            mask = snap[col].isna() & snap[f"{col}"].notna()
-        else:
-            mask = (snap[col].isna() | (snap[col].astype(str).str.strip() == "")) & snap[f"{col}"].notna()
-        # Note: here the right-hand side is the same column name coming from overlay merge
-        # (since we merged overlay columns directly). To avoid self-assignment, use the _y
-        # temp variable style:
-        newvals = snap[f"{col}"]
-        snap.loc[mask, col] = newvals[mask]
+    # ---------- pass 2: exact again using now-filled home/away ----------
+    snap_pre2 = snap.copy()
+    snap_pre2["snap_idx"] = snap_pre2.index
+    snap_pre2["date_key"] = pd.to_datetime(snap_pre2["date_local"], errors="coerce").dt.strftime("%Y-%m-%d")
+    snap_pre2["home_key"] = snap_pre2.get("homeTeam", pd.Series([""]*len(snap_pre2), index=snap_pre2.index)).fillna("").map(_normalize_team_name)
+    snap_pre2["away_key"] = snap_pre2.get("awayTeam", pd.Series([""]*len(snap_pre2), index=snap_pre2.index)).fillna("").map(_normalize_team_name)
 
-    # ---------- types & derived ----------
+    exact_overlay2 = _overlay_from_exact_matches(snap_pre2, sched_pre, cols_to_carry)
+    for col in cols_to_carry:
+        if col in exact_overlay2.columns:
+            if col not in snap.columns:
+                snap[col] = pd.NA
+            _safe_fill_blank_column(snap, col, exact_overlay2[col])
+
+    # ---------- pass 3: single-side unique fallback (orientation-aware) ----------
+    one_side_overlay = _overlay_from_single_side_unique(snap_pre2, sched_pre, cols_to_carry)
+    for col in cols_to_carry:
+        if col in one_side_overlay.columns:
+            if col not in snap.columns:
+                snap[col] = pd.NA
+            _safe_fill_blank_column(snap, col, one_side_overlay[col])
+
+    # ---------- rivalry flag + dtypes ----------
+    snap = _mark_rivalries(snap, _load_rivalries())
     if "capacity" in snap.columns:
         snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
 
-    # ranks as Int64
-    for rk in ("homeTeamRank","awayTeamRank"):
-        if rk in snap.columns:
-            snap[rk] = pd.to_numeric(snap[rk], errors="coerce").astype("Int64")
+    # Ensure ranks are Int64
+    if "homeTeamRank" in snap.columns:
+        snap["homeTeamRank"] = pd.to_numeric(snap["homeTeamRank"], errors="coerce").astype("Int64")
+    if "awayTeamRank" in snap.columns:
+        snap["awayTeamRank"] = pd.to_numeric(snap["awayTeamRank"], errors="coerce").astype("Int64")
 
-    # compute isRankedMatchup only where blank
-    if "isRankedMatchup" not in snap.columns:
-        snap["isRankedMatchup"] = pd.NA
-    if ("homeTeamRank" in snap.columns) and ("awayTeamRank" in snap.columns):
-        need = snap["isRankedMatchup"].isna() | (snap["isRankedMatchup"].astype(str).str.strip() == "")
-        computed = (
-            snap["homeTeamRank"].notna() & (snap["homeTeamRank"] > 0) &
-            snap["awayTeamRank"].notna() & (snap["awayTeamRank"] > 0)
-        )
-        snap.loc[need, "isRankedMatchup"] = computed
-    snap["isRankedMatchup"] = snap["isRankedMatchup"].fillna(False).astype(bool)
+    # Drop temp/guess columns
+    drop_cols = ["home_team_guess","away_team_guess","home_key","away_key","snap_idx","date_key"]
+    snap = snap.drop(columns=[c for c in drop_cols if c in snap.columns], errors="ignore")
 
-    # rivalries
-    rivalry_pairs = _load_rivalries()
-    snap = _mark_rivalries(snap, rivalry_pairs)
-
-    # final column order (only your list)
-    col_order_front = [
-        "team_slug","team_name","team_url",
-        "event_id","title",
-        "week",
-        "homeTeam","awayTeam",
-        "homeConference","awayConference",
-        "date_local","time_local","offer_url",
-        "lowest_price","highest_price","average_price","listing_count",
-        "days_until_game","stadium","capacity",
-        "neutralSite","conferenceGame","isRivalry","isRankedMatchup",
-        "homeTeamRank","awayTeamRank",
-        "date_collected","time_collected",
-    ]
-    final_cols = [c for c in col_order_front if c in snap.columns] + \
-                 [c for c in snap.columns if c not in col_order_front]
-    return snap[final_cols]
+    return snap
 
 # ---------------------------
 # Main snapshot logic
@@ -774,15 +747,14 @@ def log_price_snapshot():
     print(f"🚀 Starting TickPick scrape for {len(teams)} team pages...")
 
     all_rows_count = 0
-    scraped_ok = 0
-    scraped_fail = 0
-    csv_exists = os.path.exists(TMP_CSV)
+    scraped_ok     = 0
+    scraped_fail   = 0
+    csv_exists     = os.path.exists(TMP_CSV)
 
     for idx, t in enumerate(teams, start=1):
-        url = t["url"]
+        url       = t["url"]
         team_name = _titleize_from_url(url)
         print(f"  [{idx}/{len(teams)}] 🏈 Scraping {team_name} ...", flush=True)
-
         try:
             pricer = TickPickPricer(
                 team_urls=[url],
@@ -795,7 +767,7 @@ def log_price_snapshot():
                 verbose=TP_VERBOSE,
             )
             export_paths = pricer.run()
-            json_path = export_paths.get("json")
+            json_path    = export_paths.get("json")
 
             if not json_path or not os.path.exists(json_path):
                 print(f"      ❌ No JSON produced for {team_name}")
@@ -803,7 +775,6 @@ def log_price_snapshot():
                 _cleanup_pricer_exports(export_paths)
                 continue
 
-            # read rows from TickPickPricer export
             try:
                 with open(json_path, "r", encoding="utf-8") as f:
                     rows = json.load(f)
@@ -811,12 +782,10 @@ def log_price_snapshot():
                 _cleanup_pricer_exports(export_paths)
 
             if isinstance(rows, list) and rows:
-                # --- append raw rows to ONE JSONL file ---
                 with open(TMP_JSONL, "a", encoding="utf-8") as jf:
                     for r in rows:
                         jf.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-                # --- map to snapshots and append to ONE CSV file (no enrichment yet) ---
                 snap_chunk = _map_rows_to_snapshots(rows, now_et)
                 if not snap_chunk.empty:
                     header = not csv_exists and not os.path.exists(TMP_CSV)
@@ -839,7 +808,7 @@ def log_price_snapshot():
         print("⚠️ No snapshot CSV produced. Exiting.")
         return
 
-    # ---- read the single temp CSV, enrich once, then append to master ----
+    # Read → enrich once → filter past-kickoffs → append/dedupe to master
     try:
         snap_all = pd.read_csv(TMP_CSV)
     except Exception as e:
@@ -849,28 +818,27 @@ def log_price_snapshot():
     if snap_all.empty:
         print("⚠️ Temp CSV is empty after reading. Exiting.")
         return
-    
-    # Normalize titles, infer missing home/away from title, and apply team aliases (no new columns)
+
     snap_all = _apply_title_and_alias_fixes(snap_all)
     snap_all = _enrich_with_schedule_and_stadiums(snap_all)
 
-    # Final projection: ONLY the requested columns
-    desired_cols = [
-        "team_slug","team_name","team_url",
-        "event_id","title",
-        "week",
-        "homeTeam","awayTeam",
-        "homeConference","awayConference",
-        "date_local","time_local","offer_url",
-        "lowest_price","highest_price","average_price","listing_count",
-        "days_until_game","stadium","capacity",
-        "neutralSite","conferenceGame","isRivalry","isRankedMatchup",
-        "homeTeamRank","awayTeamRank",
-        "date_collected","time_collected",
-    ]
-    snap_all = snap_all[[c for c in desired_cols if c in snap_all.columns]]
+    # Guard: enrichment must return a DataFrame
+    if not isinstance(snap_all, pd.DataFrame):
+        print("❌ Enrichment failed to return a DataFrame; aborting write.")
+        return
 
-    # Append/dedupe within same minute per (offer_url or event_id)
+    # ⏰ filter out already-started games if kickoff known
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if "startDateEastern" in snap_all.columns:
+        snap_all["startDateEastern"] = pd.to_datetime(snap_all["startDateEastern"], errors="coerce")
+        mask_known  = snap_all["startDateEastern"].notna()
+        mask_future = snap_all["startDateEastern"] >= now_et
+        snap_all = pd.concat([
+            snap_all[mask_known & mask_future],
+            snap_all[~mask_known]
+        ], ignore_index=True)
+
+    # Append/dedupe within same minute per (offer_url or event_id) + collection stamp
     _ensure_dir(SNAPSHOT_PATH)
     key_cols: List[str] = []
     if "offer_url" in snap_all.columns:
@@ -878,6 +846,20 @@ def log_price_snapshot():
     if "event_id" in snap_all.columns:
         key_cols.append("event_id")
     key_cols.extend(["date_collected", "time_collected"])
+
+    # Gentle fill: only if target columns exist already
+    def _ensure_col_existing(df, target, candidates):
+        if target not in df.columns:
+            return df
+        src = next((c for c in candidates if c in df.columns), None)
+        if src is not None:
+            needs = df[target].isna() | (df[target].astype(str).str.strip() == "")
+            df.loc[needs, target] = df.loc[needs, src]
+        return df
+
+    snap_all = _ensure_col_existing(snap_all, "homeTeam", ["home_team_name","homeTeam","home_team","team_name"])
+    snap_all = _ensure_col_existing(snap_all, "awayTeam", ["away_team_name","awayTeam","away_team"])
+    snap_all = _ensure_col_existing(snap_all, "team_slug", ["home_team_slug","home_slug","homeTeamSlug","team_slug"])
 
     if os.path.exists(SNAPSHOT_PATH):
         existing = pd.read_csv(SNAPSHOT_PATH)
@@ -888,37 +870,35 @@ def log_price_snapshot():
         )
         _write_csv_atomic(combined, SNAPSHOT_PATH)
         print(f"✅ Snapshot appended ({len(snap_all)} new rows). Total now: {len(combined)}")
-        print(f"[test_daily_snapshot] write complete → {SNAPSHOT_PATH}")
         _df = combined
     else:
         _write_csv_atomic(snap_all, SNAPSHOT_PATH)
         print(f"✅ Snapshot saved ({len(snap_all)} rows) to {SNAPSHOT_PATH}")
-        print(f"[test_daily_snapshot] write complete → {SNAPSHOT_PATH}")
         _df = snap_all
 
-    # Post-write freshness assertion (America/New_York)
+    # Freshness log
     try:
         col = "date_collected"
         max_date = pd.to_datetime(_df[col], errors="coerce").max()
-        now_d = datetime.now(ZoneInfo("America/New_York")).date()
-        print(f"[test_daily_snapshot] rows={len(_df)}, max({col})={max_date.date() if pd.notnull(max_date) else 'NA'} (now={now_d})")
+        now_d    = datetime.now(ZoneInfo("America/New_York")).date()
+        print(f"[daily_snapshot] rows={len(_df)}, max({col})={max_date.date() if pd.notnull(max_date) else 'NA'} (now={now_d})")
     except Exception as e:
-        print(f"[test_daily_snapshot] freshness check failed: {e}")
+        print(f"[daily_snapshot] freshness check failed: {e}")
 
-    # ---- clean up single temp files ----
+    # Cleanup temps
     if KEEP_COMBINED_EXPORTS:
         print(f"📝 Keeping temp files:\n  - {TMP_JSONL}\n  - {TMP_CSV}")
     else:
         cleanup_targets = [TMP_JSONL, TMP_CSV]
         for f in Path(DAILY_DIR).glob("*.etag.json"):
             cleanup_targets.append(str(f))
-        for p in cleanup_targets:
+        for pth in cleanup_targets:
             try:
-                if os.path.exists(p):
-                    os.remove(p)
-                    print(f"🧹 Removed temp file: {p}")
+                if os.path.exists(pth):
+                    os.remove(pth)
+                    print(f"🧹 Removed temp file: {pth}")
             except Exception as e:
-                print(f"⚠️ Could not delete temp file {p}: {e}")
+                print(f"⚠️ Could not delete temp file {pth}: {e}")
 
 if __name__ == "__main__":
     log_price_snapshot()
