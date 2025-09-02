@@ -109,6 +109,61 @@ except Exception as e:
 _DEF_STOPWORDS = {"university","state","college","the","of","and","at","football","st","saint"}
 
 
+from bisect import bisect_right
+
+def _carry_forward_ranks_on_schedule(sched: pd.DataFrame) -> pd.DataFrame:
+    """
+    If a schedule row is missing homeTeamRank/awayTeamRank, fill it with the team's
+    latest known rank from any earlier game in the same schedule.
+    """
+    df = sched.copy()
+    df["rank_date"] = pd.to_datetime(df["startDateEastern"], errors="coerce")
+
+    # Collect known rank points: (team, date, rank)
+    home_known = df.loc[df["homeTeamRank"].notna(), ["rank_date", "homeTeam", "homeTeamRank"]]
+    home_known = home_known.rename(columns={"homeTeam": "team", "homeTeamRank": "rank"})
+    away_known = df.loc[df["awayTeamRank"].notna(), ["rank_date", "awayTeam", "awayTeamRank"]]
+    away_known = away_known.rename(columns={"awayTeam": "team", "awayTeamRank": "rank"})
+    known = pd.concat([home_known, away_known], ignore_index=True)
+    if known.empty:
+        return df.drop(columns=["rank_date"])
+
+    # Build per-team sorted (dates, ranks) lists
+    known = known.dropna(subset=["rank"]).sort_values(["team", "rank_date"])
+    rank_index: Dict[str, Tuple[List[pd.Timestamp], List[float]]] = {}
+    for team, g in known.groupby("team"):
+        dates = list(g["rank_date"])
+        ranks = list(pd.to_numeric(g["rank"], errors="coerce"))
+        rank_index[team] = (dates, ranks)
+
+    def _latest_rank(team: Optional[str], dt: Optional[pd.Timestamp]) -> Optional[float]:
+        if not isinstance(team, str) or pd.isna(dt):
+            return None
+        if team not in rank_index:
+            return None
+        dates, ranks = rank_index[team]
+        i = bisect_right(dates, dt) - 1
+        return ranks[i] if i >= 0 else None
+
+    # Ensure numeric dtype before filling
+    df["homeTeamRank"] = pd.to_numeric(df["homeTeamRank"], errors="coerce")
+    df["awayTeamRank"] = pd.to_numeric(df["awayTeamRank"], errors="coerce")
+
+    # Fill missing with carry-forward
+    mask_h = df["homeTeamRank"].isna()
+    if mask_h.any():
+        df.loc[mask_h, "homeTeamRank"] = df.loc[mask_h].apply(
+            lambda r: _latest_rank(r.get("homeTeam"), r.get("rank_date")), axis=1
+        )
+    mask_a = df["awayTeamRank"].isna()
+    if mask_a.any():
+        df.loc[mask_a, "awayTeamRank"] = df.loc[mask_a].apply(
+            lambda r: _latest_rank(r.get("awayTeam"), r.get("rank_date")), axis=1
+        )
+
+    return df.drop(columns=["rank_date"])
+
+
 def _write_csv_atomic(df: pd.DataFrame, path: str) -> None:
     tmp = f"{path}.__tmp__"
     df.to_csv(tmp, index=False)
@@ -252,6 +307,18 @@ def _canonicalize_if_aliased(name: Optional[str], aliases: Dict[str, str]) -> Op
     key = name.strip().lower()
     return aliases.get(key, name.strip())
 
+def _strip_team_suffix(name: Optional[str]) -> Optional[str]:
+    """
+    Remove a trailing 'Football' and collapse extra spaces.
+    This prevents snapshot titles like '... Nittany Lions Football' from
+    breaking matches against the weekly schedule team names.
+    """
+    if not isinstance(name, str):
+        return name
+    t = re.sub(r"\s+Football\b", "", name, flags=re.IGNORECASE).strip()
+    t = re.sub(r"\s{2,}", " ", t)
+    return t
+
 
 # ---------------------------
 # Mapping from TickPick rows → snapshot schema
@@ -359,22 +426,26 @@ def _apply_title_and_alias_fixes(snap: pd.DataFrame) -> pd.DataFrame:
         mask = df["homeTeam"].isna() | (df["homeTeam"].astype(str).str.strip() == "")
         df.loc[mask, "homeTeam"] = inferred_home[mask]
         df["homeTeam"] = df["homeTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["homeTeam"] = df["homeTeam"].apply(_strip_team_suffix)
     elif "home_team_guess" in df.columns:
         inferred_home = df.apply(lambda r: _infer_pair_from_title(r)[0], axis=1)
         mask = df["home_team_guess"].isna() | (df["home_team_guess"].astype(str).str.strip() == "")
         df.loc[mask, "home_team_guess"] = inferred_home[mask]
         df["home_team_guess"] = df["home_team_guess"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["home_team_guess"] = df["home_team_guess"].apply(_strip_team_suffix)
 
     if "awayTeam" in df.columns:
         inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
         mask = df["awayTeam"].isna() | (df["awayTeam"].astype(str).str.strip() == "")
         df.loc[mask, "awayTeam"] = inferred_away[mask]
         df["awayTeam"] = df["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["awayTeam"] = df["awayTeam"].apply(_strip_team_suffix)
     elif "away_team_guess" in df.columns:
         inferred_away = df.apply(lambda r: _infer_pair_from_title(r)[1], axis=1)
         mask = df["away_team_guess"].isna() | (df["away_team_guess"].astype(str).str.strip() == "")
         df.loc[mask, "away_team_guess"] = inferred_away[mask]
         df["away_team_guess"] = df["away_team_guess"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["away_team_guess"] = df["away_team_guess"].apply(_strip_team_suffix)
 
     return df
 
@@ -443,10 +514,25 @@ def _load_schedule() -> Optional[pd.DataFrame]:
 
 def _prepare_schedule_for_join(sched: pd.DataFrame) -> pd.DataFrame:
     df = sched.copy()
-    df["date_key"] = pd.to_datetime(df["startDateEastern"], errors="coerce").dt.strftime("%Y-%m-%d")
+    aliases = _load_team_aliases()
+
+    # Canonicalize & strip suffix on schedule side too
+    if "homeTeam" in df.columns:
+        df["homeTeam"] = df["homeTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["homeTeam"] = df["homeTeam"].apply(_strip_team_suffix)
+    if "awayTeam" in df.columns:
+        df["awayTeam"] = df["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+        df["awayTeam"] = df["awayTeam"].apply(_strip_team_suffix)
+
+    # 🔧 NEW: carry forward ranks so later games inherit the latest known rank
+    df = _carry_forward_ranks_on_schedule(df)
+
+    # Build join keys
+    df["date_key"]       = pd.to_datetime(df["startDateEastern"], errors="coerce").dt.strftime("%Y-%m-%d")
     df["home_key_sched"] = df["homeTeam"].map(_normalize_team_name)
     df["away_key_sched"] = df["awayTeam"].map(_normalize_team_name)
     return df
+
 
 
 def _prepare_snapshots_for_join(snap: pd.DataFrame) -> pd.DataFrame:
@@ -807,6 +893,9 @@ def _fm_event_key(date_key, home, away):
 def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
     if snap.empty:
         return snap.copy()
+def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
+    if snap.empty:
+        return snap.copy()
 
     if not os.path.exists(schedule_csv_path):
         print(f"[fallback] schedule not found: {schedule_csv_path}")
@@ -814,7 +903,7 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
 
     sched = pd.read_csv(schedule_csv_path)
 
-    # harmonize required columns
+    # Harmonize required columns
     rename_try = {
         "startDateEastern": ["startDateEastern", "start_date_eastern", "startDate", "game_date", "date_local"],
         "homeTeam": ["homeTeam", "home_team", "home"],
@@ -837,6 +926,14 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
         if c not in sched.columns:
             sched[c] = pd.NA
 
+    # 🔧 Canonicalize WEEKLY names the same as snapshots (aliases + strip 'Football')
+    aliases = _load_team_aliases()
+    sched["homeTeam"] = sched["homeTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+    sched["awayTeam"] = sched["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
+    sched["homeTeam"] = sched["homeTeam"].apply(_strip_team_suffix)
+    sched["awayTeam"] = sched["awayTeam"].apply(_strip_team_suffix)
+
+    # Keys
     sched["startDateEastern"] = pd.to_datetime(sched["startDateEastern"], errors="coerce")
     sched["date_key"] = sched["startDateEastern"].dt.strftime("%Y-%m-%d")
     sched["__sched_id"] = sched.index
@@ -867,19 +964,18 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
                 row[col] = src
         return row
 
-    # Figure out which rows still need enrichment
+    # Which rows still need enrichment?
     need_idx = out[~out.apply(_fm_row_is_matched, axis=1)].index.tolist()
 
     assigned = set()
     used_sched_ids = set()
 
-    # --- Pass 0: exact event-key match (re-use allowed for duplicates of the same event) ---
+    # Pass 0: exact event-key match
     for i in list(need_idx):
         r = out.loc[i]
         dk = r.get("date_key")
         if pd.isna(dk):
             continue
-        # Use home/away if present, else try from title
         ek = None
         if isinstance(r.get("homeTeam"), str) and isinstance(r.get("awayTeam"), str):
             ek = _fm_event_key(dk, r["homeTeam"], r["awayTeam"])
@@ -888,7 +984,6 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
             if th and ta:
                 ek = _fm_event_key(dk, th, ta)
         if ek and ek in sched_idx:
-            # choose best orientation among candidates
             best = None
             best_score = -1
             best_flip = False
@@ -902,7 +997,7 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
                 used_sched_ids.add(int(best["__sched_id"]))
     need_idx = [i for i in need_idx if i not in assigned]
 
-    # --- Pass 1: per-date unique remainder (avoid reusing ids across different events) ---
+    # Pass 1: per-date unique remainder
     for date_key, grp in out.loc[need_idx].groupby("date_key").groups.items():
         idxs = list(grp)
         if not idxs:
@@ -916,7 +1011,7 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
             used_sched_ids.add(int(sched_cands.iloc[0]["__sched_id"]))
     need_idx = [i for i in need_idx if i not in assigned]
 
-    # --- Pass 2: best-score per-date (exclude used to avoid collisions) ---
+    # Pass 2: best-score per-date
     for i in need_idx:
         r = out.loc[i]
         dk = r.get("date_key")
@@ -935,6 +1030,12 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
         used_sched_ids.add(int(best[2]["__sched_id"]))
 
     out.drop(columns=["date_key"], inplace=True, errors="ignore")
+
+    # Ensure ranks are numeric after fills
+    for c in ("homeTeamRank","awayTeamRank","capacity","week"):
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce")
+
     return out
 
 
