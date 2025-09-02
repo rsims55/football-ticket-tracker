@@ -1,0 +1,13 @@
+feature,mean_importance,std_importance
+days_until_game,0.0,0.0
+capacity,0.0,0.0
+neutralSite,0.0,0.0
+conferenceGame,0.0,0.0
+isRivalry,0.0,0.0
+isRankedMatchup,0.0,0.0
+homeTeamRank,0.0,0.0
+awayTeamRank,0.0,0.0
+week,0.0,0.0
+collectionSlot,0.0,0.0
+homeConference,-0.012237519370288297,0.0196023547961167
+awayConference,-0.024990985509765907,0.01546552271655771
