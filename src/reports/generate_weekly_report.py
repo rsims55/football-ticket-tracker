@@ -86,49 +86,121 @@ def _robust_load_model(path: str):
 # -----------------------
 # Helpers
 # -----------------------
-def _compose_game_label(row: pd.Series) -> str:
-    # Try a bunch of common field names; fall back to event_id
-    home_keys = ["homeTeam", "home_team", "home", "homeTeamName", "homeSchool", "home_name"]
-    away_keys = ["awayTeam", "away_team", "away", "awayTeamName", "awaySchool", "away_name"]
 
-    def _first(keys):
-        for k in keys:
-            v = row.get(k, "")
-            if pd.notna(v) and str(v).strip():
-                return str(v).strip()
+SEASON_YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
+SCHEDULE_CSV = os.getenv("SCHEDULE_CSV", f"data/weekly/full_{SEASON_YEAR}_schedule.csv")
+
+_SCHED_CACHE = None
+_ID_TO_TEAMS = None
+
+def _normalize_id(x) -> str:
+    """Coerce any id-like value to a clean string key."""
+    if pd.isna(x):
         return ""
+    s = str(x).strip()
+    # strip common CSV artifacts like .0 from floats
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
 
-    home = _first(home_keys)
-    away = _first(away_keys)
+def _load_schedule_df() -> pd.DataFrame | None:
+    """Load season schedule once; build id -> (homeTeam, awayTeam) map."""
+    global _SCHED_CACHE, _ID_TO_TEAMS
+    if _SCHED_CACHE is not None:
+        return _SCHED_CACHE
 
-    if home or away:
-        return f"{home} vs {away}".strip(" vs ")
-    # fallback: conferences, then event_id
-    hc = str(row.get("homeConference", "") or "").strip()
-    ac = str(row.get("awayConference", "") or "").strip()
-    if hc or ac:
-        return f"{hc} vs {ac}".strip(" vs ")
-    eid = row.get("event_id", "")
-    return f"event {eid}" if pd.notna(eid) and str(eid) else ""
+    if not os.path.exists(SCHEDULE_CSV):
+        print(f"⚠️ schedule not found at '{SCHEDULE_CSV}'")
+        return None
 
+    try:
+        df = pd.read_csv(SCHEDULE_CSV)
+
+        # Normalize ID column name to 'id' if needed
+        if "id" not in df.columns:
+            for c in ("event_id", "eventId", "tickpick_event_id", "EventID"):
+                if c in df.columns:
+                    df = df.rename(columns={c: "id"})
+                    break
+
+        if "id" not in df.columns:
+            print(f"⚠️ schedule at '{SCHEDULE_CSV}' is missing an id-like column "
+                  f"(has: {list(df.columns)[:12]}...)")
+            return None
+
+        # Ensure required team columns exist
+        for need in ("homeTeam", "awayTeam"):
+            if need not in df.columns:
+                print(f"⚠️ schedule missing column '{need}' (has: {list(df.columns)[:12]}...)")
+                return None
+
+        # Normalize ids to strings and build lookup dict
+        df["id"] = df["id"].map(_normalize_id)
+        _ID_TO_TEAMS = (
+            df[["id", "homeTeam", "awayTeam"]]
+            .dropna(subset=["id"])
+            .drop_duplicates("id")
+            .set_index("id")[["homeTeam", "awayTeam"]]
+            .to_dict("index")
+        )
+        print(f"🗂  schedule loaded: {len(df)} rows for {SEASON_YEAR}, "
+              f"unique ids: {len(_ID_TO_TEAMS)} from '{SCHEDULE_CSV}'")
+        _SCHED_CACHE = df
+        return df
+    except Exception as e:
+        print(f"⚠️ failed reading schedule '{SCHEDULE_CSV}': {e}")
+        return None
+
+def _row_any_id(row: pd.Series) -> str:
+    """Find an id-like column in the current row and normalize to string."""
+    for k in ("id", "event_id", "eventId", "tickpick_event_id", "EventID"):
+        if k in row and pd.notna(row[k]):
+            return _normalize_id(row[k])
+    return ""
+
+def _compose_game_label(row: pd.Series) -> str:
+    """
+    Map row -> 'homeTeam vs awayTeam' by ID using the season schedule.
+    Strictly prioritizes schedule.csv mapping for consistency.
+    """
+    sched = _load_schedule_df()
+    rid = _row_any_id(row)
+
+    # Prefer schedule mapping
+    if rid and _ID_TO_TEAMS is not None:
+        rec = _ID_TO_TEAMS.get(rid)
+        if rec:
+            h = (rec.get("homeTeam") or "").strip()
+            a = (rec.get("awayTeam") or "").strip()
+            if h or a:
+                return f"{h} vs {a}"
+
+    # Fallback: use names on the row if present
+    h2 = str(row.get("homeTeam", "") or "").strip()
+    a2 = str(row.get("awayTeam", "") or "").strip()
+    if h2 or a2:
+        return f"{h2} vs {a2}"
+
+    # Last resort: show id so we can see mismatches
+    if rid:
+        return f"id {rid}"
+    return ""
 
 def _sort_for_table(df: pd.DataFrame) -> pd.DataFrame:
     """Sort rows for table rendering: highest absolute $ error first, then keep others."""
     if "abs_error" in df.columns:
-        # numeric coerce just in case
         s = pd.to_numeric(df["abs_error"], errors="coerce")
-        return df.assign(_abs_error_num=s).sort_values("_abs_error_num", ascending=False, na_position="last").drop(columns=["_abs_error_num"])
+        return df.assign(_abs_error_num=s).sort_values(
+            "_abs_error_num", ascending=False, na_position="last"
+        ).drop(columns=["_abs_error_num"])
     return df
-
 
 def _md_rel(from_dir: str, path: str) -> str:
     p = os.path.relpath(path, start=from_dir)
     return p.replace("\\", "/")
 
-
 def _parse_dt(s):
     return pd.to_datetime(s, errors="coerce")
-
 
 def _load_eval_df() -> pd.DataFrame:
     """
@@ -170,52 +242,6 @@ def _load_eval_df() -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df
-
-
-def get_recent_evaluations(window_days: int = WEEK_WINDOW_DAYS) -> pd.DataFrame:
-    df = _load_eval_df()
-    if df.empty or "startDateEastern" not in df.columns:
-        return pd.DataFrame()
-
-    cutoff = datetime.now().date() - timedelta(days=window_days)
-    recent = df[df["startDateEastern"] >= cutoff].copy()
-
-    # Sort by largest price misses first (stable key if present)
-    if "abs_error" in recent.columns:
-        recent.sort_values(by="abs_error", ascending=False, inplace=True)
-
-    return recent
-
-
-def _format_currency(x) -> str:
-    try:
-        return f"${float(x):.2f}"
-    except Exception:
-        return ""
-
-
-def _format_dt(dt) -> str:
-    if pd.isna(dt):
-        return ""
-    return pd.to_datetime(dt).strftime("%Y-%m-%d %H:%M")
-
-
-def _humanize_feature(name: str, importance: float) -> str:
-    if "__" in name:
-        prefix, base = name.split("__", 1)
-    else:
-        prefix, base = "", name
-
-    if prefix == "num":
-        return f"- {base.replace('_',' ')} was important, contributing {importance:.1%} to predictions."
-    elif prefix == "cat":
-        if "Conference_" in base:
-            col, val = base.split("_", 1)
-            return f"- Teams from the {val} {col.replace('Conference','conference').lower()} mattered, contributing {importance:.1%}."
-        else:
-            return f"- {base.replace('_',' ')} category influenced predictions (~{importance:.1%})."
-    else:
-        return f"- {base.replace('_',' ')} influenced predictions (~{importance:.1%})."
 
 
 # -----------------------

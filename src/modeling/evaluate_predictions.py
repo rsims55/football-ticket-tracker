@@ -61,6 +61,7 @@ SNAPSHOTS_PATH   = _resolve_file("SNAPSHOTS_PATH",   Path("data") / "daily"     
 ERROR_LOG_PATH   = _resolve_file("ERROR_LOG_PATH",   Path("data") / "predicted" / "evaluation_metrics.csv")
 MERGED_OUTPUT    = _resolve_file("MERGED_OUTPUT",    Path("data") / "predicted" / "merged_eval_results.csv")
 TRAIN_SCRIPT     = PROJ_DIR / "src" / "modeling" / "train_price_model.py"
+PREDICT_SCRIPT     = PROJ_DIR / "src" / "modeling" / "predict_price.py"
 
 print("[evaluate_predictions] Paths resolved:")
 print(f"  PROJ_DIR:         {PROJ_DIR}")
@@ -316,6 +317,7 @@ def evaluate_predictions():
         )
         try:
             subprocess.run([sys.executable, str(TRAIN_SCRIPT)], check=True)
+            subprocess.run([sys.executable, str(PREDICT_SCRIPT)], check=True)
         except subprocess.CalledProcessError as e:
             print(f"❌ Retrain failed: {e}")
     else:
