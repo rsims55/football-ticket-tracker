@@ -25,11 +25,12 @@ Run:
 """
 
 import os
-from datetime import datetime, timedelta
 import warnings
-import pandas as pd
+from datetime import datetime, timedelta
+
 import joblib
 import numpy as np
+import pandas as pd
 
 # -----------------------
 # Paths / Config
@@ -57,31 +58,25 @@ IMG_FMT = os.getenv("REPORT_IMG_FMT", "png")  # png|svg
 
 TZ_LABEL = "ET"  # display-only label for times
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Compatibility: monkey-patch for scikit-learn pickle changes
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------
+# sklearn pickle compat
+# -----------------------
 def _ensure_sklearn_unpickle_compat():
     try:
-        import sklearn
-        print(f"[weekly_report] scikit-learn version: {sklearn.__version__}")
-        from sklearn.compose import _column_transformer as ct
+        import sklearn  # noqa: F401
+        from sklearn.compose import _column_transformer as ct  # type: ignore
         if not hasattr(ct, "_RemainderColsList"):
-            class _RemainderColsList(list):
-                """Minimal stand-in for deprecated private sklearn class."""
+            class _RemainderColsList(list):  # minimal shim
                 pass
             ct._RemainderColsList = _RemainderColsList
     except Exception as e:
-        # Non-fatal; loading may still work
         print(f"[weekly_report] compat patch warning: {e}")
-
 
 def _robust_load_model(path: str):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Model file not found: {path}")
     _ensure_sklearn_unpickle_compat()
     return joblib.load(path)
-
 
 # -----------------------
 # Helpers
@@ -163,7 +158,7 @@ def _compose_game_label(row: pd.Series) -> str:
     Map row -> 'homeTeam vs awayTeam' by ID using the season schedule.
     Strictly prioritizes schedule.csv mapping for consistency.
     """
-    sched = _load_schedule_df()
+    _load_schedule_df()  # ensure cache filled
     rid = _row_any_id(row)
 
     # Prefer schedule mapping
@@ -209,12 +204,22 @@ def _load_eval_df() -> pd.DataFrame:
       startDateEastern, predicted_lowest_price, actual_lowest_price, abs_error, percent_error
       # === NEW: TIMING ===
       predicted_optimal_dt, actual_lowest_dt, timing_abs_error_hours, timing_signed_error_hours
+      # (ideally) id to link games back to schedule
     """
     path = MERGED_OUTPUT if os.path.exists(MERGED_OUTPUT) else EVAL_LOG_PATH
     if not os.path.exists(path):
         return pd.DataFrame()
 
     df = pd.read_csv(path)
+
+    # Normalize any id-like column so row mapping works
+    if "id" in df.columns:
+        df["id"] = df["id"].map(_normalize_id)
+    else:
+        for c in ("event_id", "eventId", "tickpick_event_id", "EventID"):
+            if c in df.columns:
+                df["id"] = df[c].map(_normalize_id)
+                break
 
     # Keep both a date-only version (for window filter) and full datetimes where provided
     if "startDateEastern" in df.columns:
@@ -243,9 +248,36 @@ def _load_eval_df() -> pd.DataFrame:
 
     return df
 
+def _format_currency(x) -> str:
+    try:
+        return f"${float(x):.2f}"
+    except Exception:
+        return ""
+
+def _format_dt(dt) -> str:
+    if pd.isna(dt):
+        return ""
+    return pd.to_datetime(dt).strftime("%Y-%m-%d %H:%M")
+
+def _humanize_feature(name: str, importance: float) -> str:
+    if "__" in name:
+        prefix, base = name.split("__", 1)
+    else:
+        prefix, base = "", name
+
+    if prefix == "num":
+        return f"- {base.replace('_',' ')} was important, contributing {importance:.1%} to predictions."
+    elif prefix == "cat":
+        if "Conference_" in base:
+            col, val = base.split("_", 1)
+            return f"- Teams from the {val} {col.replace('Conference','conference').lower()} mattered, contributing {importance:.1%}."
+        else:
+            return f"- {base.replace('_',' ')} category influenced predictions (~{importance:.1%})."
+    else:
+        return f"- {base.replace('_',' ')} influenced predictions (~{importance:.1%})."
 
 # -----------------------
-# Model & feature plumbing (unchanged)
+# Model & feature plumbing
 # -----------------------
 def _unwrap_model(model):
     from sklearn.pipeline import Pipeline
@@ -266,7 +298,6 @@ def _unwrap_model(model):
 
     return pipeline, preprocessor, estimator
 
-
 def _expanded_feature_names(preprocessor, estimator, importances_len=None):
     names = None
     if preprocessor is not None and hasattr(preprocessor, "get_feature_names_out"):
@@ -284,7 +315,6 @@ def _expanded_feature_names(preprocessor, estimator, importances_len=None):
             names = None
     return np.asarray(names) if names is not None else None
 
-
 def _original_feature_names(preprocessor, estimator):
     from sklearn.compose import ColumnTransformer
     orig = []
@@ -292,9 +322,7 @@ def _original_feature_names(preprocessor, estimator):
     if preprocessor is not None and isinstance(preprocessor, ColumnTransformer):
         try:
             for name, trans, cols in preprocessor.transformers_:
-                if cols == "drop":
-                    continue
-                if cols == "remainder":
+                if cols == "drop" or cols == "remainder":
                     continue
                 if isinstance(cols, (list, tuple, np.ndarray)):
                     for c in cols:
@@ -314,7 +342,6 @@ def _original_feature_names(preprocessor, estimator):
             ordered.append(c)
     return ordered
 
-
 def _coerce_booleans_inplace(X: pd.DataFrame, cols):
     true_set = {"true", "1", "yes", "y", "t"}
     false_set = {"false", "0", "no", "n", "f"}
@@ -329,7 +356,6 @@ def _coerce_booleans_inplace(X: pd.DataFrame, cols):
             except Exception:
                 pass
 
-
 def _guess_kind(name: str) -> str:
     n = name.lower()
     if any(k in n for k in ["days_until", "rank", "capacity", "week", "hour", "listing", "count"]):
@@ -341,7 +367,6 @@ def _guess_kind(name: str) -> str:
     if n.startswith("cat__") or n.startswith("cat_"):
         return "cat"
     return "cat"
-
 
 def _complete_required_columns(X: pd.DataFrame,
                                required_cols: list[str],
@@ -358,7 +383,6 @@ def _complete_required_columns(X: pd.DataFrame,
             Xc[c] = "__MISSING__"
     cols = [c for c in required_cols] + [c for c in Xc.columns if c not in required_cols]
     return Xc[cols]
-
 
 def _load_perm_dataset(orig_feature_list, target_col="actual_lowest_price"):
     candidates = [
@@ -402,9 +426,8 @@ def _load_perm_dataset(orig_feature_list, target_col="actual_lowest_price"):
 
     return X, y, df
 
-
 # -----------------------
-# Existing: feature_importance (from model)
+# Feature importance
 # -----------------------
 def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
     if not os.path.exists(MODEL_PATH):
@@ -473,7 +496,6 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
 
     return "\n".join(md), weak_features
 
-
 def _safe_rmse(df: pd.DataFrame) -> float:
     if {"predicted_lowest_price", "actual_lowest_price"}.issubset(df.columns):
         diff2 = (df["predicted_lowest_price"] - df["actual_lowest_price"]) ** 2
@@ -481,7 +503,6 @@ def _safe_rmse(df: pd.DataFrame) -> float:
     if "abs_error" in df.columns:
         return float(np.sqrt(np.nanmean((df["abs_error"]) ** 2)))
     return float("nan")
-
 
 # -----------------------
 # Permutation Importance
@@ -491,7 +512,6 @@ def run_permutation_importance(model, X, y):
 
     if X is None or X.empty:
         return None
-
     if y is None or y.isna().all():
         return None
 
@@ -512,13 +532,11 @@ def run_permutation_importance(model, X, y):
     }).sort_values("mean_importance", ascending=False)
     return df
 
-
 # -----------------------
 # PDP generation
 # -----------------------
 def _sanitize_filename(s: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s)
-
 
 def generate_pdp_plots(model, X, feature_names, out_dir, prefix="pdp"):
     created = []
@@ -552,7 +570,6 @@ def generate_pdp_plots(model, X, feature_names, out_dir, prefix="pdp"):
 
     return created
 
-
 # -----------------------
 # SHAP diagnostics
 # -----------------------
@@ -564,7 +581,6 @@ def _map_expanded_to_original(expanded_names):
             base = base.rsplit("_", 1)[0]
         base_to_idx.setdefault(base, []).append(i)
     return base_to_idx
-
 
 def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_dir, prefix="shap"):
     if X_orig is None or X_orig.empty:
@@ -591,8 +607,9 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
         return None, None, []
 
     try:
-        import scipy
-        if scipy.sparse.issparse(X_trans):
+        import scipy  # noqa: F401
+        from scipy import sparse as _sp  # type: ignore
+        if _sp.issparse(X_trans):
             X_trans = X_trans.toarray()
     except Exception:
         X_trans = X_trans.toarray() if hasattr(X_trans, "toarray") else np.asarray(X_trans)
@@ -645,7 +662,6 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
         rep_idx = int(sorted(idxs, key=lambda i: mean_abs[i], reverse=True)[0])
         try:
             import matplotlib.pyplot as plt
-            fig = plt.figure(figsize=(6, 4))
             import shap as _shap  # reuse
             _shap.dependence_plot(
                 rep_idx, shap_values, X_trans,
@@ -662,10 +678,23 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
 
     return agg_path, summary_plot_path, per_feature_paths
 
-
 # -----------------------
 # Report builder
 # -----------------------
+def get_recent_evaluations(window_days: int = WEEK_WINDOW_DAYS) -> pd.DataFrame:
+    df = _load_eval_df()
+    if df.empty or "startDateEastern" not in df.columns:
+        return pd.DataFrame()
+
+    cutoff = datetime.now().date() - timedelta(days=window_days)
+    recent = df[df["startDateEastern"] >= cutoff].copy()
+
+    # Sort by largest price misses first (stable key if present)
+    if "abs_error" in recent.columns:
+        recent.sort_values(by="abs_error", ascending=False, inplace=True)
+
+    return recent
+
 def build_report() -> str:
     today_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -685,7 +714,7 @@ def build_report() -> str:
     fi_text, weak_features = get_feature_importance()
     report.append(fi_text + "\n")
 
-    # 1b) Permutation / PDP / SHAP (unchanged)
+    # 1b) Permutation / PDP / SHAP
     perm_csv_path = None
     if ENABLE_ADV_DIAGNOSTICS and os.path.exists(MODEL_PATH):
         try:
@@ -752,6 +781,7 @@ def build_report() -> str:
         # Save weekly slice (including timing columns if present)
         cols_to_save = [
             c for c in [
+                "id",  # keep id for downstream joins
                 "startDateEastern", "homeTeam", "awayTeam",
                 "predicted_lowest_price", "actual_lowest_price",
                 "abs_error", "percent_error", "weekNumber",
@@ -796,13 +826,6 @@ def build_report() -> str:
         # 3) Table (price + timing)
         has_timing = {"predicted_optimal_dt", "actual_lowest_dt", "timing_abs_error_hours"}.issubset(df.columns)
 
-        # Always sort the view we print: highest dollar abs error first
-        def _sort_for_table(_df: pd.DataFrame) -> pd.DataFrame:
-            if "abs_error" in _df.columns:
-                s = pd.to_numeric(_df["abs_error"], errors="coerce")
-                return _df.assign(_abs_error_num=s).sort_values("_abs_error_num", ascending=False, na_position="last").drop(columns=["_abs_error_num"])
-            return _df
-
         table_df = _sort_for_table(df.copy())
 
         if has_timing:
@@ -815,7 +838,7 @@ def build_report() -> str:
             report.append("|------|-----------|-----------|--------|-----------|---------|")
 
         for _, row in table_df.iterrows():
-            game = _compose_game_label(row)
+            game = _compose_game_label(row)  # <-- now pulls Home vs Away via schedule id
             date_str = row.get("startDateEastern", "")
             p = row.get("predicted_lowest_price", float("nan"))
             a = row.get("actual_lowest_price", float("nan"))
@@ -837,7 +860,6 @@ def build_report() -> str:
                     f"| {game} | {date_str} | {_format_currency(p)} | {_format_currency(a)} | "
                     f"{_format_currency(ae)} | {pe_pct} |"
                 )
-
 
         # 4) Suggestions
         report.append("\n## 💡 Suggestions")
@@ -877,7 +899,6 @@ def build_report() -> str:
         print(f"⚠️  Skipping email send (not configured or failed): {e}")
 
     return report_md_path
-
 
 if __name__ == "__main__":
     build_report()
