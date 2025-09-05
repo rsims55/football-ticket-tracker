@@ -1,7 +1,8 @@
 # src/fetchers/rankings_fetcher.py
 from __future__ import annotations
 
-import os, re
+import os
+import re
 from datetime import datetime
 from typing import Optional, List, Tuple, Dict
 
@@ -15,13 +16,15 @@ load_dotenv()
 WEEKLY_DIR = os.path.join("data", "weekly")
 os.makedirs(WEEKLY_DIR, exist_ok=True)
 
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-      "AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/124.0 Safari/537.36")
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0 Safari/537.36"
+)
 DEBUG = os.getenv("RANKINGS_DEBUG", "0") == "1"
 
 
-class RankingsFetcher:
+class RankingsFetchera:
     """
     Wikipedia-only strict priority:
       1) Current CFP (#CFP_rankings / variants)
@@ -80,7 +83,7 @@ class RankingsFetcher:
         if soup is None:
             return None
 
-        # 1) Section-targeted: scan ALL wikitables inside the section until the NEXT <h2>
+        # 1) Section-targeted: scan ALL tables inside the section until the NEXT <h2>
         for sid in self.SECTION_IDS.get(label, []):
             df = self._parse_section_scan_wikitables(soup, sid, prefer_label=label)
             if self._ok(df):
@@ -118,7 +121,9 @@ class RankingsFetcher:
                 r.raise_for_status()
                 html = r.text
 
-            if DEBUG and not local:
+            # Only save HTML when explicitly requested
+            SAVE_HTML = os.getenv("RANKINGS_SAVE_HTML", "0") == "1"
+            if DEBUG and not local and SAVE_HTML:
                 out = os.path.join(WEEKLY_DIR, f"wiki_{year}.html")
                 try:
                     with open(out, "w", encoding="utf-8") as f:
@@ -126,58 +131,61 @@ class RankingsFetcher:
                     print(f"[rankings] saved HTML → {out}")
                 except Exception as e:
                     print(f"[rankings] could not write HTML: {e}")
+
             return BeautifulSoup(html, "lxml")
         except Exception as e:
             if DEBUG:
                 print(f"[rankings] fetch failed for {year}: {e}")
             return None
 
-    # ---- Section scan: walk siblings until next <h2>; DO NOT stop at <h3> ----
+    # ---- Section scan: robust forward walk until next <h2> ----
     def _parse_section_scan_wikitables(
         self, soup: BeautifulSoup, section_id: str, prefer_label: str
     ) -> Optional[pd.DataFrame]:
+        """
+        Robust scan: starting at the <h2>/<h3> for the given section_id, iterate forward
+        through .next_elements until the next <h2>. Parse any <table> encountered
+        (direct or nested) without requiring class='wikitable'.
+        """
         anchor = soup.find(id=section_id)
         if anchor is None:
             return None
 
         heading = anchor if anchor.name in ("h2", "h3") else anchor.find_parent(["h2", "h3"]) or anchor
+        if heading is None:
+            return None
 
-        node = heading.next_sibling
         tried = 0
-        while node is not None:
-            if isinstance(node, Tag) and node.name == "h2":
-                break
+        if DEBUG:
+            print(f"[rankings] DEBUG: forward-scan from heading <{heading.name} id='{section_id}'> (prefer='{prefer_label}')")
+
+        for node in heading.next_elements:
             if isinstance(node, Tag):
-                # direct table
-                if node.name == "table" and "wikitable" in (node.get("class") or []):
+                if node is not heading and node.name == "h2":
+                    break
+                if node.name == "table":
                     tried += 1
+                    if DEBUG:
+                        print(f"[rankings] DEBUG: parse attempt on table (classes={node.get('class')})")
                     week_num, poll_date = self._meta_for_table(node, prefer_label)
                     df = self._parse_rank_table(node, week_num, poll_date, prefer_label)
                     if self._ok(df):
                         return df
-                # nested tables inside wrappers
-                for tbl in node.find_all("table", class_="wikitable"):
-                    tried += 1
-                    week_num, poll_date = self._meta_for_table(tbl, prefer_label)
-                    df = self._parse_rank_table(tbl, week_num, poll_date, prefer_label)
-                    if self._ok(df):
-                        return df
-            node = node.next_sibling
 
         if DEBUG and tried:
-            print(f"[rankings] section '{section_id}' scanned {tried} wikitables → none parsed")
+            print(f"[rankings] section '{section_id}' scanned {tried} tables → none parsed")
         return None
 
     # ---- Label-aware page-wide fallback (prevents AP being mis-tagged as CFP) ----
     def _page_wide_best_table(self, soup: BeautifulSoup, prefer_label: str) -> Optional[pd.DataFrame]:
-        for tbl in soup.find_all("table", class_="wikitable"):
+        for tbl in soup.find_all("table"):
             probe, n = self._try_table_quick(tbl)
             if probe is None:
                 continue
 
             head_text = self._nearest_heading_text(tbl).lower()
             is_cfp = ("cfp" in head_text) or ("playoff" in head_text)
-            ap_col_idx = self._ap_preseason_col_index(tbl)
+            ap_col_idx, _ap_week = self._ap_week1_or_pre_col_index(tbl)
             is_ap = (" ap" in f" {head_text} ") or (ap_col_idx >= 1)
 
             if prefer_label == "CFP" and not is_cfp:
@@ -228,35 +236,44 @@ class RankingsFetcher:
 
         return week_num, poll_date
 
-    # ---- AP matrix helper (choose 'Preseason' column explicitly) ----
-    def _ap_preseason_col_index(self, table: Tag) -> int:
-        """
-        For AP matrix tables (header has 'Preseason', 'Week 1', ...),
-        return the absolute column index for the 'Preseason' column.
-        If not found, return -1.
-        """
+    # ---- AP matrix helpers (prefer Week 1 over Preseason) ----
+    def _ap_find_header_row(self, table: Tag) -> Optional[Tag]:
         thead = table.find("thead")
-        header_row = None
         if thead:
-            header_row = thead.find("tr")
-        if not header_row:
-            tbody = table.find("tbody") or table
-            rows = tbody.find_all("tr")
-            if rows:
-                for r in rows:
-                    ths = r.find_all("th")
-                    if len(ths) >= 3:  # rank + many week headers
-                        header_row = r
-                        break
-        if not header_row:
-            return -1
+            hr = thead.find("tr")
+            if hr:
+                return hr
+        tbody = table.find("tbody") or table
+        for r in tbody.find_all("tr"):
+            ths = r.find_all("th")
+            if len(ths) >= 3:  # rank + multiple week headers
+                return r
+        return None
 
-        headers = header_row.find_all(["th", "td"])
+    def _ap_week1_or_pre_col_index(self, table: Tag) -> Tuple[int, Optional[int]]:
+        """
+        Return (column_index, week_num) for AP matrix:
+          - Prefer 'Week 1' → (idx, 1)
+          - Else 'Preseason' → (idx, 0)
+          - Else (-1, None)
+        """
+        hr = self._ap_find_header_row(table)
+        if not hr:
+            return -1, None
+        headers = hr.find_all(["th", "td"])
+        pre_idx = -1
+        wk1_idx = -1
         for idx, h in enumerate(headers):
             t = h.get_text(" ", strip=True).lower()
             if "preseason" in t:
-                return idx
-        return -1
+                pre_idx = idx
+            if re.search(r"\bweek\s*1\b", t):
+                wk1_idx = idx
+        if wk1_idx >= 0:
+            return wk1_idx, 1
+        if pre_idx >= 0:
+            return pre_idx, 0
+        return -1, None
 
     # ---- Table parsers ----
     def _parse_rank_table(
@@ -270,18 +287,19 @@ class RankingsFetcher:
         rows = tbody.find_all("tr")
         out: List[dict] = []
 
-        # Detect AP matrix header once per table
-        ap_col = None
+        # Detect AP matrix column once per table: prefer Week 1 else Preseason
+        ap_col, ap_week = (None, None)
         if prefer_label == "AP":
-            ap_col = getattr(table, "_ap_pre_col", None)
-            if ap_col is None:
-                ap_col = self._ap_preseason_col_index(table)
-                setattr(table, "_ap_pre_col", ap_col)
+            cached = getattr(table, "_ap_wk1orpre_colweek", None)
+            if cached is None:
+                ap_col, ap_week = self._ap_week1_or_pre_col_index(table)
+                setattr(table, "_ap_wk1orpre_colweek", (ap_col, ap_week))
+            else:
+                ap_col, ap_week = cached
 
-        # If heading didn't carry 'Preseason', but this is an AP matrix and we're using the
-        # 'Preseason' column, force week = 0 as requested.
-        if prefer_label == "AP" and week_num is None and ap_col is not None and ap_col >= 1:
-            week_num = 0
+        # If heading didn't provide week info, use the detected AP week
+        if prefer_label == "AP" and ap_week is not None:
+            week_num = ap_week
 
         for tr in rows:
             cells = tr.find_all(["th", "td"])  # allow nested
@@ -337,6 +355,7 @@ class RankingsFetcher:
 
     def _extract_first_place_votes(self, s: str) -> int:
         m = re.search(r"\((\d{1,3})\)", s)
+        # Ignore state abbreviations like (FL), (UT), etc.
         if m and not re.search(r"\([A-Z]{2}\)", s):
             try:
                 return int(m.group(1))
@@ -349,7 +368,7 @@ class RankingsFetcher:
         rows = tbody.find_all("tr")
         out: List[dict] = []
 
-        ap_col = self._ap_preseason_col_index(table)
+        ap_col, _ = self._ap_week1_or_pre_col_index(table)
 
         for tr in rows:
             cells = tr.find_all(["th", "td"])
@@ -387,8 +406,9 @@ class RankingsFetcher:
 
     # ---- Cleaning ----
     def _clean_team(self, s: str) -> str:
-        s = re.sub(r"\[.*?\]", "", s)                  # remove footnotes like [1]
-        s = re.sub(r"\(\s*\d+(?:-\d+)?\s*\)", "", s)   # remove (25) or (10-2) — keep (FL) etc.
+        s = re.sub(r"\[.*?\]", "", s)  # remove footnotes like [1]
+        # remove (25), (10-2), and also (14 2) formatting
+        s = re.sub(r"\(\s*\d+(?:[-\s]\d+)?\s*\)", "", s)
         s = s.replace("—", " ").replace("–", " ")
         s = re.sub(r"\s+", " ", s).strip()
         return s
@@ -396,10 +416,17 @@ class RankingsFetcher:
     def _clean_df(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
         if df is None or df.empty:
             return None
-        df = df.rename(columns={
-            "RK": "rank", "Rank": "rank", "#": "rank",
-            "TEAM": "school", "Team": "school", "School": "school", "team": "school",
-        })
+        df = df.rename(
+            columns={
+                "RK": "rank",
+                "Rank": "rank",
+                "#": "rank",
+                "TEAM": "school",
+                "Team": "school",
+                "School": "school",
+                "team": "school",
+            }
+        )
         if "rank" not in df.columns:
             df = df.rename(columns={df.columns[0]: "rank"})
         if "school" not in df.columns and len(df.columns) >= 2:
@@ -435,4 +462,45 @@ class RankingsFetcher:
                 print(f"[rankings] wrote artifact → {out} ({len(df)} rows)")
         except Exception:
             if DEBUG:
-                import traceback; traceback.print_exc()
+                import traceback
+
+                traceback.print_exc()
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="Fetch latest CFP/AP rankings from Wikipedia.")
+    parser.add_argument("--year", type=int, default=None, help="Season year (defaults to current year)")
+    args = parser.parse_args()
+
+    try:
+        fetcher = RankingsFetchera(year=args.year)
+        df = fetcher.fetch_current_then_prior_cfp_ap()
+        if df is None or df.empty:
+            print("❌ No rankings found (no table parsed).")
+            sys.exit(1)
+
+        print("✅ Parsed rankings:")
+        try:
+            print(df.head(10).to_string(index=False))
+        except Exception:
+            print(df.head(10))
+
+        # Print where it wrote (avoid Series truthiness bug)
+        year_used = fetcher.source_year or (args.year or datetime.now().year)
+        poll_val = "AP"
+        if "poll" in df.columns and len(df) > 0:
+            try:
+                poll_val = str(df["poll"].iloc[0]) if pd.notna(df["poll"].iloc[0]) else "AP"
+            except Exception:
+                pass
+        outpath = os.path.join(WEEKLY_DIR, f"wiki_rankings_{year_used}_{poll_val}.csv")
+        if os.path.exists(outpath):
+            print(f"💾 Wrote CSV → {outpath}")
+        else:
+            print("⚠️ CSV not detected after parse; check write permissions to data/weekly/")
+    except Exception as e:
+        print(f"💣 Runner crashed: {e}")
+        sys.exit(2)
