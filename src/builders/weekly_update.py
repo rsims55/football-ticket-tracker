@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import sys, os, json, time, uuid
+import sys, os, json, time, uuid, re, glob
 from datetime import datetime, date
 from typing import Optional, List, Dict
 from pathlib import Path
@@ -15,8 +15,8 @@ PROJ_DIR = SRC_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from fetchers.schedule_fetcher import ScheduleFetcher
-from fetchers.rankings_fetcher import RankingsFetcher
+# Uses your existing ScheduleFetcher (unchanged behavior)  [ref]
+from fetchers.schedule_fetcher import ScheduleFetcher  # :contentReference[oaicite:3]{index=3}
 
 YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
 
@@ -71,10 +71,16 @@ if not ALIAS_JSON.exists():
     )
 
 with open(ALIAS_JSON, "r", encoding="utf-8") as f:
-    alias_map: Dict[str, str] = json.load(f)
+    alias_map: Dict[str, str] = json.load(f)  # :contentReference[oaicite:4]{index=4}
 
 def get_alias(name: str) -> str:
-    return alias_map.get(name, name)
+    # Exact first; if not found, try with parentheses removed and cleaned punctuation
+    name = (name or "").strip()
+    if name in alias_map:
+        return alias_map[name]
+    # Remove any parenthetical phrases like "(FL)" "(OH)" "(preseason)"
+    stripped = re.sub(r"\s*\([^)]*\)", "", name).strip().rstrip(".")
+    return alias_map.get(stripped, stripped)
 
 def _canon(val):
     if pd.isna(val):
@@ -109,7 +115,7 @@ def _atomic_csv_write(df: pd.DataFrame, path: Path, retries: int = 5, delay: flo
     for i in range(retries):
         try:
             df.to_csv(tmp, index=False)
-            os.replace(tmp, path)  # atomic on Windows if target not locked
+            os.replace(tmp, path)
             return
         except PermissionError as e:
             print(f"⚠️ PermissionError writing {path}: attempt {i+1}/{retries} – {e}")
@@ -151,7 +157,7 @@ if WEEKLY_SCHEDULE_OUT.exists():
 # 1) Fetch schedule
 # ======================
 print("📅 Fetching schedule…")
-schedule_df = ScheduleFetcher(YEAR).fetch().copy()
+schedule_df = ScheduleFetcher(YEAR).fetch().copy()  # :contentReference[oaicite:5]{index=5}
 if "startDateEastern" not in schedule_df.columns:
     raise KeyError("schedule_df is missing 'startDateEastern'")
 
@@ -159,9 +165,8 @@ if "startDateEastern" not in schedule_df.columns:
 schedule_df["homeTeam"] = schedule_df["homeTeam"].apply(_canon)
 schedule_df["awayTeam"] = schedule_df["awayTeam"].apply(_canon)
 
-# Ensure 'week' exists (numeric) and compute the rankings week (schedule.week - 1, min 0)
+# Ensure 'week' exists (numeric)
 _ensure_week_column(schedule_df)
-schedule_df["rankings_week"] = (schedule_df["week"].fillna(1) - 1).clip(lower=0).astype(int)
 
 schedule_df["game_date"] = _to_date_yyyy_mm_dd(schedule_df["startDateEastern"])
 today_d = date.today()
@@ -169,39 +174,80 @@ is_past = schedule_df["game_date"] < today_d
 is_now_or_future = schedule_df["game_date"] >= today_d
 
 # ======================
-# 2) Fetch latest rankings (Wikipedia strict order)
+# 2) Load latest LOCAL rankings CSV from data/weekly/*rankings*.csv
 # ======================
-print("📈 Fetching latest rankings (Wikipedia only; CFP→AP, current→prior)…")
-rf = RankingsFetcher(YEAR)
-rankings_df = rf.fetch_current_then_prior_cfp_ap()
-print(f"   → rankings source: {rf.source} year={rf.source_year}")
+def _load_latest_rankings_csv(weekly_dir: Path) -> pd.DataFrame:
+    # Find any CSV with "rankings" in the name
+    paths = sorted(
+        [Path(p) for p in glob.glob(str(weekly_dir / "*rankings*.csv"))],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not paths:
+        raise FileNotFoundError(f"No rankings CSVs found in {weekly_dir} (looking for *rankings*.csv).")
 
-if rankings_df is None or rankings_df.empty:
-    raise RuntimeError("No Wikipedia rankings found in order: current CFP, current AP, prior CFP, prior AP.")
+    # Use the most recently modified file
+    for p in paths:
+        try:
+            df = pd.read_csv(p)
+            if df is not None and not df.empty:
+                print(f"📊 Using rankings file → {p.name}")
+                return df
+        except Exception as e:
+            print(f"⚠️ Failed reading {p.name}: {e}")
+    raise RuntimeError("Could not load any rankings CSV in weekly directory.")
 
-# Normalize rankings frame:
-# - 'school' → canonical
-# - ensure 'week' exists (int; default 0 if missing)
-rankings_df = rankings_df.copy()
-rankings_df = rankings_df.rename(columns={"school": "rank_school", "rank": "rank"}).copy()
-rankings_df["rank_school_alias"] = rankings_df["rank_school"].apply(_canon)
-if "week" not in rankings_df.columns:
-    rankings_df["week"] = 0
-rankings_df["week"] = pd.to_numeric(rankings_df["week"], errors="coerce").fillna(0).astype(int)
+def _clean_school_name(s: str) -> str:
+    if s is None:
+        return ""
+    # Remove footnotes like [1]
+    s = re.sub(r"\[.*?\]", "", str(s))
+    # Remove first-place votes like "(25)" and any records like "(10-2)"
+    s = re.sub(r"\(\s*\d+(?:[-\s]\d+)?\s*\)", "", s)
+    # Strip any remaining parentheticals (e.g., (FL), (OH))
+    s = re.sub(r"\s*\([^)]*\)", "", s)
+    # Normalize whitespace/punctuation
+    s = s.replace("—", " ").replace("–", " ")
+    s = re.sub(r"\s+", " ", s).strip().rstrip(".")
+    return s
 
-# Build a lookup for (rank_week, team) → rank
-rank_map_df = rankings_df[["week", "rank_school_alias", "rank"]].copy()
-rank_map_df["key"] = rank_map_df["week"].astype(str) + "||" + rank_map_df["rank_school_alias"]
-rank_lookup: Dict[str, int] = dict(zip(rank_map_df["key"], rank_map_df["rank"]))
+print("📈 Loading rankings from local weekly CSVs…")
+rankings_raw = _load_latest_rankings_csv(WEEKLY_DIR)
+
+# Normalize common column names
+col_map = {
+    "RK": "rank", "Rank": "rank", "#": "rank",
+    "TEAM": "school", "Team": "school", "School": "school", "team": "school",
+}
+rankings_raw = rankings_raw.rename(columns={k: v for k, v in col_map.items() if k in rankings_raw.columns})
+
+if not {"rank", "school"}.issubset(rankings_raw.columns):
+    raise KeyError("Rankings CSV must contain at least 'rank' and 'school' columns.")
+
+# Keep only top 25 rows and essential cols
+rankings_df = rankings_raw[["rank", "school"]].copy()
+rankings_df["rank"] = pd.to_numeric(rankings_df["rank"], errors="coerce")
+rankings_df = rankings_df.dropna(subset=["rank"])
+rankings_df["rank"] = rankings_df["rank"].astype(int)
+rankings_df["school"] = rankings_df["school"].astype(str)
+
+# Clean + alias → canonical
+rankings_df["school_clean"] = rankings_df["school"].map(_clean_school_name)
+rankings_df["school_alias"] = rankings_df["school_clean"].map(get_alias)
+
+# Build mapping school_alias (canonicalized) → rank
+rank_lookup: Dict[str, int] = dict(
+    zip(rankings_df["school_alias"].astype(str), rankings_df["rank"].astype(int))
+)
 
 # ======================
-# 3) Initialize/Preserve/Update ranks
+# 3) Initialize/Preserve/Update ranks (NO new rows)
 # ======================
 for col in ["homeTeamRank", "awayTeamRank"]:
     if col not in schedule_df.columns:
         schedule_df[col] = pd.NA
 
-# 3a) Preserve past weeks from previous snapshot
+# 3a) Preserve past games’ ranks from prior snapshot
 if prev_df is not None and {"homeTeamRank", "awayTeamRank", "homeTeam", "awayTeam", "game_date"}.issubset(prev_df.columns):
     prev_past = prev_df[prev_df["game_date"] < today_d][["homeTeam", "awayTeam", "game_date", "homeTeamRank", "awayTeamRank"]]
     schedule_df = schedule_df.merge(
@@ -216,25 +262,21 @@ if prev_df is not None and {"homeTeamRank", "awayTeamRank", "homeTeam", "awayTea
         schedule_df["awayTeamRank"] = schedule_df["awayTeamRank"].mask(is_past, schedule_df["awayTeamRank_prev"])
     schedule_df.drop(columns=["homeTeamRank_prev", "awayTeamRank_prev"], inplace=True, errors="ignore")
 
-# 3b) Update current+future using week-offset rankings
-# Build composite keys: "<rankings_week>||<canonical team>"
-schedule_df["home_key"] = schedule_df["rankings_week"].astype(str) + "||" + schedule_df["homeTeam"]
-schedule_df["away_key"] = schedule_df["rankings_week"].astype(str) + "||" + schedule_df["awayTeam"]
+# 3b) Update ranks for current+future games using the local lookup
+schedule_df["homeTeamRank_new"] = schedule_df["homeTeam"].map(rank_lookup)
+schedule_df["awayTeamRank_new"] = schedule_df["awayTeam"].map(rank_lookup)
 
-schedule_df["homeTeamRank_new"] = schedule_df["home_key"].map(rank_lookup)
-schedule_df["awayTeamRank_new"] = schedule_df["away_key"].map(rank_lookup)
-
-# Assign safely with mask (avoids shape/ndim AssertionError)
+# Assign with mask to avoid altering past rows or shapes
 schedule_df["homeTeamRank"] = schedule_df["homeTeamRank"].mask(is_now_or_future, schedule_df["homeTeamRank_new"])
 schedule_df["awayTeamRank"] = schedule_df["awayTeamRank"].mask(is_now_or_future, schedule_df["awayTeamRank_new"])
 
-schedule_df.drop(columns=["homeTeamRank_new", "awayTeamRank_new", "home_key", "away_key"], inplace=True, errors="ignore")
+schedule_df.drop(columns=["homeTeamRank_new", "awayTeamRank_new"], inplace=True, errors="ignore")
 
-# Boolean flag for ranked vs ranked
+# Boolean flag for ranked vs ranked (kept intact)
 schedule_df["isRankedMatchup"] = schedule_df["homeTeamRank"].notna() & schedule_df["awayTeamRank"].notna()
 
 # ======================
-# 4) Stadium capacity merge
+# 4) Stadium capacity merge (unchanged)
 # ======================
 print("🏟️  Merging stadium capacities…")
 stadiums_path = _first_existing_path(STADIUM_CANDIDATES)

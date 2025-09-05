@@ -24,7 +24,7 @@ UA = (
 DEBUG = os.getenv("RANKINGS_DEBUG", "0") == "1"
 
 
-class RankingsFetchera:
+class RankingsFetchers:
     """
     Wikipedia-only strict priority:
       1) Current CFP (#CFP_rankings / variants)
@@ -212,21 +212,33 @@ class RankingsFetchera:
     def _meta_for_table(self, tbl: Tag, prefer_label: str) -> Tuple[Optional[int], Optional[str]]:
         """
         Derive (week_num, poll_date) from the nearest heading, when possible.
-        - Preseason → week 0
-        - 'Week N'  → week N
+        Rules:
+        - If header has 'Preseason' → week = 0
+        - If header has 'Week N (Final)' → week = max(N-1, 0)
+        - Else if header has 'Week N' → week = N
+        - poll_date parsed if present in parentheses like '(September 2, 2025)'
         """
         txt = self._nearest_heading_text(tbl)
         week_num: Optional[int] = None
         poll_date: Optional[str] = None
 
         if txt:
-            if re.search(r"preseason", txt, re.IGNORECASE):
+            tl = txt.lower()
+
+            # Preseason
+            if re.search(r"\bpreseason\b", tl, re.IGNORECASE):
                 week_num = 0
             else:
-                m_week = re.search(r"week\s*(\d+)", txt, re.IGNORECASE)
+                # Look for "Week N"
+                m_week = re.search(r"\bweek\s*(\d+)\b", tl, re.IGNORECASE)
                 if m_week:
-                    week_num = int(m_week.group(1))
+                    n = int(m_week.group(1))
 
+                    # If "(Final)" appears anywhere in the heading, walk back one week (floor at 0)
+                    is_final = re.search(r"\(.*final.*\)", tl, re.IGNORECASE) is not None
+                    week_num = max(n - 1, 0) if is_final else n
+
+            # Optional poll date like "(September 2, 2025)"
             m_date = re.search(
                 r"\((January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\)",
                 txt
@@ -235,6 +247,7 @@ class RankingsFetchera:
                 poll_date = m_date.group(0).strip("()")
 
         return week_num, poll_date
+
 
     # ---- AP matrix helpers (prefer Week 1 over Preseason) ----
     def _ap_find_header_row(self, table: Tag) -> Optional[Tag]:
@@ -476,7 +489,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        fetcher = RankingsFetchera(year=args.year)
+        fetcher = RankingsFetchers(year=args.year)
         df = fetcher.fetch_current_then_prior_cfp_ap()
         if df is None or df.empty:
             print("❌ No rankings found (no table parsed).")
