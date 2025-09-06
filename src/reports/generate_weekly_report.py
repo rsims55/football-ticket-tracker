@@ -1,27 +1,8 @@
 #!/usr/bin/env python3
 """
-Generate a weekly model report:
-- Best predictors (feature importances from the fitted model)
-- Accuracy over the past 7 days
-- Table of predicted vs actual with errors
-- Suggestions / next variables to explore
-- Saves markdown report and a CSV excerpt for the past week
-- Optionally emails the report if reports/send_email.py is available
-
-NEW:
-- Permutation importance on recent data
-- PDPs for top perm-important features
-- SHAP summary + dependence plots
-- Robust model loader that monkey-patches missing private sklearn symbols
-- Auto-completion of missing original columns for diagnostics (neutral defaults)
-- Per-run dated folder with subfolders:
-    reports/weekly/YYYY-MM-DD/
-      weekly_report_YYYY-MM-DD.md
-      images/  (all plots here)
-      data/    (all CSVs here)
-
-Run:
-  python src/reports/generate_weekly_report.py
+Weekly model report with solid Game labels:
+- Joins by normalized ID primarily from data/daily/price_snapshots.csv
+- Falls back to season schedule (data/weekly/full_{SEASON_YEAR}_schedule.csv)
 """
 
 import os
@@ -58,6 +39,11 @@ IMG_FMT = os.getenv("REPORT_IMG_FMT", "png")  # png|svg
 
 TZ_LABEL = "ET"  # display-only label for times
 
+# Data sources for ID→teams mapping
+SEASON_YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
+SCHEDULE_CSV = os.getenv("SCHEDULE_CSV", f"data/weekly/full_{SEASON_YEAR}_schedule.csv")
+PRICE_SNAPSHOTS_CSV = os.getenv("PRICE_SNAPSHOTS_CSV", "data/daily/price_snapshots.csv")
+
 # -----------------------
 # sklearn pickle compat
 # -----------------------
@@ -82,107 +68,220 @@ def _robust_load_model(path: str):
 # Helpers
 # -----------------------
 
-SEASON_YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
-SCHEDULE_CSV = os.getenv("SCHEDULE_CSV", f"data/weekly/full_{SEASON_YEAR}_schedule.csv")
-
+_SNAP_CACHE = None
 _SCHED_CACHE = None
-_ID_TO_TEAMS = None
+_ID_TO_TEAMS = None  # combined map from snapshots (primary) then schedule
 
 def _normalize_id(x) -> str:
-    """Coerce any id-like value to a clean string key."""
+    """Coerce any id-like value to a clean string key (no float artifacts, trimmed)."""
     if pd.isna(x):
         return ""
     s = str(x).strip()
-    # strip common CSV artifacts like .0 from floats
     if s.endswith(".0"):
         s = s[:-2]
     return s
 
+def _clean_str(s):
+    return "" if pd.isna(s) else str(s).strip()
+
+def _extract_teams_from_title(title: str) -> tuple[str, str]:
+    """Try to parse 'Home vs. Away' or 'Home vs Away' or 'Home at Away'."""
+    if not title:
+        return "", ""
+    t = title.strip()
+    lower = t.lower()
+    for sep in [" vs. ", " vs ", " VS. ", " VS "]:
+        i = lower.find(sep.strip().lower())
+        if i != -1:
+            return t[:i].strip(), t[i + len(sep.strip()):].strip()
+    # occasionally "at"
+    for sep in [" at ", " AT "]:
+        i = lower.find(sep.strip().lower())
+        if i != -1:
+            return t[:i].strip(), t[i + len(sep.strip()):].strip()
+    return "", ""
+
+def _read_csv_safe(path: str):
+    """Read CSV as strings (dtype=str). Return None if missing."""
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        return pd.read_csv(path, dtype=str)
+    except Exception as e:
+        print(f"⚠️ failed reading '{path}': {e}")
+        return None
+
+def _load_price_snapshots() -> pd.DataFrame | None:
+    """Load price snapshots; build id → (home, away)."""
+    global _SNAP_CACHE
+    if _SNAP_CACHE is not None:
+        return _SNAP_CACHE
+    df = _read_csv_safe(PRICE_SNAPSHOTS_CSV)
+    if df is None:
+        return None
+
+    # Normalize id column name
+    if "id" not in df.columns:
+        for c in ("event_id", "eventId", "EventID", "tickpick_event_id"):
+            if c in df.columns:
+                df = df.rename(columns={c: "id"})
+                break
+    if "id" not in df.columns:
+        print(f"⚠️ snapshots missing 'id' (has: {list(df.columns)[:12]}...)")
+        _SNAP_CACHE = df
+        return df
+
+    # Pick candidate home/away columns (or parse from title)
+    home_keys = [c for c in df.columns if c.lower() in {"hometeam", "home_team", "home", "homename", "home_name"}]
+    away_keys = [c for c in df.columns if c.lower() in {"awayteam", "away_team", "away", "awayname", "away_name"}]
+    title_keys = [c for c in df.columns if c.lower() in {"event", "event_title", "title", "name", "eventname"}]
+
+    df["id"] = df["id"].map(_normalize_id)
+
+    # Build normalized home/away
+    if home_keys and away_keys:
+        hk, ak = home_keys[0], away_keys[0]
+        df["__home"] = df[hk].map(_clean_str)
+        df["__away"] = df[ak].map(_clean_str)
+    else:
+        # Parse from title if possible
+        tk = title_keys[0] if title_keys else None
+        if tk:
+            parsed = df[tk].map(lambda s: _extract_teams_from_title(_clean_str(s)))
+            df["__home"] = parsed.map(lambda x: x[0])
+            df["__away"] = parsed.map(lambda x: x[1])
+        else:
+            df["__home"] = ""
+            df["__away"] = ""
+
+    # Keep only rows with an id
+    df = df[df["id"].astype(bool)].copy()
+    _SNAP_CACHE = df
+    print(f"🧾 snapshots loaded: {len(df)} rows from '{PRICE_SNAPSHOTS_CSV}'")
+    return df
+
 def _load_schedule_df() -> pd.DataFrame | None:
-    """Load season schedule once; build id -> (homeTeam, awayTeam) map."""
-    global _SCHED_CACHE, _ID_TO_TEAMS
+    """Load season schedule; provide id → (home, away) fallback."""
+    global _SCHED_CACHE
     if _SCHED_CACHE is not None:
         return _SCHED_CACHE
-
-    if not os.path.exists(SCHEDULE_CSV):
-        print(f"⚠️ schedule not found at '{SCHEDULE_CSV}'")
+    df = _read_csv_safe(SCHEDULE_CSV)
+    if df is None:
         return None
 
-    try:
-        df = pd.read_csv(SCHEDULE_CSV)
-
-        # Normalize ID column name to 'id' if needed
-        if "id" not in df.columns:
-            for c in ("event_id", "eventId", "tickpick_event_id", "EventID"):
-                if c in df.columns:
-                    df = df.rename(columns={c: "id"})
-                    break
-
-        if "id" not in df.columns:
-            print(f"⚠️ schedule at '{SCHEDULE_CSV}' is missing an id-like column "
-                  f"(has: {list(df.columns)[:12]}...)")
-            return None
-
-        # Ensure required team columns exist
-        for need in ("homeTeam", "awayTeam"):
-            if need not in df.columns:
-                print(f"⚠️ schedule missing column '{need}' (has: {list(df.columns)[:12]}...)")
-                return None
-
-        # Normalize ids to strings and build lookup dict
-        df["id"] = df["id"].map(_normalize_id)
-        _ID_TO_TEAMS = (
-            df[["id", "homeTeam", "awayTeam"]]
-            .dropna(subset=["id"])
-            .drop_duplicates("id")
-            .set_index("id")[["homeTeam", "awayTeam"]]
-            .to_dict("index")
-        )
-        print(f"🗂  schedule loaded: {len(df)} rows for {SEASON_YEAR}, "
-              f"unique ids: {len(_ID_TO_TEAMS)} from '{SCHEDULE_CSV}'")
+    # Normalize columns
+    if "id" not in df.columns:
+        for c in ("event_id", "eventId", "EventID", "tickpick_event_id"):
+            if c in df.columns:
+                df = df.rename(columns={c: "id"})
+                break
+    if "id" not in df.columns:
+        print(f"⚠️ schedule missing 'id' (has: {list(df.columns)[:12]}...)")
         _SCHED_CACHE = df
         return df
-    except Exception as e:
-        print(f"⚠️ failed reading schedule '{SCHEDULE_CSV}': {e}")
-        return None
+
+    # Ensure team cols exist
+    if "homeTeam" not in df.columns or "awayTeam" not in df.columns:
+        print(f"⚠️ schedule missing homeTeam/awayTeam (has: {list(df.columns)[:12]}...)")
+
+    df["id"] = df["id"].map(_normalize_id)
+    _SCHED_CACHE = df
+    print(f"📅 schedule loaded: {len(df)} rows from '{SCHEDULE_CSV}'")
+    return df
+
+def _build_id_to_teams():
+    """Combine mappings: snapshots (primary) then schedule (fallback)."""
+    global _ID_TO_TEAMS
+    if _ID_TO_TEAMS is not None:
+        return _ID_TO_TEAMS
+
+    id_to = {}
+
+    snap = _load_price_snapshots()
+    if snap is not None and "id" in snap.columns:
+        for _id, h, a in snap[["id", "__home", "__away"]].itertuples(index=False):
+            h = _clean_str(h)
+            a = _clean_str(a)
+            if _id and (h or a):
+                id_to[_id] = {"homeTeam": h, "awayTeam": a}
+
+    sched = _load_schedule_df()
+    if sched is not None and "id" in sched.columns:
+        hcol = "homeTeam" if "homeTeam" in sched.columns else None
+        acol = "awayTeam" if "awayTeam" in sched.columns else None
+        if hcol and acol:
+            for _id, h, a in sched[["id", hcol, acol]].itertuples(index=False):
+                _id = _normalize_id(_id)
+                if _id and _id not in id_to:
+                    id_to[_id] = {"homeTeam": _clean_str(h), "awayTeam": _clean_str(a)}
+
+    _ID_TO_TEAMS = id_to
+    print(f"🔗 id→teams map built: {len(_ID_TO_TEAMS)} unique ids")
+    return _ID_TO_TEAMS
+
+def _attach_labels_by_id(df: pd.DataFrame) -> pd.DataFrame:
+    """Left-join id→(home, away) labels from combined map."""
+    id_to = _build_id_to_teams()
+    if not id_to:
+        return df
+
+    map_df = (pd.DataFrame.from_dict(id_to, orient="index")
+              .reset_index().rename(columns={"index": "id"}))
+    map_df["id"] = map_df["id"].map(_normalize_id)
+    left = df.copy()
+    if "id" in left.columns:
+        left["id"] = left["id"].map(_normalize_id)
+    else:
+        # if eval has another id-like column, normalize into 'id'
+        for c in ("event_id", "eventId", "EventID", "tickpick_event_id"):
+            if c in left.columns:
+                left["id"] = left[c].map(_normalize_id)
+                break
+        if "id" not in left.columns:
+            left["id"] = ""
+
+    merged = left.merge(map_df.rename(columns={
+        "homeTeam": "homeTeam_sched",
+        "awayTeam": "awayTeam_sched"
+    }), on="id", how="left")
+    return merged
 
 def _row_any_id(row: pd.Series) -> str:
-    """Find an id-like column in the current row and normalize to string."""
-    for k in ("id", "event_id", "eventId", "tickpick_event_id", "EventID"):
+    for k in ("id", "event_id", "eventId", "EventID", "tickpick_event_id"):
         if k in row and pd.notna(row[k]):
             return _normalize_id(row[k])
     return ""
 
 def _compose_game_label(row: pd.Series) -> str:
     """
-    Map row -> 'homeTeam vs awayTeam' by ID using the season schedule.
-    Strictly prioritizes schedule.csv mapping for consistency.
+    Prefer merged labels (homeTeam_sched/awayTeam_sched),
+    else try dict lookup by id, else row fallbacks, else show id.
     """
-    _load_schedule_df()  # ensure cache filled
+    h_sched = _clean_str(row.get("homeTeam_sched", ""))
+    a_sched = _clean_str(row.get("awayTeam_sched", ""))
+    if h_sched or a_sched:
+        return f"{h_sched} vs {a_sched}".strip(" vs ")
+
     rid = _row_any_id(row)
-
-    # Prefer schedule mapping
-    if rid and _ID_TO_TEAMS is not None:
-        rec = _ID_TO_TEAMS.get(rid)
+    id_to = _build_id_to_teams()
+    if rid and id_to:
+        rec = id_to.get(rid)
         if rec:
-            h = (rec.get("homeTeam") or "").strip()
-            a = (rec.get("awayTeam") or "").strip()
+            h = _clean_str(rec.get("homeTeam", ""))
+            a = _clean_str(rec.get("awayTeam", ""))
             if h or a:
-                return f"{h} vs {a}"
+                return f"{h} vs {a}".strip(" vs ")
 
-    # Fallback: use names on the row if present
-    h2 = str(row.get("homeTeam", "") or "").strip()
-    a2 = str(row.get("awayTeam", "") or "").strip()
+    h2 = _clean_str(row.get("homeTeam", ""))
+    a2 = _clean_str(row.get("awayTeam", ""))
     if h2 or a2:
-        return f"{h2} vs {a2}"
+        return f"{h2} vs {a2}".strip(" vs ")
 
-    # Last resort: show id so we can see mismatches
     if rid:
         return f"id {rid}"
     return ""
 
 def _sort_for_table(df: pd.DataFrame) -> pd.DataFrame:
-    """Sort rows for table rendering: highest absolute $ error first, then keep others."""
     if "abs_error" in df.columns:
         s = pd.to_numeric(df["abs_error"], errors="coerce")
         return df.assign(_abs_error_num=s).sort_values(
@@ -200,28 +299,28 @@ def _parse_dt(s):
 def _load_eval_df() -> pd.DataFrame:
     """
     Prefer MERGED_OUTPUT, else EVAL_LOG_PATH.
-    Expected (from evaluator):
-      startDateEastern, predicted_lowest_price, actual_lowest_price, abs_error, percent_error
-      # === NEW: TIMING ===
-      predicted_optimal_dt, actual_lowest_dt, timing_abs_error_hours, timing_signed_error_hours
-      # (ideally) id to link games back to schedule
+    Read as strings to preserve IDs; coerce numerics/dates explicitly.
     """
     path = MERGED_OUTPUT if os.path.exists(MERGED_OUTPUT) else EVAL_LOG_PATH
     if not os.path.exists(path):
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype=str)
 
-    # Normalize any id-like column so row mapping works
+    # Normalize/create id column
     if "id" in df.columns:
         df["id"] = df["id"].map(_normalize_id)
     else:
-        for c in ("event_id", "eventId", "tickpick_event_id", "EventID"):
+        made = False
+        for c in ("event_id", "eventId", "EventID", "tickpick_event_id"):
             if c in df.columns:
                 df["id"] = df[c].map(_normalize_id)
+                made = True
                 break
+        if not made:
+            df["id"] = ""
 
-    # Keep both a date-only version (for window filter) and full datetimes where provided
+    # Dates
     if "startDateEastern" in df.columns:
         df["_startDateEastern_dt"] = _parse_dt(df["startDateEastern"])
         df["startDateEastern"] = _parse_dt(df["startDateEastern"]).dt.date
@@ -232,12 +331,12 @@ def _load_eval_df() -> pd.DataFrame:
                 df["startDateEastern"] = _parse_dt(df[alt]).dt.date
                 break
 
-    # Price columns
+    # Coerce numerics
     for col in ("predicted_lowest_price", "actual_lowest_price", "abs_error", "percent_error"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # === NEW: TIMING ===
+    # Timing columns
     if "predicted_optimal_dt" in df.columns:
         df["predicted_optimal_dt"] = _parse_dt(df["predicted_optimal_dt"])
     if "actual_lowest_dt" in df.columns:
@@ -536,7 +635,7 @@ def run_permutation_importance(model, X, y):
 # PDP generation
 # -----------------------
 def _sanitize_filename(s: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in s)
+    return "".join(ch if ch.isalnum() or s in ("-", "_") else "_" for s in s)
 
 def generate_pdp_plots(model, X, feature_names, out_dir, prefix="pdp"):
     created = []
@@ -689,7 +788,7 @@ def get_recent_evaluations(window_days: int = WEEK_WINDOW_DAYS) -> pd.DataFrame:
     cutoff = datetime.now().date() - timedelta(days=window_days)
     recent = df[df["startDateEastern"] >= cutoff].copy()
 
-    # Sort by largest price misses first (stable key if present)
+    # Sort by largest price misses first
     if "abs_error" in recent.columns:
         recent.sort_values(by="abs_error", ascending=False, inplace=True)
 
@@ -775,23 +874,29 @@ def build_report() -> str:
 
     # 2) Accuracy (past week) + TIMING
     df = get_recent_evaluations(WEEK_WINDOW_DAYS)
+
+    # Attach labels from snapshots/schedule BEFORE rendering
+    if not df.empty:
+        df = _attach_labels_by_id(df)
+
     if df.empty:
         report.append("## 📊 Model Accuracy (Past 7 Days)\nNo games to evaluate in the past week.\n")
     else:
-        # Save weekly slice (including timing columns if present)
+        # Save weekly slice (including merged labels)
         cols_to_save = [
             c for c in [
-                "id",  # keep id for downstream joins
-                "startDateEastern", "homeTeam", "awayTeam",
+                "id",
+                "startDateEastern",
+                "homeTeam_sched", "awayTeam_sched",  # from mapping
+                "homeTeam", "awayTeam",              # if present on eval rows
                 "predicted_lowest_price", "actual_lowest_price",
                 "abs_error", "percent_error", "weekNumber",
                 "dayOfWeek", "kickoffHour",
-                # === NEW: TIMING ===
                 "predicted_optimal_dt", "actual_lowest_dt",
                 "timing_abs_error_hours", "timing_signed_error_hours",
             ] if c in df.columns
         ]
-        df[cols_to_save].to_csv(recent_csv_path, index=False)
+        df[cols_to_save].to_csv(os.path.join(data_dir, f"weekly_eval_rows_{today_str}.csv"), index=False)
 
         report.append("## 📊 Model Accuracy (Past 7 Days)\n")
         report.append(f"- Games evaluated: **{len(df)}**")
@@ -807,7 +912,7 @@ def build_report() -> str:
         if "percent_error" in df.columns:
             report.append(f"- Games > 5% price error: **{over_5} / {len(df)}**")
 
-        # === NEW: TIMING SUMMARY ===
+        # Timing summary
         if "timing_abs_error_hours" in df.columns and df["timing_abs_error_hours"].notna().any():
             t_mae = float(df["timing_abs_error_hours"].mean())
             t_med = float(df["timing_abs_error_hours"].median())
@@ -823,7 +928,7 @@ def build_report() -> str:
                 direction = "later than" if bias > 0 else "earlier than"
                 report.append(f"- Bias: predictions are on average **{abs(bias):.2f} h {direction}** actual lows")
 
-        # 3) Table (price + timing)
+        # Table
         has_timing = {"predicted_optimal_dt", "actual_lowest_dt", "timing_abs_error_hours"}.issubset(df.columns)
 
         table_df = _sort_for_table(df.copy())
@@ -838,7 +943,7 @@ def build_report() -> str:
             report.append("|------|-----------|-----------|--------|-----------|---------|")
 
         for _, row in table_df.iterrows():
-            game = _compose_game_label(row)  # <-- now pulls Home vs Away via schedule id
+            game = _compose_game_label(row)
             date_str = row.get("startDateEastern", "")
             p = row.get("predicted_lowest_price", float("nan"))
             a = row.get("actual_lowest_price", float("nan"))
@@ -861,7 +966,7 @@ def build_report() -> str:
                     f"{_format_currency(ae)} | {pe_pct} |"
                 )
 
-        # 4) Suggestions
+        # Suggestions
         report.append("\n## 💡 Suggestions")
         if "percent_error" in df.columns and len(df) > 0 and (over_5 / len(df)) > 0.40:
             report.append("- Miss rate >40% this week; consider revisiting hyperparameters or adding interaction features.")
@@ -874,7 +979,7 @@ def build_report() -> str:
         report.append("- Explore time-of-day effects more granularly (hour buckets) and weekday/weekend splits.")
         report.append("- Check stadium capacity normalization (capacity vs. sold % if/when available).")
         if "timing_signed_error_hours" in df.columns and df["timing_signed_error_hours"].notna().any():
-            later_share = float((df["timing_signed_error_hours"] > 0).mean())
+            later_share = float(df["timing_signed_error_hours"] > 0).mean()
             report.append(f"- Timing: {later_share:.0%} of predictions occur *after* the actual low — consider features about pre-game demand decay and listing churn.")
         if weak_features:
             report.append("- Near-zero importance this week (may be unrelated): " + ", ".join(sorted(set(weak_features))[:20]))
