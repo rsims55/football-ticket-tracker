@@ -18,6 +18,9 @@ if str(SRC_DIR) not in sys.path:
 # Uses your existing ScheduleFetcher (unchanged behavior)  [ref]
 from fetchers.schedule_fetcher import ScheduleFetcher  # :contentReference[oaicite:3]{index=3}
 
+# Import RankingsFetcher
+from fetchers.rankings_fetcher import RankingsFetchers 
+
 YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
@@ -154,7 +157,7 @@ if WEEKLY_SCHEDULE_OUT.exists():
         print(f"⚠️ Could not read previous weekly schedule: {e}")
 
 # ======================
-# 1) Fetch schedule
+# 1) Fetch schedule and rankings
 # ======================
 print("📅 Fetching schedule…")
 schedule_df = ScheduleFetcher(YEAR).fetch().copy()  # :contentReference[oaicite:5]{index=5}
@@ -172,6 +175,30 @@ schedule_df["game_date"] = _to_date_yyyy_mm_dd(schedule_df["startDateEastern"])
 today_d = date.today()
 is_past = schedule_df["game_date"] < today_d
 is_now_or_future = schedule_df["game_date"] >= today_d
+
+# ======================
+# 1a) Try to fetch fresh rankings from Wikipedia (writes to data/weekly/)
+#     Falls back silently to local CSVs if it can't parse.
+# ======================
+print("📅 Fetching rankings…")
+try:
+    print("📈 Fetching latest rankings (Wikipedia only; CFP→AP, current→prior)…")
+    rf = RankingsFetchers(year=YEAR)
+    fetched_df = rf.fetch_current_then_prior_cfp_ap()
+    if fetched_df is None or fetched_df.empty:
+        print("⚠️ No fresh rankings parsed; will use the most recent local *rankings*.csv.")
+    else:
+        src = rf.source or "wiki:AP"
+        sy  = rf.source_year or YEAR
+        try:
+            top1 = str(fetched_df.loc[fetched_df["rank"].idxmin(), "school"])
+        except Exception:
+            top1 = "unknown"
+        print(f"✅ Rankings fetched from {src} ({sy}); #1 = {top1}")
+except Exception as e:
+    print(f"⚠️ Rankings fetch failed: {e} — proceeding with local *rankings*.csv if available.")
+
+
 
 # ======================
 # 2) Load latest LOCAL rankings CSV from data/weekly/*rankings*.csv

@@ -32,6 +32,12 @@ class RankingsFetchers:
       3) Prior   CFP
       4) Prior   AP
 
+    Week selection (per request):
+      - For each (year, poll), try numbered weeks descending: 16 → 1
+      - If (year == current year) AND poll == AP, also try Preseason (treated as week 0)
+        if none of the numbered weeks are present.
+      - Return the first parseable top-25 table.
+
     Exposes:
       - fetch_current_then_prior_cfp_ap() -> DataFrame | None
       - self.source -> 'wiki:CFP' | 'wiki:AP'
@@ -55,6 +61,8 @@ class RankingsFetchers:
         """
         Try in order:
           (year, CFP) → (year, AP) → (year-1, CFP) → (year-1, AP)
+        For each (year, poll), try Week 16 down to Week 1 (numbered weeks).
+        If (year == current year) and poll == AP, also try Preseason (week 0) afterward.
         Returns the first parsed ranking table as a normalized DataFrame.
         """
         order = [
@@ -65,45 +73,86 @@ class RankingsFetchers:
         ]
         if DEBUG:
             print("📈 Fetching latest rankings (Wikipedia only; CFP→AP, current→prior)…")
+            print("🔎 Week preference: 16 → 1, then (current-year AP only) Preseason")
 
         for y, label in order:
-            df = self._fetch_year_label(y, label)
-            if self._ok(df):
+            soup = self._get_soup(y)
+            if soup is None:
+                continue
+
+            # 1) Try numbered weeks 16..1
+            found_df: Optional[pd.DataFrame] = None
+            found_week: Optional[int] = None
+            for week in range(16, 0, -1):
+                df = self._fetch_year_label_for_week(soup, y, label, target_week=week)
+                if self._ok(df):
+                    found_df, found_week = df.copy(), week
+                    break
+
+            # 2) For CURRENT YEAR + AP only: if none found, try Preseason (week 0)
+            if found_df is None and (y == self.year) and (label == "AP"):
+                df = self._fetch_year_label_for_week(soup, y, label, target_week=0)
+                if self._ok(df):
+                    found_df, found_week = df.copy(), 0
+
+            if self._ok(found_df):
                 # stamp source + season (use the year we actually fetched)
                 self.source, self.source_year = f"wiki:{label}", y
-                df = df.copy()
-                df["season"] = y
-                self._write_artifact(df, y)
-                return df
+                out_df = found_df.copy()
+                out_df["season"] = y
+                # ensure week column reflects the chosen week
+                if "week" not in out_df.columns or out_df["week"].isna().all():
+                    out_df["week"] = int(found_week if found_week is not None else -1)
+
+                # Write artifact
+                self._write_artifact(out_df, y)
+
+                # Print confirmation exactly as requested
+                week_str = "Preseason" if (found_week == 0) else f"Week {found_week}"
+                print(f"✅ Selected {label} {y} {week_str}")
+
+                if DEBUG:
+                    print(f"✅ Selected {label} {y} {week_str} with {len(out_df)} rows")
+
+                return out_df
+
+            if DEBUG:
+                print(f"↩️  No usable week found for {label} {y}")
+
         return None
 
     # -------- Internals --------
-    def _fetch_year_label(self, year: int, label: str) -> Optional[pd.DataFrame]:
-        soup = self._get_soup(year)
-        if soup is None:
-            return None
-
-        # 1) Section-targeted: scan ALL tables inside the section until the NEXT <h2>
+    def _fetch_year_label_for_week(
+        self, soup: BeautifulSoup, year: int, label: str, target_week: int
+    ) -> Optional[pd.DataFrame]:
+        """
+        Attempt to parse the specified (year, label, target_week).
+        1) Section-targeted scan (walk forward until next <h2>) filtering to the target week
+        2) Page-wide fallback constrained to the target week
+        """
+        # 1) Section-targeted
         for sid in self.SECTION_IDS.get(label, []):
-            df = self._parse_section_scan_wikitables(soup, sid, prefer_label=label)
+            df = self._parse_section_scan_wikitables(
+                soup, sid, prefer_label=label, target_week=target_week
+            )
             if self._ok(df):
                 if DEBUG:
-                    print(f"[rankings] {year}/{label} via id='{sid}' → {len(df)} rows")
+                    print(f"[rankings] {year}/{label} week={target_week} via id='{sid}' → {len(df)} rows")
                 df = df.copy()
                 df["poll"] = self.POLL_NAME.get(label, label)
+                df["week"] = int(target_week)
                 return df
 
-        # 2) Label-aware page-wide fallback
-        df = self._page_wide_best_table(soup, prefer_label=label)
+        # 2) Page-wide fallback
+        df = self._page_wide_best_table(soup, prefer_label=label, target_week=target_week)
         if self._ok(df):
             if DEBUG:
-                print(f"[rankings] {year}/{label} via page-wide fallback → {len(df)} rows")
+                print(f"[rankings] {year}/{label} week={target_week} via page-wide fallback → {len(df)} rows")
             df = df.copy()
             df["poll"] = self.POLL_NAME.get(label, label)
+            df["week"] = int(target_week)
             return df
 
-        if DEBUG:
-            print(f"[rankings] {year}/{label} → not found")
         return None
 
     def _get_soup(self, year: int) -> Optional[BeautifulSoup]:
@@ -140,12 +189,16 @@ class RankingsFetchers:
 
     # ---- Section scan: robust forward walk until next <h2> ----
     def _parse_section_scan_wikitables(
-        self, soup: BeautifulSoup, section_id: str, prefer_label: str
+        self, soup: BeautifulSoup, section_id: str, prefer_label: str, target_week: Optional[int] = None
     ) -> Optional[pd.DataFrame]:
         """
         Robust scan: starting at the <h2>/<h3> for the given section_id, iterate forward
         through .next_elements until the next <h2>. Parse any <table> encountered
         (direct or nested) without requiring class='wikitable'.
+
+        If target_week is provided:
+          - For AP, only parse if the table has a column matching that week (or Preseason=0)
+          - For CFP (or non-matrix AP), only accept if nearest heading resolves to that week
         """
         anchor = soup.find(id=section_id)
         if anchor is None:
@@ -157,7 +210,7 @@ class RankingsFetchers:
 
         tried = 0
         if DEBUG:
-            print(f"[rankings] DEBUG: forward-scan from heading <{heading.name} id='{section_id}'> (prefer='{prefer_label}')")
+            print(f"[rankings] DEBUG: forward-scan from <{heading.name} id='{section_id}'> (prefer='{prefer_label}', week={target_week})")
 
         for node in heading.next_elements:
             if isinstance(node, Tag):
@@ -165,27 +218,58 @@ class RankingsFetchers:
                     break
                 if node.name == "table":
                     tried += 1
-                    if DEBUG:
-                        print(f"[rankings] DEBUG: parse attempt on table (classes={node.get('class')})")
-                    week_num, poll_date = self._meta_for_table(node, prefer_label)
-                    df = self._parse_rank_table(node, week_num, poll_date, prefer_label)
-                    if self._ok(df):
-                        return df
+                    if prefer_label == "AP":
+                        # Require AP table to support the requested week column
+                        col_idx, _wk = self._ap_col_index_for_week(node, target_week)
+                        if col_idx < 0:
+                            continue
+                        # Parse with forced AP column/week
+                        week_num, poll_date = self._meta_for_table(node, prefer_label)
+                        df = self._parse_rank_table(
+                            node,
+                            week_num=(target_week if target_week is not None else _wk),
+                            poll_date=poll_date,
+                            prefer_label=prefer_label,
+                            ap_forced_col=col_idx,
+                            ap_forced_week=(target_week if target_week is not None else _wk),
+                        )
+                        if self._ok(df):
+                            return df
+                    else:
+                        # CFP or other: only accept if nearest heading says the same week
+                        wk_from_head, poll_date = self._meta_for_table(node, prefer_label)
+                        if target_week is not None and wk_from_head is not None and wk_from_head != target_week:
+                            continue
+                        df = self._parse_rank_table(
+                            node,
+                            week_num=(target_week if target_week is not None else wk_from_head),
+                            poll_date=poll_date,
+                            prefer_label=prefer_label,
+                        )
+                        if self._ok(df):
+                            return df
 
         if DEBUG and tried:
-            print(f"[rankings] section '{section_id}' scanned {tried} tables → none parsed")
+            print(f"[rankings] section '{section_id}' scanned {tried} tables → none parsed for week {target_week}")
         return None
 
-    # ---- Label-aware page-wide fallback (prevents AP being mis-tagged as CFP) ----
-    def _page_wide_best_table(self, soup: BeautifulSoup, prefer_label: str) -> Optional[pd.DataFrame]:
+    # ---- Label-aware page-wide fallback (filtered to a target week) ----
+    def _page_wide_best_table(
+        self, soup: BeautifulSoup, prefer_label: str, target_week: Optional[int] = None
+    ) -> Optional[pd.DataFrame]:
+        """
+        Walk all tables. For AP: only consider tables that have the exact target week column.
+        For CFP/others: only accept if nearest heading week matches the target week (when provided).
+        """
         for tbl in soup.find_all("table"):
+            # quick probe to see if it's plausibly a rankings table
             probe, n = self._try_table_quick(tbl)
             if probe is None:
                 continue
 
             head_text = self._nearest_heading_text(tbl).lower()
             is_cfp = ("cfp" in head_text) or ("playoff" in head_text)
-            ap_col_idx, _ap_week = self._ap_week1_or_pre_col_index(tbl)
+            ap_col_idx, _apw = self._ap_week1_or_pre_col_index(tbl)
             is_ap = (" ap" in f" {head_text} ") or (ap_col_idx >= 1)
 
             if prefer_label == "CFP" and not is_cfp:
@@ -193,8 +277,31 @@ class RankingsFetchers:
             if prefer_label == "AP" and not is_ap:
                 continue
 
-            week_num, poll_date = self._meta_for_table(tbl, prefer_label)
-            return self._parse_rank_table(tbl, week_num, poll_date, prefer_label)
+            if prefer_label == "AP":
+                # Require exact target week column (including Preseason when target_week == 0)
+                col_idx, wk = self._ap_col_index_for_week(tbl, target_week)
+                if col_idx < 0:
+                    continue
+                week_num = target_week if target_week is not None else wk
+                _, poll_date = self._meta_for_table(tbl, prefer_label)
+                return self._parse_rank_table(
+                    tbl,
+                    week_num=week_num,
+                    poll_date=poll_date,
+                    prefer_label=prefer_label,
+                    ap_forced_col=col_idx,
+                    ap_forced_week=week_num,
+                )
+            else:
+                wk_from_head, poll_date = self._meta_for_table(tbl, prefer_label)
+                if target_week is not None and wk_from_head is not None and wk_from_head != target_week:
+                    continue
+                return self._parse_rank_table(
+                    tbl,
+                    week_num=(target_week if target_week is not None else wk_from_head),
+                    poll_date=poll_date,
+                    prefer_label=prefer_label,
+                )
 
         return None
 
@@ -248,8 +355,7 @@ class RankingsFetchers:
 
         return week_num, poll_date
 
-
-    # ---- AP matrix helpers (prefer Week 1 over Preseason) ----
+    # ---- AP matrix helpers (supports arbitrary week selection) ----
     def _ap_find_header_row(self, table: Tag) -> Optional[Tag]:
         thead = table.find("thead")
         if thead:
@@ -265,7 +371,7 @@ class RankingsFetchers:
 
     def _ap_week1_or_pre_col_index(self, table: Tag) -> Tuple[int, Optional[int]]:
         """
-        Return (column_index, week_num) for AP matrix:
+        Legacy helper: Return (column_index, week_num) for AP matrix:
           - Prefer 'Week 1' → (idx, 1)
           - Else 'Preseason' → (idx, 0)
           - Else (-1, None)
@@ -288,30 +394,63 @@ class RankingsFetchers:
             return pre_idx, 0
         return -1, None
 
+    def _ap_col_index_for_week(self, table: Tag, target_week: Optional[int]) -> Tuple[int, Optional[int]]:
+        """
+        Find the AP matrix column for the requested week.
+        - target_week == 0 maps to 'Preseason'
+        - target_week >= 1 maps to 'Week N'
+        Returns (col_index, resolved_week) or (-1, None) if not present.
+        """
+        if target_week is None:
+            return -1, None
+        hr = self._ap_find_header_row(table)
+        if not hr:
+            return -1, None
+        headers = hr.find_all(["th", "td"])
+        for idx, h in enumerate(headers):
+            t = h.get_text(" ", strip=True).lower()
+            if target_week == 0 and "preseason" in t:
+                return idx, 0
+            if target_week >= 1 and re.search(rf"\bweek\s*{target_week}\b", t):
+                return idx, target_week
+        return -1, None
+
     # ---- Table parsers ----
     def _parse_rank_table(
-        self, table: Tag, week_num: Optional[int], poll_date: Optional[str], prefer_label: str
+        self,
+        table: Tag,
+        week_num: Optional[int],
+        poll_date: Optional[str],
+        prefer_label: str,
+        ap_forced_col: Optional[int] = None,
+        ap_forced_week: Optional[int] = None,
     ) -> Optional[pd.DataFrame]:
         """
         Parse rows where the first cell is a numeric rank (accept '1' or '1.')
         and the chosen column contains the team (may include '(##)' FP votes).
+
+        If prefer_label == 'AP' and ap_forced_col is provided, use that column.
+        Else for AP, fall back to Week1/Preseason heuristic (legacy).
         """
         tbody = table.find("tbody") or table
         rows = tbody.find_all("tr")
         out: List[dict] = []
 
-        # Detect AP matrix column once per table: prefer Week 1 else Preseason
+        # Decide which AP column to use (matrix)
         ap_col, ap_week = (None, None)
         if prefer_label == "AP":
-            cached = getattr(table, "_ap_wk1orpre_colweek", None)
-            if cached is None:
-                ap_col, ap_week = self._ap_week1_or_pre_col_index(table)
-                setattr(table, "_ap_wk1orpre_colweek", (ap_col, ap_week))
+            if ap_forced_col is not None and ap_forced_col >= 0:
+                ap_col, ap_week = ap_forced_col, ap_forced_week
             else:
-                ap_col, ap_week = cached
+                cached = getattr(table, "_ap_wk1orpre_colweek", None)
+                if cached is None:
+                    ap_col, ap_week = self._ap_week1_or_pre_col_index(table)
+                    setattr(table, "_ap_wk1orpre_colweek", (ap_col, ap_week))
+                else:
+                    ap_col, ap_week = cached
 
         # If heading didn't provide week info, use the detected AP week
-        if prefer_label == "AP" and ap_week is not None:
+        if prefer_label == "AP" and week_num is None and ap_week is not None:
             week_num = ap_week
 
         for tr in rows:
@@ -367,7 +506,7 @@ class RankingsFetchers:
         return df
 
     def _extract_first_place_votes(self, s: str) -> int:
-        m = re.search(r"\((\d{1,3})\)", s)
+        m = re.search(r"\((\d{1,3})\)\s*$", s)
         # Ignore state abbreviations like (FL), (UT), etc.
         if m and not re.search(r"\([A-Z]{2}\)", s):
             try:
@@ -476,7 +615,6 @@ class RankingsFetchers:
         except Exception:
             if DEBUG:
                 import traceback
-
                 traceback.print_exc()
 
 
