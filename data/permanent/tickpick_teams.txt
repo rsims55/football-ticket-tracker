@@ -1,11 +1,15 @@
 [
     {
-        "slug": "penn-state-nittany-lions-football",
-        "url": "https://www.tickpick.com/ncaa-football/penn-state-nittany-lions-football-tickets/"
+        "slug": "miami-hurricanes-football",
+        "url": "https://www.tickpick.com/ncaa-football/miami-hurricanes-football-tickets/"
     },
     {
-        "slug": "arkansas-razorbacks-football",
-        "url": "https://www.tickpick.com/ncaa-football/arkansas-razorbacks-football-tickets/"
+        "slug": "stanford-cardinal-football",
+        "url": "https://www.tickpick.com/ncaa-football/stanford-cardinal-football-tickets/"
+    },
+     {
+        "slug": "colorado-state-rams-football",
+        "url": "https://www.tickpick.com/ncaa-football/colorado-state-rams-football-tickets/"
     },
     {
         "slug": "boston-college-eagles-football",
