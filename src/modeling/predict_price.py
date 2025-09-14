@@ -202,7 +202,7 @@ def _prep_games_frame(df: pd.DataFrame) -> pd.DataFrame:
 
     df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
 
-    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week"]:
+    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week", "home_last_point_diff_at_snapshot", "away_last_point_diff_at_snapshot"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 

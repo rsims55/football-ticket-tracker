@@ -186,7 +186,7 @@ def train_model():
         df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
     )
     df = _coerce_numerics(
-        df, ["days_until_game", "capacity", "homeTeamRank", "awayTeamRank"]
+        df, ["days_until_game", "capacity", "homeTeamRank", "awayTeamRank", "home_last_point_diff_at_snapshot", "away_last_point_diff_at_snapshot"]
     )
 
     # Keep only relevant cols (includes derived collectionSlot via CATEGORICAL_FEATURES)

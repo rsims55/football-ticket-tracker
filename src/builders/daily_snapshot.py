@@ -72,8 +72,8 @@ TEAMS_JSON_PATH = os.getenv(
     "TEAMS_JSON_PATH",
     os.path.join(PROJ_DIR, "data", "permanent", "tickpick_teams.txt")
 )
-TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
-# TEAMS_LIMIT = 3
+# TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
+TEAMS_LIMIT = 3
 
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 ALWAYS_RUN_DAILY = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
@@ -351,9 +351,7 @@ def _map_rows_to_snapshots(rows: List[Dict[str, Any]], now_et: datetime) -> pd.D
             "average_price": r.get("avg_price_from_page"),
             "listing_count": r.get("tickets_available_from_page"),
             "date_collected": date_str,
-            "time_collected": time_str,
-            "home_last_point_diff": r.get("home_last_point_diff"),
-            "away_last_point_diff": r.get("away_last_point_diff")
+            "time_collected": time_str
         })
 
     df = pd.DataFrame.from_records(recs) if recs else pd.DataFrame()
@@ -373,7 +371,7 @@ def _cleanup_pricer_exports(paths: Dict[str, str]) -> None:
         if p and os.path.exists(p):
             try:
                 os.remove(p)
-                print(f"🧹 Removed temp {k.upper()} export: {p}")
+                print(f"🧹 Removed temp {k.UPPER()} export: {p}")
             except Exception as e:
                 print(f"⚠️ Could not delete {k} export {p}: {e}")
 
@@ -496,6 +494,9 @@ def _load_schedule() -> Optional[pd.DataFrame]:
         "homeConference":   ["homeConference", "home_conference", "home_conf", "home_conf_name"],
         "awayConference":   ["awayConference", "away_conference", "away_conf", "away_conf_name"],
         "week":             ["week", "game_week", "week_num", "week_number"],
+        # NEW point-diff inputs from weekly update:
+        "home_last_point_diff": ["home_last_point_diff", "homeLastPointDiff", "home_last_pd"],
+        "away_last_point_diff": ["away_last_point_diff", "awayLastPointDiff", "away_last_pd"],
     }
 
     for canon, cands in optional_map.items():
@@ -526,7 +527,7 @@ def _prepare_schedule_for_join(sched: pd.DataFrame) -> pd.DataFrame:
         df["awayTeam"] = df["awayTeam"].apply(lambda x: _canonicalize_if_aliased(x, aliases) if isinstance(x, str) else x)
         df["awayTeam"] = df["awayTeam"].apply(_strip_team_suffix)
 
-    # 🔧 NEW: carry forward ranks so later games inherit the latest known rank
+    # 🔧 carry forward ranks so later games inherit the latest known rank
     df = _carry_forward_ranks_on_schedule(df)
 
     # Build join keys
@@ -639,17 +640,31 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     cols_to_carry = [
         "homeTeam","awayTeam","stadium","capacity","neutralSite","conferenceGame",
         "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
-        "homeConference","awayConference","week"
+        "homeConference","awayConference","week",
+        # NEW: carry point diffs from weekly
+        "home_last_point_diff","away_last_point_diff",
     ]
 
+    # Map schedule→snapshot destination names for specific fields
+    schedule_to_snapshot_map = {
+        "home_last_point_diff": "home_last_point_diff_at_snapshot",
+        "away_last_point_diff": "away_last_point_diff_at_snapshot",
+    }
+
     if sched is None or sched.empty:
+        # Ensure target columns exist (use mapped names)
         for col in cols_to_carry:
-            if col not in snap.columns:
-                snap[col] = pd.NA
+            dest = schedule_to_snapshot_map.get(col, col)
+            if dest not in snap.columns:
+                snap[dest] = pd.NA
         rivalry_pairs = _load_rivalries()
         snap = _mark_rivalries(snap, rivalry_pairs)
         if "capacity" in snap.columns:
             snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
+        # coerce the two new fields if present
+        for _c in ("home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot"):
+            if _c in snap.columns:
+                snap[_c] = pd.to_numeric(snap[_c], errors="coerce")
         return _finalize_columns_order(snap.drop(columns=[c for c in ("home_team_guess","away_team_guess") if c in snap.columns]))
 
     # Build join keys
@@ -671,6 +686,9 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         "awayConference": "homeConference",
         "homeTeamRank": "awayTeamRank",
         "awayTeamRank": "homeTeamRank",
+        # Note: last point diffs swap with home/away orientation:
+        "home_last_point_diff": "away_last_point_diff",
+        "away_last_point_diff": "home_last_point_diff",
     })
     m2 = snap_pre.merge(sched_flip, how="left", on="date_key", suffixes=("", "_sched"))
     m2 = m2[(m2["home_key"] == m2["home_key_sched"]) & (m2["away_key"] == m2["away_key_sched"])].copy()
@@ -693,26 +711,28 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         if f"{col}_dir" in matched.columns or f"{col}_flip" in matched.columns:
             overlay[col] = matched.apply(lambda r, c=col: pick(r, c), axis=1)
 
-    # Ensure target columns exist
+    # Ensure target columns exist (using mapped destinations)
     for col in cols_to_carry:
-        if col not in snap.columns:
-            snap[col] = pd.NA
+        dest = schedule_to_snapshot_map.get(col, col)
+        if dest not in snap.columns:
+            snap[dest] = pd.NA
 
     # Align overlay by original snap index; fill only where missing
     ov_idx = overlay.set_index("snap_idx")
     for col in cols_to_carry:
         if col not in ov_idx.columns:
             continue
+        dest = schedule_to_snapshot_map.get(col, col)
         ov = snap.index.to_series().map(ov_idx[col])
-        if pd.api.types.is_numeric_dtype(snap[col]):
-            need = snap[col].isna()
+        if pd.api.types.is_numeric_dtype(snap[dest]):
+            need = snap[dest].isna()
         else:
-            need = snap[col].isna() | (snap[col].astype(str).str.strip() == "")
+            need = snap[dest].isna() | (snap[dest].astype(str).str.strip() == "")
         has = ov.notna()
         mask = need & has
-        snap.loc[mask, col] = ov[mask].values  # use values to avoid index length mismatch
+        snap.loc[mask, dest] = ov[mask].values  # use values to avoid index length mismatch
 
-    # Backfill home/away from title if still blank
+    # Backfill home/away from title if still blank (write to 'homeTeam'/'awayTeam' fields)
     def _clean_title_local(t):
         if not isinstance(t, str):
             return t
@@ -751,6 +771,11 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     if "capacity" in snap.columns:
         snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
 
+    # coerce the two new fields
+    for _c in ("home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot"):
+        if _c in snap.columns:
+            snap[_c] = pd.to_numeric(snap[_c], errors="coerce")
+
     snap = snap.drop(columns=[c for c in ("home_team_guess","away_team_guess","home_key","away_key") if c in snap.columns],
                      errors="ignore")
 
@@ -769,6 +794,8 @@ def _finalize_columns_order(snap: pd.DataFrame) -> pd.DataFrame:
         "days_until_game","stadium","capacity",
         "neutralSite","conferenceGame","isRivalry","isRankedMatchup",
         "homeTeamRank","awayTeamRank",
+        # NEW: snapshot-time last point diffs next to ranks
+        "home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot",
         "date_collected","time_collected",
     ]
     final_cols = [c for c in col_order_front if c in snap.columns] + \
@@ -822,7 +849,9 @@ def _fm_row_is_matched(row: pd.Series) -> bool:
     )
     enriched_cols = [
         "week","stadium","homeConference","awayConference",
-        "neutralSite","conferenceGame","homeTeamRank","awayTeamRank","capacity"
+        "neutralSite","conferenceGame","homeTeamRank","awayTeamRank","capacity",
+        # consider the new fields too
+        "home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot",
     ]
     has_enrichment = any(
         (c in row.index) and pd.notna(row[c]) and str(row[c]).strip() != ""
@@ -895,9 +924,6 @@ def _fm_event_key(date_key, home, away):
 def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
     if snap.empty:
         return snap.copy()
-def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
-    if snap.empty:
-        return snap.copy()
 
     if not os.path.exists(schedule_csv_path):
         print(f"[fallback] schedule not found: {schedule_csv_path}")
@@ -923,7 +949,9 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
 
     optional = ["week","stadium","capacity","neutralSite","conferenceGame",
                 "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
-                "homeConference","awayConference"]
+                "homeConference","awayConference",
+                # NEW: allow weekly last point diffs
+                "home_last_point_diff","away_last_point_diff"]
     for c in optional:
         if c not in sched.columns:
             sched[c] = pd.NA
@@ -952,18 +980,34 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
     # Helper: copy fields from schedule row into snapshot (only missing)
     carry_cols = ["week","stadium","capacity","neutralSite","conferenceGame",
                   "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
-                  "homeConference","awayConference","homeTeam","awayTeam"]
+                  "homeConference","awayConference","homeTeam","awayTeam",
+                  # NEW (source names in schedule):
+                  "home_last_point_diff","away_last_point_diff"]
+
+    # NEW: mapping schedule→snapshot names for the two diffs
+    fallback_schedule_to_snapshot_map = {
+        "home_last_point_diff": "home_last_point_diff_at_snapshot",
+        "away_last_point_diff": "away_last_point_diff_at_snapshot",
+    }
 
     def _apply_fill(row, cand, flipped):
         src_home, src_away = cand["homeTeam"], cand["awayTeam"]
         if flipped:
             src_home, src_away = src_away, src_home
         for col in carry_cols:
-            if col not in row.index:
-                continue
-            src = src_home if col == "homeTeam" else src_away if col == "awayTeam" else cand.get(col)
-            if pd.isna(row[col]) or (isinstance(row[col], str) and row[col].strip() == ""):
-                row[col] = src
+            dest = fallback_schedule_to_snapshot_map.get(col, col)
+            # source value (special-case team names which may need flip)
+            if col == "homeTeam":
+                src = src_home
+            elif col == "awayTeam":
+                src = src_away
+            else:
+                src = cand.get(col)
+
+            if dest not in row.index:
+                row[dest] = pd.NA
+            if pd.isna(row[dest]) or (isinstance(row[dest], str) and row[dest].strip() == ""):
+                row[dest] = src
         return row
 
     # Which rows still need enrichment?
@@ -1033,8 +1077,9 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
 
     out.drop(columns=["date_key"], inplace=True, errors="ignore")
 
-    # Ensure ranks are numeric after fills
-    for c in ("homeTeamRank","awayTeamRank","capacity","week"):
+    # Ensure ranks/nums are numeric after fills (includes the new fields)
+    for c in ("homeTeamRank","awayTeamRank","capacity","week",
+              "home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot"):
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")
 
