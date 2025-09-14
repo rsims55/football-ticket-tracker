@@ -379,7 +379,28 @@ def job_evaluate_predictions(paths: Paths) -> None:
         if _sync_mode() == "perjob":
             do_sync(paths, "evaluate_predictions")
         else:
-            logging.info("[evaluate_predictions] per-job sync skipped (twice_daily mode)")
+            logging.info("[evaluate_predictions] per-job sync skipped")
+
+def job_weekly_report(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
+    try:
+        run_py_script("src/reports/generate_weekly_report.py", paths.app_root, env=env)
+    finally:
+        if _sync_mode() == "perjob":
+            do_sync(paths, "generate weekly report")
+        else:
+            logging.info("[generate weekly report] per-job sync skipped")
+
+def job_send_report(paths: Paths) -> None:
+    env = _child_env_for_repo(paths)
+    try:
+        run_py_script("src/reports/send_email.py", paths.app_root, env=env)
+    finally:
+        if _sync_mode() == "perjob":
+            do_sync(paths, "send report")
+        else:
+            logging.info("[sendreport] per-job sync skipped")
+
 
 # ---------- main ----------
 
@@ -401,10 +422,18 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
                   CronTrigger(hour="6,18", minute="45", timezone=TZ),
                   id="job_predict_price", name="job_predict_price", replace_existing=True)
 
-    # Optional: evaluate right after predict (uncomment to enable)
-    # sched.add_job(lambda: job_evaluate_predictions(paths),
-    #               CronTrigger(hour="6,18", minute="50", timezone=TZ),
-    #               id="job_evaluate_predictions", name="job_evaluate_predictions", replace_existing=True)
+    # Weekly: Sunday at 08:00
+    sched.add_job(lambda: job_evaluate_predictions(paths),
+                  CronTrigger(hour="8", minute="00", timezone=TZ),
+                  id="job_evaluate_predictions", name="job_evaluate_predictions", replace_existing=True)
+    
+    sched.add_job(lambda: job_weekly_report(paths),
+                  CronTrigger(hour="8", minute="15", timezone=TZ),
+                  id="job_weekly_report", name="job_weekly_report", replace_existing=True)
+    
+    sched.add_job(lambda: job_send_report(paths),
+                  CronTrigger(hour="8", minute="20", timezone=TZ),
+                  id="job_send_report", name="job_send_report", replace_existing=True)
 
     # Weekly: Wednesday 05:30
     sched.add_job(lambda: job_weekly_update(paths),
@@ -476,6 +505,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Kickoff: run key jobs once after startup (staggered to avoid overlap)
     from apscheduler.triggers.date import DateTrigger
     base = datetime.datetime.now(TZ) + datetime.timedelta(seconds=5)
+    sched.add_job(lambda: job_weekly_update(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=135)),
+                  id="kickoff_weekly_update", replace_existing=True)
     sched.add_job(lambda: job_daily_snapshot(paths),
                   DateTrigger(run_date=base),
                   id="kickoff_daily_snapshot", replace_existing=True)
@@ -485,9 +517,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     sched.add_job(lambda: job_predict_price(paths),
                   DateTrigger(run_date=base + datetime.timedelta(seconds=90)),
                   id="kickoff_predict_price", replace_existing=True)
-    sched.add_job(lambda: job_weekly_update(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=135)),
-                  id="kickoff_weekly_update", replace_existing=True)
+    sched.add_job(lambda: job_evaluate_predictions(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=130)),
+                  id="kickoff_evaluate_predictions", replace_existing=True)
+    sched.add_job(lambda: job_weekly_report(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=160)),
+                  id="kickoff_generate_report", replace_existing=True)
+    sched.add_job(lambda: job_send_report(paths),
+                  DateTrigger(run_date=base + datetime.timedelta(seconds=190)),
+                  id="kickoff_send_report", replace_existing=True)
     logging.info("Kickoff jobs scheduled to run immediately after startup.")
 
     logging.info("Scheduler started")

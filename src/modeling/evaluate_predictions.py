@@ -313,13 +313,8 @@ def evaluate_predictions():
     error_fraction = (merged["percent_error"] > PERCENT_ERROR_THRESHOLD).mean()
     if error_fraction > ERROR_FRACTION_TRIGGER:
         print(
-            f"⚠️ {error_fraction:.0%} of games exceed {int(PERCENT_ERROR_THRESHOLD*100)}% error — retraining model."
+            f"⚠️ {error_fraction:.0%} of games exceed {int(PERCENT_ERROR_THRESHOLD*100)}% error — should retrain model."
         )
-        try:
-            subprocess.run([sys.executable, str(TRAIN_SCRIPT)], check=True)
-            subprocess.run([sys.executable, str(PREDICT_SCRIPT)], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Retrain failed: {e}")
     else:
         print(
             f"✅ Only {error_fraction:.0%} of games exceeded {int(PERCENT_ERROR_THRESHOLD*100)}% error — no retraining needed."
