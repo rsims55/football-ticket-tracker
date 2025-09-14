@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from functools import lru_cache
-from typing import List, Dict, Iterable, Optional
+from typing import List, Dict, Iterable, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,26 @@ import pandas as pd
 _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]
 DEFAULT_MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
+
+# ---- Parity with predict_price.py (do NOT change without changing predict_price) ----
+# These names/values MUST match the training/prediction pipeline.
+NUMERIC_FEATURES = [
+    "days_until_game",
+    "capacity",
+    "neutralSite",
+    "conferenceGame",
+    "isRivalry",
+    "isRankedMatchup",
+    "homeTeamRank",
+    "awayTeamRank",
+    "week",
+]
+CATEGORICAL_FEATURES = ["homeConference", "awayConference", "collectionSlot"]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+
+# EXACT grid & order used by predict_price.py
+COLLECTION_TIMES: List[str] = ["06:00", "12:00", "18:00", "00:00"]  # same order
+MAX_DAYS_OUT: int = 30
 
 # ---------- Robust model loader ----------
 @lru_cache(maxsize=1)
@@ -52,158 +72,206 @@ def _load_model(model_path: str | Path | None = None):
 # ---------- Helpers ----------
 def _to_dt(x):
     try:
-        return pd.to_datetime(x)
+        return pd.to_datetime(x, errors="coerce")
     except Exception:
         return pd.NaT
 
 def _to_float(x):
     try:
-        if pd.isna(x): return np.nan
+        if pd.isna(x):
+            return np.nan
         return float(x)
     except Exception:
         return np.nan
 
-def _time_of_day_bin(hour: int) -> str:
-    # 4 bins aligned with your 4x daily cadence
-    if 0 <= hour < 6:   return "00-06"
-    if 6 <= hour < 12:  return "06-12"
-    if 12 <= hour < 18: return "12-18"
-    return "18-24"
-
-def _synthesize_time_features(kickoff: pd.Timestamp, tstamp: pd.Timestamp) -> dict:
-    # Raw values
-    weekday = int(tstamp.weekday())               # 0=Mon
-    hour    = int(tstamp.hour)
-    month   = int(tstamp.month)
-    is_weekend = 1 if weekday >= 5 else 0
-    tod_bin = _time_of_day_bin(hour)
-
-    # Horizons
-    days_until  = np.nan
-    hours_until = np.nan
-    if pd.notna(kickoff):
-        delta = (kickoff - tstamp)
-        days_until  = delta.total_seconds() / 86400.0
-        hours_until = delta.total_seconds() / 3600.0
-
-    return {
-        # numerics
-        "days_until": days_until,
-        "days_until_game": days_until,   # alias
-        "hours_until": hours_until,
-        "weekday": weekday,
-        "day_of_week": weekday,          # alias
-        "month": month,
-        "hour": hour,
-        "is_weekend": is_weekend,
-        "is_night_game": 1 if hour >= 17 else 0,
-        # categoricals
-        "time_of_day_bin": tod_bin,
-        "day_name": tstamp.strftime("%a"),
-        "date_only": tstamp.date().isoformat(),
-        # datetime passthrough (pipelines usually ignore or transform)
-        "kickoff_ts": kickoff,
-        "startDateEastern": kickoff,
-        "prediction_time": tstamp,
+def _coerce_booleans(df: pd.DataFrame, bool_cols=None) -> pd.DataFrame:
+    """NaN-safe boolean coercion (parity with predict_price)."""
+    import numpy as np
+    if bool_cols is None:
+        bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
+    bool_cols = [c for c in bool_cols if c in df.columns]
+    truth_map = {
+        True: True, False: False,
+        "true": True, "false": False, "True": True, "False": False,
+        "yes": True, "no": False, "YES": True, "NO": False,
+        "y": True, "n": False, "Y": True, "N": False,
+        1: True, 0: False, "1": True, "0": False,
+        "t": True, "f": False, "T": True, "F": False,
+        np.nan: np.nan,
     }
+    for c in bool_cols:
+        s = df[c]
+        if not pd.api.types.is_bool_dtype(s):
+            s = s.map(truth_map).astype("boolean")
+        df[c] = s.fillna(False).astype(bool)
+    return df
 
-def _coerce_numeric_fields(feat: dict, keys: list[str]):
-    for k in keys:
-        if k in feat:
-            feat[k] = _to_float(feat[k])
+def _nearest_slot_label(ts: pd.Timestamp) -> str:
+    """Map any timestamp to one of the EXACT labels the model knows."""
+    if pd.isna(ts):
+        return "12:00"
+    minutes = ts.hour * 60 + ts.minute
+    idx = int(np.round(minutes / 360.0)) % 4
+    return ["00:00", "06:00", "12:00", "18:00"][idx]
 
-def _build_features_for_time(row: Dict, tstamp: pd.Timestamp) -> Dict:
-    """Build a rich, model-agnostic feature set with common aliases."""
-    kickoff = _to_dt(row.get("startDateEastern"))
-    base = {
-        # ids / labels (categoricals are fine; pipeline encoders will handle them)
-        "event_id": row.get("event_id"),
-        "homeTeam": row.get("homeTeam"),
-        "awayTeam": row.get("awayTeam"),
-        "home_team": row.get("homeTeam"),   # alias
-        "away_team": row.get("awayTeam"),   # alias
-        "week": row.get("week"),
-        "stadium": row.get("stadium") or row.get("venue"),
-        "venue": row.get("venue") or row.get("stadium"),
-        "homeConference": row.get("homeConference"),
-        "awayConference": row.get("awayConference"),
-        # flags (bool/int)
-        "neutral_site": row.get("neutral_site"),
-        "rivalry": row.get("is_rivalry") if "is_rivalry" in row else row.get("rivalry"),
-        "is_rivalry": row.get("is_rivalry") if "is_rivalry" in row else row.get("rivalry"),
-        "is_conference_game": row.get("is_conference_game") if "is_conference_game" in row else row.get("conference_game"),
-        "conference_game": row.get("conference_game") if "conference_game" in row else row.get("is_conference_game"),
-        # ranks / capacity
-        "home_rank": row.get("home_rank") if "home_rank" in row else row.get("homeRanking"),
-        "away_rank": row.get("away_rank") if "away_rank" in row else row.get("awayRanking"),
-        "capacity": row.get("capacity"),
-        # kickoff passthroughs
-        "startDateEastern": kickoff,
-        "kickoff_ts": kickoff,
+def _kickoff_date(row: Dict) -> pd.Timestamp:
+    # Accept a handful of common keys and coerce
+    for key in ("startDateEastern", "kickoff_ts", "start_time", "startDate", "date_local"):
+        if key in row and pd.notna(row[key]):
+            dt = _to_dt(row[key])
+            if pd.notna(dt):
+                return dt
+    return pd.NaT
+
+def _alias_row_to_required(row: Dict) -> Dict:
+    """Accept common aliases in your data and produce the exact keys FEATURES expect."""
+    # Start with passthroughs or common alt names
+    out = {
+        "homeConference": row.get("homeConference", row.get("home_conference")),
+        "awayConference": row.get("awayConference", row.get("away_conference")),
+        "capacity":       _to_float(row.get("capacity")),
+        "neutralSite":    row.get("neutralSite", row.get("neutral_site")),
+        "conferenceGame": row.get("conferenceGame", row.get("conference_game")),
+        "isRivalry":      row.get("isRivalry", row.get("rivalry", row.get("is_rivalry"))),
+        "isRankedMatchup": row.get("isRankedMatchup", row.get("is_ranked_matchup")),
+        "homeTeamRank":   _to_float(row.get("homeTeamRank", row.get("home_rank", row.get("homeRanking")))),
+        "awayTeamRank":   _to_float(row.get("awayTeamRank", row.get("away_rank", row.get("awayRanking")))),
+        "week":           int(_to_float(row.get("week"))) if row.get("week") is not None else 0,
     }
+    # boolean coercion happens later on the DataFrame
+    return out
 
-    # numeric coercions
-    _coerce_numeric_fields(base, ["week", "home_rank", "away_rank", "capacity"])
+def _build_sim_grid_like_predict_price(kickoff: pd.Timestamp) -> pd.DataFrame:
+    """Produce the exact (days x 4 slots) grid used by predict_price.py for a single game."""
+    if pd.isna(kickoff):
+        raise ValueError("startDateEastern/kickoff is missing or invalid for trajectory simulation.")
 
-    # join time-derived features
-    base.update(_synthesize_time_features(kickoff, pd.Timestamp(tstamp)))
-    return base
+    game_date = kickoff.date()
+    days = np.arange(1, MAX_DAYS_OUT + 1, dtype=int)
 
-def _align_to_model_requirements(model, df_feats: pd.DataFrame) -> pd.DataFrame:
-    """If the model exposes expected feature names, add any missing ones (NaN) and order columns."""
-    # Try to discover expected names
-    expected = None
-    # direct
-    expected = getattr(model, "feature_names_in_", None)
-    # pipeline last step
-    if expected is None and hasattr(model, "named_steps"):
-        try:
-            last = list(model.named_steps.values())[-1]
-            expected = getattr(last, "feature_names_in_", None)
-        except Exception:
-            pass
-    # ColumnTransformer sometimes has get_feature_names_out AFTER fit; but final model
-    # usually only knows the transformed array names, not raw feature names—skip that.
+    # Repeat days for each slot in the SAME ORDER as predict_price.py
+    sim_days = np.repeat(days, len(COLLECTION_TIMES))
+    sim_slots = np.tile(np.array(COLLECTION_TIMES, dtype=object), len(days))
 
-    if expected is None:
-        # No explicit contract: return as-is; pipeline should handle unknowns.
-        return df_feats
+    # For convenience, also carry the timestamp we are "simulating from"
+    # (not used by the model, just helpful for plotting/inspection)
+    sim_dates = [pd.Timestamp(game_date) - pd.Timedelta(int(d), "D") for d in sim_days]
+    # Represent a wall-clock for plotting by combining date + slot (00:00/06:00/12:00/18:00)
+    sim_ts = [pd.to_datetime(f"{d.date().isoformat()} {slot}") for d, slot in zip(sim_dates, sim_slots)]
 
-    expected = list(expected)
+    return pd.DataFrame(
+        {
+            "days_until_game": sim_days,
+            "collectionSlot": sim_slots,
+            "prediction_time": sim_ts,  # not used by the model; good for charts
+        }
+    )
 
-    # Provide common aliases if the model trained with slightly different keys
-    alias_map = {
-        "days_until_game": "days_until",
-        "day_of_week": "weekday",
-        "home_team": "homeTeam",
-        "away_team": "awayTeam",
-        "kickoff": "startDateEastern",
-    }
-    for exp in list(expected):
-        if exp not in df_feats.columns and exp in alias_map and alias_map[exp] in df_feats.columns:
-            df_feats[exp] = df_feats[alias_map[exp]]
+def _assemble_feature_frame(base_row: Dict, kickoff: pd.Timestamp, sim_grid: pd.DataFrame) -> pd.DataFrame:
+    """Combine static game fields with sim grid to match the model's FEATURES exactly."""
+    static = _alias_row_to_required(base_row)
+    static_df = pd.DataFrame({k: [v] * len(sim_grid) for k, v in static.items()})
+    df = pd.concat([sim_grid.reset_index(drop=True), static_df.reset_index(drop=True)], axis=1)
 
-    # Add any still-missing columns as NaN so predict() won’t error
-    for exp in expected:
-        if exp not in df_feats.columns:
-            df_feats[exp] = np.nan
+    # Coerce numerics & booleans (parity with predict_price)
+    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
 
-    # Order columns to match model
-    df_feats = df_feats.reindex(columns=expected, fill_value=np.nan)
-    return df_feats
+    # Ensure columns and order; add any missing with NaN (pipeline imputes/one-hots)
+    for f in FEATURES:
+        if f not in df.columns:
+            df[f] = np.nan
+    df = df[FEATURES + ["prediction_time"]]  # keep prediction_time for caller
+    return df
 
-# ---------- Public API ----------
+# ---------- Public APIs ----------
 def predict_for_times(row: Dict, times: Iterable[pd.Timestamp], model_path: str | Path | None = None) -> List[float]:
-    """Return predicted prices for the given timestamps using your saved model.
-
-    - Builds a robust feature frame with common aliases (days_until & days_until_game, etc.).
-    - If the model declares expected raw feature names, missing ones are added as NaN and ordered.
+    """
+    Predict prices for arbitrary timestamps, mapped to the model's exact features.
+    NOTE: For *parity* with predict_price.py's "lowest", use predict_grid_like_optimal().
     """
     model = _load_model(model_path)
-    feats = [_build_features_for_time(row, t) for t in times]
-    df_feats = pd.DataFrame(feats)
+    kickoff = _kickoff_date(row)
+    if pd.isna(kickoff):
+        raise ValueError("Row must include a valid 'startDateEastern' (or alias) to compute days_until_game.")
 
-    df_feats = _align_to_model_requirements(model, df_feats)
+    # Build a small frame where each time maps to (days_until_game, collectionSlot)
+    times = [pd.Timestamp(t) for t in times]
+    days_until = [(kickoff.date() - t.date()).days for t in times]
+    slots = [_nearest_slot_label(t) for t in times]
 
-    yhat = model.predict(df_feats)
+    base = _alias_row_to_required(row)
+    df = pd.DataFrame(
+        {
+            "days_until_game": days_until,
+            "collectionSlot": slots,
+            **{k: base[k] for k in base},
+        }
+    )
+    # Coercions and ordering
+    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
+    for f in FEATURES:
+        if f not in df.columns:
+            df[f] = np.nan
+    df = df[FEATURES]
+
+    yhat = model.predict(df)
     return pd.to_numeric(pd.Series(yhat), errors="coerce").astype(float).tolist()
+
+def predict_grid_like_optimal(row: Dict, model_path: str | Path | None = None, max_days: int = MAX_DAYS_OUT) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """
+    Build the SAME grid (days 1..max_days × slots 06/12/18/00) used by predict_price.py,
+    predict every point, and return:
+      - a DataFrame with columns: prediction_time, days_until_game, collectionSlot, yhat
+      - a dict {predicted_lowest_price, optimal_purchase_date, optimal_purchase_time}
+    Using this function ensures the argmin matches predict_price.py exactly.
+    """
+    # allow caller to shrink horizon if desired
+    global MAX_DAYS_OUT
+    original = MAX_DAYS_OUT
+    MAX_DAYS_OUT = int(max_days)
+    try:
+        model = _load_model(model_path)
+        kickoff = _kickoff_date(row)
+        sim_grid = _build_sim_grid_like_predict_price(kickoff)
+        feat_df = _assemble_feature_frame(row, kickoff, sim_grid)
+
+        yhat = model.predict(feat_df[FEATURES])
+        sim_grid = sim_grid.assign(yhat=pd.to_numeric(yhat, errors="coerce").astype(float))
+
+        # Find argmin exactly like predict_price.py: over the (days, slots) flattened in this order
+        best_idx = int(np.nanargmin(sim_grid["yhat"].values))
+        best_row = sim_grid.iloc[best_idx]
+
+        predicted_lowest_price = round(float(best_row["yhat"]), 2)
+        # Convert "days_until_game" back to a calendar date (kickoff_date - delta_days)
+        best_date = (kickoff.normalize() - pd.Timedelta(int(best_row["days_until_game"]), "D")).date().isoformat()
+        best_time = str(best_row["collectionSlot"])
+
+        summary = {
+            "predicted_lowest_price": predicted_lowest_price,
+            "optimal_purchase_date": best_date,
+            "optimal_purchase_time": best_time,
+            "optimal_source": "model",  # parity label
+        }
+
+        # Also expose a convenient trajectory frame for plotting
+        # (Each row is one simulated timestamp’s prediction.)
+        # Columns: prediction_time, days_until_game, collectionSlot, yhat
+        out_df = sim_grid[["prediction_time", "days_until_game", "collectionSlot", "yhat"]].copy()
+        return out_df, summary
+    finally:
+        MAX_DAYS_OUT = original
+
+# Backwards-compatible short name
+def predict_trajectory(row: Dict, model_path: str | Path | None = None, max_days: int = MAX_DAYS_OUT):
+    """
+    Convenience wrapper: returns (trajectory_df, summary_dict).
+    The summary_dict fields align with predict_price.py output.
+    """
+    return predict_grid_like_optimal(row, model_path=model_path, max_days=max_days)
