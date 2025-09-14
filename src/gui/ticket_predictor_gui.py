@@ -1,23 +1,24 @@
-# src/gui/ticket_predictor_gui.py — Step 2: robust snapshot timestamps + numeric coercion
+# src/gui/ticket_predictor_gui.py — Month/Day x-axis; 4x daily bins; month labels; past-games show lowest price text
 from __future__ import annotations
 
 import sys
 import os
 from pathlib import Path
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QPushButton, QMessageBox, QListView, QSizePolicy
+    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QLabel, QComboBox, QPushButton, QMessageBox, QListView, QSizePolicy, QScrollArea
 )
 from PyQt5.QtCore import Qt, QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import Formatter, NullFormatter
+from matplotlib.transforms import blended_transform_factory
+import numpy as np
 
-# -----------------------------
-# Repo-locked paths (runs from anywhere)
 # -----------------------------
 _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]  # .../repo root
@@ -44,9 +45,23 @@ SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily/price_snapshots.
 PRED_PATH     = _resolve_file("OUTPUT_PATH",  Path("data/predicted/predicted_prices_optimal.csv"))
 MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_with_context.csv"))
 
-# -----------------------------
-# Status helpers (module-level)
-# -----------------------------
+# ---- Time-of-day bin labels (Night 00:00–05:59; Morning 06:00–11:59; Afternoon 12:00–17:59; Evening 18:00–23:59)
+def tod_bucket(hour: int) -> str:
+    if 6 <= hour <= 11:  return "Morning"
+    if 12 <= hour <= 17: return "Afternoon"
+    if 18 <= hour <= 23: return "Evening"
+    return "Night"
+
+class TODMinorFormatter(Formatter):
+    def __call__(self, x, pos=None):
+        dt = mdates.num2date(x)
+        return tod_bucket(dt.hour)
+
+class DayNoZeroFormatter(mdates.DateFormatter):
+    """Formats day-of-month without leading zeros (portable)."""
+    def __call__(self, x, pos=None):
+        s = super().__call__(x, pos)  # usually '01'..'31'
+        return s.lstrip('0')
 
 def _fmt_mtime(p: Path) -> str:
     try:
@@ -64,85 +79,67 @@ class TicketApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🎟️ Ticket Price Predictor")
-        self.setGeometry(200, 200, 1000, 720)
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f0f2f5; font-family: Arial; }
-        """)
+        self.setGeometry(200, 200, 1080, 780)
+        self.setStyleSheet("QMainWindow { background-color: #f0f2f5; font-family: Arial; }")
 
-        # state for live countdown / chart re-render
+        # state
         self.current_row = None
         self.current_event_id = None
-        self.ax = None  # cached axes for smoother resize redraws
+        self.ax = None
+
+        # trajectory state
+        self.traj_times = []
+        self.traj_prices = []
+        self.playhead_line = None
+        self.playhead_marker = None
+        self.hover_annot = None
+        self._tt_series = None
+        self._yy_series = None
 
         try:
             self.snapshots = self.load_snapshot_data()
-            self.df = self.load_and_merge_data()   # predictions + snapshots (by event_id)
+            self.df = self.load_and_merge_data()
         except Exception as e:
             QMessageBox.critical(self, "Startup Error", f"{e}")
             raise
 
         self.init_ui()
 
-        # Live countdown timer (1s) — only updates countdown label, not whole details
+        # timers
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_countdown_live)
         self.timer.start(1000)
 
-        # Status auto-refresh (2s) — updates timestamps label only
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.update_status_only)
-        self.status_timer.start(2000)
-
-    # ---------------- Data loading ----------------
+    # ---------------- Data ----------------
     def _infer_collected_dt(self, snaps: pd.DataFrame) -> pd.Series:
-        """Best-effort timestamp for when the snapshot row was taken.
-        Tries several columns; falls back to date-only at midnight if no time is present.
-        """
-        # 1) Full datetime candidates
         for c in ["collected_at", "snapshot_datetime", "retrieved_at", "scraped_at", "collected_dt"]:
             if c in snaps.columns:
                 ts = pd.to_datetime(snaps[c], errors="coerce")
                 if ts.notna().any():
                     return ts
-        # 2) Combine date_collected + time candidates
         time_cand = next((c for c in ["time_collected", "collection_time", "snapshot_time", "time_pulled"] if c in snaps.columns), None)
         if "date_collected" in snaps.columns and time_cand:
-            ts = pd.to_datetime(
-                snaps["date_collected"].astype(str).str.strip() + " " + snaps[time_cand].astype(str).str.strip(),
-                errors="coerce"
-            )
+            ts = pd.to_datetime(snaps["date_collected"].astype(str).str.strip()+" "+snaps[time_cand].astype(str).str.strip(), errors="coerce")
             if ts.notna().any():
                 return ts
-        # 3) Fallback to date only (midnight)
         if "date_collected" in snaps.columns:
             ts = pd.to_datetime(snaps["date_collected"], errors="coerce")
             if ts.notna().any():
                 return ts
-        # 4) Give up: return all NaT
         return pd.Series(pd.NaT, index=snaps.index)
 
     def load_snapshot_data(self) -> pd.DataFrame:
         if not SNAPSHOT_PATH.exists():
             raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}'")
         snaps = pd.read_csv(SNAPSHOT_PATH)
-
-        # Ensure numeric lowest_price so we don't drop valid 0/strings later
         snaps["lowest_price"] = pd.to_numeric(snaps.get("lowest_price"), errors="coerce")
-
-        # Build collected_dt robustly (today's rows with only date will still appear at 00:00)
         snaps["collected_dt"] = self._infer_collected_dt(snaps)
-
-        # Fallback: try to build startDateEastern from date_local/time_local if missing
         if "startDateEastern" not in snaps.columns:
             if "date_local" in snaps.columns:
                 if "time_local" in snaps.columns:
-                    snaps["startDateEastern"] = pd.to_datetime(
-                        snaps["date_local"].astype(str) + " " + snaps["time_local"].astype(str), errors="coerce"
-                    )
+                    snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"].astype(str)+" "+snaps["time_local"].astype(str), errors="coerce")
                 else:
                     snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"], errors="coerce")
-
-        # Team column sanity for dropdowns
         if "homeTeam" not in snaps.columns and "home_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"home_team_guess": "homeTeam"})
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
@@ -150,7 +147,6 @@ class TicketApp(QMainWindow):
         return snaps
 
     def load_and_merge_data(self) -> pd.DataFrame:
-        # prefer merged artifact if present (has snapshot context)
         if MERGED_PATH.exists():
             merged = pd.read_csv(MERGED_PATH)
         else:
@@ -161,7 +157,6 @@ class TicketApp(QMainWindow):
                 pred["startDateEastern"] = pd.to_datetime(pred["startDateEastern"], errors="coerce")
             if "event_id" not in pred.columns:
                 raise KeyError("Predictions must contain 'event_id'.")
-            # join on snapshots for team names / schedule context if available
             snaps = getattr(self, "snapshots", None)
             if snaps is not None and "event_id" in snaps.columns:
                 merged = pred.merge(snaps, on="event_id", how="left", suffixes=("", "_snap"))
@@ -172,160 +167,100 @@ class TicketApp(QMainWindow):
 
         if "startDateEastern" in merged.columns:
             merged["startDateEastern"] = pd.to_datetime(merged["startDateEastern"], errors="coerce")
-
         if "week" in merged.columns:
             merged["week"] = pd.to_numeric(merged["week"], errors="coerce").astype("Int64")
-
-        # ensure team columns exist for dropdowns
         for tcol in ("homeTeam", "awayTeam"):
             if tcol not in merged.columns:
                 merged[tcol] = pd.NA
-
+        if "predicted_lowest_price" not in merged.columns and "predicted_lowest_price_num" in merged.columns:
+            merged["predicted_lowest_price"] = pd.to_numeric(merged["predicted_lowest_price_num"], errors="coerce")
         merged = merged.dropna(subset=["predicted_lowest_price"])
         return merged
 
     # ---------------- UI ----------------
     def init_ui(self):
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
+        self.central_widget = QWidget(); self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(); self.central_widget.setLayout(self.layout)
 
-        self.layout = QVBoxLayout()
-        self.central_widget.setLayout(self.layout)
-
-        container = QWidget()
-        container_layout = QVBoxLayout()
-        container.setLayout(container_layout)
+        container = QWidget(); container_layout = QVBoxLayout(); container.setLayout(container_layout)
         container.setStyleSheet("""
-            background-color: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin: 16px;
-            border: 1px solid #ccc;
+            background-color: white; border-radius: 12px; padding: 20px; margin: 16px; border: 1px solid #ccc;
         """)
-        container_layout.setSpacing(8)
-        self.layout.addWidget(container)
+        container_layout.setSpacing(8); self.layout.addWidget(container)
 
-        title = QLabel("🎟️ Ticket Price Predictor")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            QLabel { font-size: 26px; font-weight: bold; margin-bottom: 6px; }
-        """)
+        title = QLabel("🎟️ Ticket Price Predictor"); title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("QLabel { font-size: 26px; font-weight: bold; margin-bottom: 6px; }")
         container_layout.addWidget(title)
 
-        # Home dropdown
-        self.home_combo = QComboBox()
-        self.home_combo.setView(QListView())
+        # Home
+        self.home_combo = QComboBox(); self.home_combo.setView(QListView())
         self.home_combo.addItem("-- Select Home Team --")
-        homes = sorted(self.df["homeTeam"].dropna().unique())
-        self.home_combo.addItems(homes)
+        homes = sorted(self.df["homeTeam"].dropna().unique()); self.home_combo.addItems(homes)
         self.home_combo.currentIndexChanged.connect(self.update_away_teams)
-        self.home_combo.setStyleSheet("""
-            QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }
-            QComboBox QAbstractItemView::item { padding: 6px 8px; }
-            QListView::item:hover { color: #1a73e8; }
-        """)
+        self.home_combo.setStyleSheet("QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }")
         container_layout.addWidget(self.home_combo)
 
-        # Away dropdown
-        self.away_combo = QComboBox()
-        self.away_combo.setView(QListView())
+        # Away
+        self.away_combo = QComboBox(); self.away_combo.setView(QListView())
         self.away_combo.addItem("-- Select Away Team --")
-        self.away_combo.setStyleSheet("""
-            QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }
-            QComboBox QAbstractItemView::item { padding: 6px 8px; }
-            QListView::item:hover { color: #1a73e8; }
-        """)
+        self.away_combo.setStyleSheet("QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }")
         container_layout.addWidget(self.away_combo)
 
-        # Predict button
-        self.predict_button = QPushButton("Get Prediction")
-        self.predict_button.clicked.connect(self.get_prediction)
+        # Predict
+        self.predict_button = QPushButton("Get Prediction"); self.predict_button.clicked.connect(self.get_prediction)
         self.predict_button.setStyleSheet("""
-            QPushButton {
-                background-color: #1a73e8; color: white; padding: 8px 10px;
-                font-size: 14px; font-weight: bold; border: none; border-radius: 6px;
-            }
+            QPushButton { background-color: #1a73e8; color: white; padding: 8px 10px; font-size: 14px; font-weight: bold; border: none; border-radius: 6px; }
             QPushButton:hover { background-color: #1669c1; }
-        """)
-        container_layout.addWidget(self.predict_button)
+        """); container_layout.addWidget(self.predict_button)
 
-        # --- Details area ---
+        # Details (scrollable; at least as tall as chart)
         self.details_label = QLabel("")
         self.details_label.setTextFormat(Qt.RichText)
         self.details_label.setWordWrap(True)
         self.details_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.details_label.setStyleSheet("""
-            QLabel {
-                background-color: #fafafa; border: 1px solid #ddd; padding: 12px;
-                font-size: 15px; border-radius: 8px;
-            }
-        """)
-        self.details_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        container_layout.addWidget(self.details_label, stretch=0)
+        self.details_label.setStyleSheet(
+            "QLabel { background-color: #fafafa; border: 1px solid #ddd; padding: 12px; font-size: 15px; border-radius: 8px; }"
+        )
+        self.details_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.details_scroll = QScrollArea()
+        self.details_scroll.setWidget(self.details_label)
+        self.details_scroll.setWidgetResizable(True)
+        self.details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.details_scroll.setStyleSheet("QScrollArea { border: 0; }")
+        container_layout.addWidget(self.details_scroll, stretch=0)
 
         # Countdown
-        self.countdown_label = QLabel("")
-        self.countdown_label.setTextFormat(Qt.RichText)
-        self.countdown_label.setAlignment(Qt.AlignLeft)
+        self.countdown_label = QLabel(""); self.countdown_label.setTextFormat(Qt.RichText); self.countdown_label.setAlignment(Qt.AlignLeft)
         self.countdown_label.setStyleSheet("QLabel { font-size: 14px; padding: 2px 0 8px 2px; }")
         container_layout.addWidget(self.countdown_label, stretch=0)
 
-        # ---- Chart (responsive) ----
+        # Chart
         self.chart_canvas = FigureCanvas(Figure(constrained_layout=True))
         self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.chart_canvas.setMinimumHeight(260)
+        self.chart_canvas.setMinimumHeight(340)
         self.ax = self.chart_canvas.figure.add_subplot(111)
         container_layout.addWidget(self.chart_canvas, stretch=1)
+        self.details_scroll.setMinimumHeight(self.chart_canvas.minimumHeight())
 
-        # ---- Status bar (Last updated + Refresh) ----
-        status_bar = QWidget()
-        status_layout = QHBoxLayout()
-        status_layout.setContentsMargins(8, 4, 8, 8)
-        status_bar.setLayout(status_layout)
+        # Hover
+        self.chart_canvas.mpl_connect("motion_notify_event", self.on_mouse_move)
 
-        self.status_label = QLabel(get_status_text())
-        self.status_label.setAlignment(Qt.AlignLeft)
-        self.refresh_btn = QPushButton("Refresh")
-        self.refresh_btn.clicked.connect(self.reload_data_and_status)
-
-        status_layout.addWidget(self.status_label, stretch=1)
-        status_layout.addWidget(self.refresh_btn, stretch=0)
-        self.layout.addWidget(status_bar)
-
-    # ----- Window resize: refresh chart ticks and redraw efficiently -----
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self.current_event_id is not None:
-            self.render_chart(self.current_event_id, reuse_axes=True)
-        else:
-            self.chart_canvas.draw_idle()
-
-    # ---------------- Dropdown logic ----------------
+    # ---------------- Dropdowns ----------------
     def update_away_teams(self):
         selected_home = self.home_combo.currentText()
         if selected_home.startswith("--"):
-            self.away_combo.clear()
-            self.away_combo.addItem("-- Select Away Team --")
-            return
-
+            self.away_combo.clear(); self.away_combo.addItem("-- Select Away Team --"); return
         df_home = self.df[self.df["homeTeam"] == selected_home].sort_values("startDateEastern")
-        seen = set()
-        ordered_away = []
+        seen, ordered = set(), []
         for away in df_home["awayTeam"]:
-            if pd.isna(away):
-                continue
-            if away not in seen:
-                ordered_away.append(away)
-                seen.add(away)
+            if pd.isna(away): continue
+            if away not in seen: ordered.append(away); seen.add(away)
+        self.away_combo.clear(); self.away_combo.addItem("-- Select Away Team --"); self.away_combo.addItems(ordered)
 
-        self.away_combo.clear()
-        self.away_combo.addItem("-- Select Away Team --")
-        self.away_combo.addItems(ordered_away)
-
-    # ---------------- Formatting helpers ----------------
+    # ---------------- Format helpers ----------------
     def _fmt_ampm_no_sec(self, val: str) -> str:
-        if val is None or str(val).strip() == "" or str(val).strip().upper() == "TBD":
-            return "TBD"
+        if val is None or str(val).strip() == "" or str(val).strip().upper() == "TBD": return "TBD"
         s = str(val).strip()
         try:
             t = pd.to_datetime(s).time()
@@ -341,37 +276,27 @@ class TicketApp(QMainWindow):
 
     def _fmt_full_date(self, dt_like) -> str:
         try:
-            dt = pd.to_datetime(dt_like)
-            return dt.strftime("%A, %B %d, %Y")
+            dt = pd.to_datetime(dt_like); return dt.strftime("%A, %B %d, %Y")
         except Exception:
             return "TBD"
 
     def _parse_time_hhmm(self, t_str: str):
-        if not t_str:
-            return None
+        if not t_str: return None
         try:
             return pd.to_datetime(str(t_str)).time()
         except Exception:
             for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
-                try:
-                    return datetime.strptime(str(t_str), fmt).time()
-                except Exception:
-                    continue
+                try: return datetime.strptime(str(t_str), fmt).time()
+                except Exception: continue
             return None
 
     def _humanize_delta(self, td: pd.Timedelta) -> str:
-        total_seconds = int(td.total_seconds())
-        sign = "-" if total_seconds < 0 else ""
-        total_seconds = abs(total_seconds)
-        days = total_seconds // 86400
-        hours = (total_seconds % 86400) // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
+        total = int(td.total_seconds()); sign = "-" if total < 0 else ""; total = abs(total)
+        d = total // 86400; h = (total % 86400) // 3600; m = (total % 3600) // 60; s = total % 60
         parts = []
-        if days: parts.append(f"{days}d")
-        if hours or days: parts.append(f"{hours}h")
-        parts.append(f"{minutes}m")
-        parts.append(f"{seconds}s")
+        if d: parts.append(f"{d}d")
+        if h or d: parts.append(f"{h}h")
+        parts.append(f"{m}m"); parts.append(f"{s}s")
         return sign + " ".join(parts)
 
     def _format_kickoff(self, row) -> str:
@@ -387,234 +312,272 @@ class TicketApp(QMainWindow):
                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
         return "TBD"
 
-    # ---------------- Prediction / Rendering ----------------
+    # ---------------- Prediction & rendering ----------------
     def get_prediction(self):
         try:
-            home = self.home_combo.currentText()
-            away = self.away_combo.currentText()
-
+            home = self.home_combo.currentText(); away = self.away_combo.currentText()
             if home.startswith("--") or away.startswith("--"):
-                self.details_label.setText("<b>❌ Please select both a home and away team.</b>")
-                self.countdown_label.setText("")
-                return
+                self.details_label.setText("<b>❌ Please select both a home and away team.</b>"); self.countdown_label.setText(""); return
 
-            match = self.df[
-                (self.df["homeTeam"] == home) &
-                (self.df["awayTeam"] == away)
-            ].sort_values("startDateEastern")
-
+            match = self.df[(self.df["homeTeam"] == home) & (self.df["awayTeam"] == away)].sort_values("startDateEastern")
             if match.empty:
-                self.details_label.setText("<b>❌ No prediction found for this matchup.</b>")
-                self.countdown_label.setText("")
-                return
+                self.details_label.setText("<b>❌ No prediction found for this matchup.</b>"); self.countdown_label.setText(""); return
 
-            now = pd.Timestamp.now()
-            upcoming = match[match["startDateEastern"] >= now]
+            now = pd.Timestamp.now(); upcoming = match[match["startDateEastern"] >= now]
             row = (upcoming.iloc[0] if not upcoming.empty else match.iloc[0]).to_dict()
 
-            self.current_row = row
-            self.current_event_id = row.get("event_id")
-            self.render_details(row)          # static info once
-            self.update_countdown_live()      # live piece now
+            self.current_row = row; self.current_event_id = row.get("event_id")
+            self.update_countdown_live()
+
+            kickoff = pd.to_datetime(row.get("startDateEastern"))
+            if pd.notna(kickoff) and kickoff < now:
+                # Game is in the past → show text-only lowest price
+                self.render_past_lowest(self.current_event_id, kickoff, row)
+                return
+
+            # Build trajectory via model (natural timestamps; no snapping)
+            self.traj_times, self.traj_prices, warn = self.build_trajectory(row)
+            if warn: self._set_details_with_warning(row, warn)
+            else:    self.render_details(row)
+
             self.render_chart(self.current_event_id, reuse_axes=False)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not fetch prediction.\n{e}")
 
+    def _set_details_with_warning(self, row, warn: str):
+        base = self._details_html(row, forecast_min_text="—")
+        self.details_label.setText(base + f"<div style='margin-top:8px;color:#b00020;'>⚠️ {warn}</div>")
+
     def render_details(self, row):
-        game_dt = pd.to_datetime(row["startDateEastern"])
-        stadium = row.get("stadium", "Unknown Venue")
+        # compute min from trajectory
+        traj_min_txt = "—"
+        if self.traj_times and self.traj_prices:
+            idx = int(np.nanargmin(pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")))
+            ts_min = pd.to_datetime(self.traj_times[idx]); p_min = float(self.traj_prices[idx])
+            traj_min_txt = f"${p_min:,.2f} on {ts_min.strftime('%a, %b %d, %Y %I:%M %p')}"
+        self.details_label.setText(self._details_html(row, traj_min_txt))
+
+    def _details_html(self, row, forecast_min_text: str) -> str:
+        game_dt = pd.to_datetime(row["startDateEastern"]); stadium = row.get("stadium", "Unknown Venue")
         kickoff = self._format_kickoff(row)
-
-        # Optimal purchase strings (static parts)
         opt_time_str = self._fmt_ampm_no_sec(row.get("optimal_purchase_time"))
-        opt_date_iso = row.get("optimal_purchase_date", "")
-        opt_date_fmt = self._fmt_full_date(opt_date_iso)
-
+        opt_date_iso = row.get("optimal_purchase_date", ""); opt_date_fmt = self._fmt_full_date(opt_date_iso)
         week_str = int(row["week"]) if pd.notna(row.get("week")) else "—"
-
-        html = f"""
+        return f"""
             <div style="font-size: 15px; line-height: 1.6;">
                 <h2 style="margin-bottom: 2px;">{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}</h2>
-                <div style="font-size: 18px; font-weight: 700; color: #6a1b9a; margin-bottom: 6px;">
-                    Predicted Price: ${row['predicted_lowest_price']:.2f}
+                <div style="font-size: 16px; font-weight: 700; color: #6a1b9a; margin: 4px 0 8px 0;">
+                    Current Forecasted Minimum: {forecast_min_text}
                 </div><br>
-
                 <b>Optimal Purchase Date:</b> {opt_date_fmt}<br>
                 <b>Optimal Purchase Time:</b> {opt_time_str}<br>
-
                 <b>Game Week:</b> {week_str}<br>
                 <b>Game Date:</b> {game_dt.strftime('%A, %B %d, %Y')}<br>
                 <b>Kickoff Time:</b> {kickoff}<br>
                 <b>Venue:</b> {stadium}<br>
             </div>
         """
-        self.details_label.setText(html)
 
-    def _tick_step_for_height(self) -> int:
-        """Use finer price tick steps on larger chart heights."""
-        h = self.chart_canvas.height()
-        if h >= 700: return 20
-        if h >= 600: return 25
-        if h >= 480: return 50
-        return 100
+    def build_trajectory(self, row: dict):
+        from gui.predict_trajectory import predict_for_times
+        warn = ""
+        kickoff = pd.to_datetime(row.get("startDateEastern")); now = pd.Timestamp.now()
+        if pd.isna(kickoff): return [], [], "Missing kickoff datetime for this event."
+        start = max(now, now.floor('T')); end = kickoff
+        if end <= start: start = end - pd.Timedelta(hours=6)
+        # 6-hour grid is fine; times remain natural (no snapping to bins)
+        times = pd.date_range(start=start, end=end, freq="6H")
+        if len(times) < 2: times = pd.DatetimeIndex([start, end])
+        try:
+            prices = predict_for_times(row, list(times))
+            return list(times), list(prices), warn
+        except Exception as e:
+            warn = f"Prediction failed: {e}"; return [], [], warn
 
+    # ---------------- Chart + hover interactions ----------------
     def render_chart(self, event_id, reuse_axes: bool = True):
+        import matplotlib.dates as mdates
+        from matplotlib.transforms import blended_transform_factory
+
         if reuse_axes and self.ax is not None:
-            self.ax.clear()
-            ax = self.ax
+            self.ax.clear(); ax = self.ax
         else:
             self.chart_canvas.figure.clear()
             ax = self.chart_canvas.figure.add_subplot(111)
-            self.ax = ax  # cache for future resizes
+            self.ax = ax
 
-        # Use numeric price and robust collected_dt so today is included even if time is missing
-        snap_filtered = self.snapshots[self.snapshots.get("event_id").astype(str) == str(event_id)].copy()
-        snap_filtered["lowest_price"] = pd.to_numeric(snap_filtered.get("lowest_price"), errors="coerce")
-        snap_filtered = snap_filtered.dropna(subset=["collected_dt", "lowest_price"], how="any")
+        # Validate trajectory
+        if not self.traj_times or not self.traj_prices or len(self.traj_times) != len(self.traj_prices):
+            ax.set_title("No forecast trajectory available")
+            ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
+            self.chart_canvas.draw_idle(); return
 
-        if snap_filtered.empty:
-            ax.set_title("No snapshot data available")
-        else:
-            snap_filtered = snap_filtered.sort_values("collected_dt")
-            ax.plot(snap_filtered["collected_dt"], snap_filtered["lowest_price"], marker="o", linewidth=1.8, label="Lowest Price")
+        tt = pd.to_datetime(pd.Series(self.traj_times))
+        yy = pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")
+        ok = tt.notna() & yy.notna()
+        tt, yy = tt[ok], yy[ok]
+        if tt.empty:
+            ax.set_title("No forecast trajectory available")
+            ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
+            self.chart_canvas.draw_idle(); return
 
-            # pin x-axis to first/last snapshot timestamp
-            dt_min = snap_filtered["collected_dt"].min()
-            dt_max = snap_filtered["collected_dt"].max()
-            if pd.notna(dt_min) and pd.notna(dt_max):
-                if dt_min == dt_max:
-                    dt_min = dt_min - pd.Timedelta(hours=6)
-                    dt_max = dt_max + pd.Timedelta(hours=6)
-                ax.set_xlim(dt_min, dt_max)
-                ax.margins(x=0)
+        # Plot
+        ax.plot(tt, yy, linewidth=2.0, label="Predicted price trajectory")
+        ax.scatter(tt, yy, s=18, alpha=0.9)
 
-            ax.set_title("Price Trend Over Time")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price ($)")
-            ax.legend()
+        # X-axis: force one tick per day with day number
+        x_min = tt.min().normalize()
+        x_max = (tt.max().normalize() + pd.Timedelta(days=1))
+        ax.set_xlim(x_min, x_max)
 
-            # date ticks: days major, 00/06/12/18 minor
-            try:
-                ax.xaxis.set_major_locator(mdates.DayLocator())
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-                ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[0,6,12,18]))
-                ax.grid(True, which='major', axis='x', alpha=0.25)
-                ax.grid(True, which='minor', axis='x', alpha=0.08)
-            except Exception:
-                ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d %H:%M'))
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d"))
+        ax.tick_params(axis="x", which="major", labelsize=11, pad=20, bottom=True, labelbottom=True)
 
-            ax.tick_params(axis='x', rotation=45)
+        # Gridlines
+        ax.grid(True, which="major", axis="both", alpha=0.28)
 
-            # dynamic Y-axis tick step
-            try:
-                ax.yaxis.set_major_locator(MultipleLocator(self._tick_step_for_height()))
-            except Exception:
-                pass
+        ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
+        ax.legend(loc="best")
 
-        self.chart_canvas.figure.subplots_adjust(bottom=0.18)
+        # Autoscale Y
+        ax.relim(); ax.autoscale(axis='y', tight=False)
+
+        # Month separators and labels
+        trans = blended_transform_factory(ax.transData, ax.get_xaxis_transform())
+        months = pd.date_range(x_min, x_max, freq="MS")
+        for m in months:
+            ax.axvline(m, color="gray", linestyle="--", alpha=0.65, linewidth=1.0, zorder=0)
+            ax.text(
+                m, -0.25, m.strftime("%b"),
+                ha="center", va="top", fontsize=12, fontweight="bold", color="gray",
+                transform=trans, clip_on=False,
+                bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="none", alpha=0.95),
+                zorder=5
+            )
+
+        # Title/playhead
+        x0, y0 = tt.iloc[0], float(yy.iloc[0])
+        self.playhead_line = ax.axvline(x0, linestyle="--", alpha=0.6)
+        self.playhead_marker = ax.plot([x0], [y0], marker="o", markersize=6)[0]
+
+        # Hover annotation
+        if self.hover_annot is None:
+            self.hover_annot = ax.annotate(
+                "", xy=(0,0), xytext=(12,12), textcoords="offset points",
+                bbox=dict(boxstyle="round", fc="white", ec="#888"),
+                arrowprops=dict(arrowstyle="->", color="#666")
+            )
+        self.hover_annot.set_visible(False)
+
+        # Keep series for hover
+        self._tt_series = tt.reset_index(drop=True)
+        self._yy_series = yy.reset_index(drop=True)
+        self._update_title_and_marker(0)
+
+        # **Critical fix:** disable constrained layout and add padding
+        self.chart_canvas.figure.set_constrained_layout(False)
+        self.chart_canvas.figure.subplots_adjust(bottom=0.65)
+
         self.chart_canvas.draw_idle()
 
-    # ---------------- Live countdown tick ----------------
-    def update_countdown_live(self):
-        """Refresh ONLY the countdown label every 1s; avoids scroll/resize jumps."""
-        if not self.current_row:
-            return
 
+    def _update_title_and_marker(self, idx: int):
+        idx = max(0, min(idx, len(self._tt_series)-1))
+        ts = self._tt_series.iloc[idx]; pr = float(self._yy_series.iloc[idx])
+        bucket = tod_bucket(ts.hour)
+        title = f"Forecasted Price: ${pr:,.2f} — {ts.strftime('%a %b %d, %Y')} ({bucket})"
+        self.ax.set_title(title)
+
+        if self.playhead_line is not None: self.playhead_line.set_xdata([ts])
+        if self.playhead_marker is not None:
+            self.playhead_marker.set_xdata([ts]); self.playhead_marker.set_ydata([pr])
+
+        self.ax.relim(); self.ax.autoscale(axis='y', tight=False)
+        self.chart_canvas.draw_idle()
+
+    def on_mouse_move(self, event):
+        if event.inaxes != self.ax or self._tt_series is None:
+            if self.hover_annot:
+                self.hover_annot.set_visible(False); self.chart_canvas.draw_idle()
+            return
+        xdata = event.xdata
+        if xdata is None: return
+        xs = mdates.date2num(self._tt_series.dt.to_pydatetime())
+        idx = int(np.argmin(np.abs(xs - xdata)))
+        ts = self._tt_series.iloc[idx]; pr = float(self._yy_series.iloc[idx])
+
+        # within ~4 hours of a point (since spacing is 6h)
+        if abs(xs[idx] - xdata) < (1.0/6.0):
+            self.hover_annot.xy = (ts, pr)
+            self.hover_annot.set_text(f"${pr:,.2f}\n{tod_bucket(ts.hour)}")
+            self.hover_annot.set_visible(True)
+            self._update_title_and_marker(idx)
+            self.chart_canvas.draw_idle()
+        else:
+            if self.hover_annot.get_visible():
+                self.hover_annot.set_visible(False); self.chart_canvas.draw_idle()
+
+    # ---------------- Past game text-only summary ----------------
+    def render_past_lowest(self, event_id, kickoff: pd.Timestamp, row: dict):
+        ax = self.ax or self.chart_canvas.figure.add_subplot(111)
+        ax.clear(); ax.axis("off")
+
+        # Compute observed lowest price up to kickoff from snapshots (fallbacks included)
+        min_price_txt = "—"
+        try:
+            df = self.snapshots.copy()
+            if "event_id" in df.columns:
+                df = df[df["event_id"] == event_id]
+            if not df.empty:
+                df["collected_dt"]  = pd.to_datetime(df.get("collected_dt"), errors="coerce")
+                df["lowest_price"]  = pd.to_numeric(df.get("lowest_price"), errors="coerce")
+                if df["collected_dt"].notna().any():
+                    df = df[df["collected_dt"] <= kickoff] if pd.notna(kickoff) else df
+                mp = df["lowest_price"].min()
+                if pd.notna(mp):
+                    min_price_txt = f"${float(mp):,.2f}"
+        except Exception:
+            pass
+
+        # Fallbacks from merged row if snapshots were missing
+        if min_price_txt == "—":
+            for k in ("actual_lowest_price", "observed_lowest_price", "final_lowest_price"):
+                if k in row and pd.notna(row[k]):
+                    try:
+                        min_price_txt = f"${float(row[k]):,.2f}"; break
+                    except Exception:
+                        continue
+
+        matchup = f"{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}"
+        date_str = pd.to_datetime(row.get("startDateEastern")).strftime("%A, %B %d, %Y") if pd.notna(row.get("startDateEastern")) else "Game date unknown"
+
+        ax.text(0.5, 0.68, f"{matchup}", ha="center", va="center", fontsize=16, fontweight="bold", transform=ax.transAxes)
+        ax.text(0.5, 0.54, f"Game Date: {date_str}", ha="center", va="center", fontsize=12, transform=ax.transAxes)
+        ax.text(0.5, 0.40, "Observed Lowest Price", ha="center", va="center", fontsize=13, color="#555", transform=ax.transAxes)
+        ax.text(0.5, 0.30, min_price_txt, ha="center", va="center", fontsize=20, fontweight="bold", transform=ax.transAxes, color="#2e7d32")
+
+        self.details_label.setText(self._details_html(row, forecast_min_text="—") + "<div style='margin-top:8px;color:#444;'>Game has concluded.</div>")
+        self.chart_canvas.draw_idle()
+
+    # ---------------- Live countdown ----------------
+    def update_countdown_live(self):
+        if not self.current_row: return
         opt_date_iso = self.current_row.get("optimal_purchase_date", "")
         parsed_time = self._parse_time_hhmm(self.current_row.get("optimal_purchase_time"))
-
-        if not opt_date_iso or not parsed_time:
-            self.countdown_label.setText("")
-            return
-
+        if not opt_date_iso or not parsed_time: self.countdown_label.setText(""); return
         opt_dt = pd.to_datetime(f"{opt_date_iso} {parsed_time.strftime('%H:%M:%S')}", errors="coerce")
-        if pd.isna(opt_dt):
-            self.countdown_label.setText("")
-            return
-
-        now_dt = pd.Timestamp.now()
-        delta = opt_dt - now_dt
-        human = self._humanize_delta(delta)
-        if delta.total_seconds() < 0:
-            html = '<div style="font-weight:700; color:#c62828;">PAST OPTIMAL DATE</div>'
-        else:
-            html = f'<div style="color:#2e7d32;">Countdown to Optimal Ticket Price: {human}</div>'
+        if pd.isna(opt_dt): self.countdown_label.setText(""); return
+        now_dt = pd.Timestamp.now(); delta = opt_dt - now_dt; human = self._humanize_delta(delta)
+        html = '<div style="font-weight:700; color:#c62828;">PAST OPTIMAL DATE</div>' if delta.total_seconds() < 0 else f'<div style="color:#2e7d32;">Countdown to Optimal Ticket Price: {human}</div>'
         self.countdown_label.setText(html)
-
-    # ---------------- Reload + Status ----------------
-    def reload_data_and_status(self):
-        """Re-read CSVs from disk, rebuild dropdowns, keep current selection if possible."""
-        try:
-            self.snapshots = self.load_snapshot_data()
-            self.df = self.load_and_merge_data()
-        except Exception as e:
-            QMessageBox.critical(self, "Reload Error", f"{e}")
-            return
-
-        # Rebuild home team dropdown preserving selection if possible
-        prev_home = self.home_combo.currentText()
-        homes = sorted(self.df["homeTeam"].dropna().unique())
-
-        self.home_combo.blockSignals(True)
-        self.home_combo.clear()
-        self.home_combo.addItem("-- Select Home Team --")
-        self.home_combo.addItems(homes)
-        self.home_combo.blockSignals(False)
-
-        # Restore previous home if still present
-        if prev_home in homes:
-            idx = self.home_combo.findText(prev_home)
-            if idx >= 0:
-                self.home_combo.setCurrentIndex(idx)
-                self.update_away_teams()
-
-        # If an event is selected, re-render chart with fresh snapshots
-        if self.current_event_id is not None:
-            self.render_chart(self.current_event_id, reuse_axes=False)
-
-        # Update status label
-        self.update_status_only()
-
-    def update_status_only(self):
-        self.status_label.setText(get_status_text())
-
-    # ---------- helpers reused above ----------
-    def _parse_time_hhmm(self, t_str: str):
-        if not t_str:
-            return None
-        try:
-            return pd.to_datetime(str(t_str)).time()
-        except Exception:
-            for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
-                try:
-                    return datetime.strptime(str(t_str), fmt).time()
-                except Exception:
-                    continue
-            return None
-
-    def _humanize_delta(self, td: pd.Timedelta) -> str:
-        total_seconds = int(td.total_seconds())
-        sign = "-" if total_seconds < 0 else ""
-        total_seconds = abs(total_seconds)
-        days = total_seconds // 86400
-        hours = (total_seconds % 86400) // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-        parts = []
-        if days: parts.append(f"{days}d")
-        if hours or days: parts.append(f"{hours}h")
-        parts.append(f"{minutes}m")
-        parts.append(f"{seconds}s")
-        return sign + " ".join(parts)
 
 # =========================================================
 
 def main():
     app = QApplication(sys.argv)
-    win = TicketApp()
-    win.show()
+    win = TicketApp(); win.show()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

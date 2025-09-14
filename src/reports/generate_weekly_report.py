@@ -71,9 +71,6 @@ def _now():
 def _elapsed(s):
     return perf_counter() - s
 
-def _deadline_exceeded(start_ts, max_seconds):
-    return _elapsed(start_ts) > max_seconds if max_seconds and max_seconds > 0 else False
-
 def _log_step(label, t0):
     print(f"[weekly_report] {label} (t+{_elapsed(t0):.1f}s)")
 
@@ -670,9 +667,6 @@ def run_permutation_importance(model, X, y, n_repeats=PERM_N_REPEATS, n_jobs=PER
         return None
     if y is None or (isinstance(y, pd.Series) and y.isna().all()):
         return None
-    if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-        print("[perm] skipped (over diagnostics time budget)")
-        return None
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -731,11 +725,6 @@ def generate_pdp_plots(model, X, feature_names, out_dir, prefix="pdp", time_budg
         print(f"⚠️  Skipping PDP (matplotlib/sklearn not available): {e}")
         return created
 
-    # Respect diagnostics time budget
-    if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-        print("[pdp] skipped (over diagnostics time budget)")
-        return created
-
     # Downsample rows for PDP
     X_use = X
     if len(X_use) > PDP_SAMPLE_N:
@@ -746,9 +735,6 @@ def generate_pdp_plots(model, X, feature_names, out_dir, prefix="pdp", time_budg
 
     feats = [f for f in feature_names if f in X_use.columns][:TOP_FEATURES_FOR_PLOTS]
     for f in feats:
-        if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-            print("[pdp] budget reached; stopping remaining plots")
-            break
         try:
             fig = plt.figure(figsize=(6, 4))
             ax = fig.gca()
@@ -790,11 +776,6 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
         import matplotlib.pyplot as plt
     except Exception as e:
         print(f"⚠️  Skipping SHAP (library not available): {e}")
-        return None, None, []
-
-    # Respect diagnostics time budget
-    if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-        print("[shap] skipped (over diagnostics time budget)")
         return None, None, []
 
     # Downsample rows for SHAP
@@ -840,11 +821,6 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
     os.makedirs(os.path.dirname(agg_path), exist_ok=True)
     agg.to_csv(agg_path, index=False)
 
-    # Respect budget before plotting
-    if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-        print("[shap] budget reached before plotting")
-        return agg_path, None, []
-
     # Summary bar (top 20)
     summary_plot_path = None
     try:
@@ -866,9 +842,6 @@ def run_shap_and_plots(estimator, preprocessor, X_orig, top_original_feats, out_
     # Dependence plots for top features (respect TOP_FEATURES_FOR_PLOTS)
     per_feature_paths = []
     for base in list(agg["feature"].head(TOP_FEATURES_FOR_PLOTS)):
-        if time_budget_s is not None and t0 is not None and _deadline_exceeded(t0, time_budget_s):
-            print("[shap] budget reached; stopping dependence plots")
-            break
         idxs = base_to_idx.get(base, [])
         if not idxs:
             continue
@@ -934,8 +907,6 @@ def build_report() -> str:
     perm_csv_path = None
     if ENABLE_ADV_DIAGNOSTICS and os.path.exists(MODEL_PATH):
         try:
-            if _deadline_exceeded(t0_total, REPORT_MAX_SECONDS):
-                raise RuntimeError("Report time budget exceeded before diagnostics.")
             model = _robust_load_model(MODEL_PATH)
             pipeline, preprocessor, estimator = _unwrap_model(model)
             model_for_perm = model
@@ -974,42 +945,38 @@ def build_report() -> str:
             else:
                 top_for_plots = orig_feats[:TOP_FEATURES_FOR_PLOTS] if orig_feats else []
 
-            # PDP (bounded)
-            if not _deadline_exceeded(t0_diag, DIAG_MAX_SECONDS):
-                _log_step("generating PDP plots", t0_total)
-                if top_for_plots:
-                    pdp_imgs = generate_pdp_plots(
-                        model_for_perm, X_perm, top_for_plots, images_dir, prefix=f"pdp_{today_str}",
-                        time_budget_s=DIAG_MAX_SECONDS, t0=t0_diag
-                    )
-                    if pdp_imgs:
-                        report.append("## 📈 Partial Dependence (Top Perm-Important)\n")
-                        for img in pdp_imgs:
-                            report.append(f"![PDP]({_md_rel(report_dir_for_date, img)})")
-                        report.append("")
-
-            # SHAP (bounded)
-            if not _deadline_exceeded(t0_diag, DIAG_MAX_SECONDS):
-                _log_step("running SHAP diagnostics", t0_total)
-                agg_path, shap_summary_img, shap_dep_imgs = run_shap_and_plots(
-                    estimator=estimator,
-                    preprocessor=preprocessor,
-                    X_orig=X_perm,
-                    top_original_feats=top_for_plots,
-                    out_dir=images_dir,
-                    prefix=f"shap_{today_str}",
-                    time_budget_s=DIAG_MAX_SECONDS,
-                    t0=t0_diag
+            _log_step("generating PDP plots", t0_total)
+            if top_for_plots:
+                pdp_imgs = generate_pdp_plots(
+                    model_for_perm, X_perm, top_for_plots, images_dir, prefix=f"pdp_{today_str}",
+                    time_budget_s=DIAG_MAX_SECONDS, t0=t0_diag
                 )
-                if agg_path or shap_summary_img or shap_dep_imgs:
-                    report.append("## 🧮 SHAP Diagnostics (Top Perm-Important)\n")
-                    if agg_path and os.path.exists(agg_path):
-                        report.append(f"- Aggregated mean |SHAP| table: `{_md_rel(report_dir_for_date, agg_path)}`")
-                    if shap_summary_img and os.path.exists(shap_summary_img):
-                        report.append(f"![SHAP Summary]({_md_rel(report_dir_for_date, shap_summary_img)})")
-                    for img in shap_dep_imgs:
-                        report.append(f"![SHAP Dependence]({_md_rel(report_dir_for_date, img)})")
+                if pdp_imgs:
+                    report.append("## 📈 Partial Dependence (Top Perm-Important)\n")
+                    for img in pdp_imgs:
+                        report.append(f"![PDP]({_md_rel(report_dir_for_date, img)})")
                     report.append("")
+
+            _log_step("running SHAP diagnostics", t0_total)
+            agg_path, shap_summary_img, shap_dep_imgs = run_shap_and_plots(
+                estimator=estimator,
+                preprocessor=preprocessor,
+                X_orig=X_perm,
+                top_original_feats=top_for_plots,
+                out_dir=images_dir,
+                prefix=f"shap_{today_str}",
+                time_budget_s=DIAG_MAX_SECONDS,
+                t0=t0_diag
+            )
+            if agg_path or shap_summary_img or shap_dep_imgs:
+                report.append("## 🧮 SHAP Diagnostics (Top Perm-Important)\n")
+                if agg_path and os.path.exists(agg_path):
+                    report.append(f"- Aggregated mean |SHAP| table: `{_md_rel(report_dir_for_date, agg_path)}`")
+                if shap_summary_img and os.path.exists(shap_summary_img):
+                    report.append(f"![SHAP Summary]({_md_rel(report_dir_for_date, shap_summary_img)})")
+                for img in shap_dep_imgs:
+                    report.append(f"![SHAP Dependence]({_md_rel(report_dir_for_date, img)})")
+                report.append("")
 
         except Exception as e:
             report.append(f"### ⚠️ Advanced diagnostics skipped\nReason: {e}\n")
@@ -1086,9 +1053,6 @@ def build_report() -> str:
             report.append("|------|-----------|-----------|--------|-----------|---------|")
 
         for _, row in table_df.iterrows():
-            if _deadline_exceeded(t0_total, REPORT_MAX_SECONDS):
-                report.append("\n_Stopped table early: report time budget reached._")
-                break
             game = _compose_game_label(row)  # now uses merged schedule/snapshot names first
             date_str = row.get("startDateEastern", "")
             p = row.get("predicted_lowest_price", float("nan"))
@@ -1144,7 +1108,7 @@ def build_report() -> str:
 
     # Optional email hook (only if time remains)
     try:
-        if REPORT_RECIPIENT and not _deadline_exceeded(t0_total, REPORT_MAX_SECONDS):
+        if REPORT_RECIPIENT:
             from reports.send_email import send_markdown_report  # your existing helper
             send_markdown_report(report_md_path, REPORT_RECIPIENT)
             print(f"📧 Report emailed to {REPORT_RECIPIENT}")
