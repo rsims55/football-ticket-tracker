@@ -352,6 +352,8 @@ def _map_rows_to_snapshots(rows: List[Dict[str, Any]], now_et: datetime) -> pd.D
             "listing_count": r.get("tickets_available_from_page"),
             "date_collected": date_str,
             "time_collected": time_str,
+            "home_last_point_diff": r.get("home_last_point_diff"),
+            "away_last_point_diff": r.get("away_last_point_diff")
         })
 
     df = pd.DataFrame.from_records(recs) if recs else pd.DataFrame()
