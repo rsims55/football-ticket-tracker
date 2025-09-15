@@ -72,8 +72,8 @@ TEAMS_JSON_PATH = os.getenv(
     "TEAMS_JSON_PATH",
     os.path.join(PROJ_DIR, "data", "permanent", "tickpick_teams.txt")
 )
-# TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
-TEAMS_LIMIT = 3
+TEAMS_LIMIT = int(os.getenv("TEAMS_LIMIT", "0"))
+# TEAMS_LIMIT = 3
 
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 ALWAYS_RUN_DAILY = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
