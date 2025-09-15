@@ -4,81 +4,47 @@
 ## 🔍 Best Predictors of Ticket Price
 
 ### Top Transformed Features (expanded)
-- days until game was important, contributing 34.0% to predictions.
-- isRankedMatchup was important, contributing 21.0% to predictions.
-- capacity was important, contributing 14.6% to predictions.
-- week was important, contributing 9.1% to predictions.
-- awayTeamRank was important, contributing 7.1% to predictions.
-- isRivalry was important, contributing 2.5% to predictions.
-- homeTeamRank was important, contributing 2.3% to predictions.
-- collectionSlot 12:00 category influenced predictions (~1.9%).
+- days until game was important, contributing 35.8% to predictions.
+- isRankedMatchup was important, contributing 20.2% to predictions.
+- capacity was important, contributing 14.0% to predictions.
+- week was important, contributing 8.8% to predictions.
+- awayTeamRank was important, contributing 6.9% to predictions.
+- homeTeamRank was important, contributing 2.6% to predictions.
+- isRivalry was important, contributing 2.4% to predictions.
+- collectionSlot 12:00 category influenced predictions (~2.0%).
 - Teams from the Big Ten awayconference mattered, contributing 1.2%.
 - Teams from the SEC awayconference mattered, contributing 1.1%.
 - Teams from the Big 12 awayconference mattered, contributing 0.7%.
-- conferenceGame was important, contributing 0.7% to predictions.
+- conferenceGame was important, contributing 0.5% to predictions.
 - neutralSite was important, contributing 0.5% to predictions.
-- Teams from the SEC homeconference mattered, contributing 0.4%.
 - Teams from the ACC awayconference mattered, contributing 0.4%.
 - Teams from the Big 12 homeconference mattered, contributing 0.4%.
+- Teams from the SEC homeconference mattered, contributing 0.4%.
 - Teams from the Mountain West awayconference mattered, contributing 0.3%.
 - Teams from the American Athletic homeconference mattered, contributing 0.2%.
 - collectionSlot 18:00 category influenced predictions (~0.2%).
 - Teams from the ACC homeconference mattered, contributing 0.2%.
 
 ### Aggregated by Original Column
-- days_until: 0.3405
-- isRankedMatchup: 0.2102
-- capacity: 0.1460
-- week: 0.0908
-- awayTeamRank: 0.0711
-- awayConference: 0.0433
-- isRivalry: 0.0246
-- homeTeamRank: 0.0230
-- collectionSlot: 0.0221
-- homeConference: 0.0171
-- conferenceGame: 0.0065
-- neutralSite: 0.0048
+- days_until: 0.3576
+- isRankedMatchup: 0.2020
+- capacity: 0.1398
+- week: 0.0880
+- awayTeamRank: 0.0691
+- awayConference: 0.0432
+- homeTeamRank: 0.0261
+- isRivalry: 0.0236
+- collectionSlot: 0.0235
+- homeConference: 0.0175
+- conferenceGame: 0.0049
+- neutralSite: 0.0047
 
 **Possibly unrelated (near-zero importance):** conferenceGame, neutralSite
 
-## 🧪 Permutation Importance (recent data)
+### ⚠️ Advanced diagnostics skipped
+Reason: A worker process managed by the executor was unexpectedly terminated. This could be caused by a segmentation fault while calling the function or by an excessive memory usage causing the Operating System to kill the worker.
 
-Top features by mean importance:
-
-- days_until_game: -0.000000 (±0.000000)
-- capacity: -0.000000 (±0.000000)
-- homeTeamRank: -0.000000 (±0.000000)
-- conferenceGame: -0.000000 (±0.000000)
-- awayTeamRank: -0.000000 (±0.000000)
-- isRankedMatchup: -0.000000 (±0.000000)
-- neutralSite: -0.000000 (±0.000000)
-- isRivalry: -0.000000 (±0.000000)
-- collectionSlot: -0.000000 (±0.000000)
-- homeConference: -0.003243 (±0.002634)
-- week: -0.005232 (±0.001856)
-- awayConference: -0.038514 (±0.009113)
-
-_Saved full table → `data/permutation_importance_2025-09-14.csv`_
-
-## 📈 Partial Dependence (Top Perm-Important)
-
-![PDP](images/pdp_2025-09-14_days_until_game.png)
-![PDP](images/pdp_2025-09-14_capacity.png)
-![PDP](images/pdp_2025-09-14_homeTeamRank.png)
-![PDP](images/pdp_2025-09-14_conferenceGame.png)
-![PDP](images/pdp_2025-09-14_awayTeamRank.png)
-![PDP](images/pdp_2025-09-14_isRankedMatchup.png)
-
-## 🧮 SHAP Diagnostics (Top Perm-Important)
-
-- Aggregated mean |SHAP| table: `data/shap_2025-09-14_mean_abs_by_feature_2025-09-14.csv`
-![SHAP Summary](images/shap_2025-09-14_summary_bar.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_awayTeamRank.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_homeTeamRank.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_week.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_conferenceGame.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_awayConference.png)
-![SHAP Dependence](images/shap_2025-09-14_dependence_capacity.png)
+Detailed tracebacks of the workers should have been printed to stderr in the executor process if faulthandler was not disabled.
 
 ## 📊 Model Accuracy (Past 7 Days)
 
