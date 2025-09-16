@@ -11,15 +11,16 @@ USAGE (from repo root):
   powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 stop
   powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 status
   powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 log -Lines 200
-  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 runonce   # headless one-off
-  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 kill      # kill PID from lock
-  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 cleanlock # delete stale lock
+  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 runonce
+  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 kill
+  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 cleanlock
+  powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 restart
   powershell -ExecutionPolicy Bypass -File .\tools\run_daemon.ps1 uninstall
 #>
 
 param(
   [Parameter(Position=0)]
-  [ValidateSet('install','start','stop','status','log','runonce','uninstall','_launch','kill','cleanlock')]
+  [ValidateSet('install','start','stop','status','log','runonce','uninstall','_launch','kill','cleanlock','restart')]
   [string]$Command = 'install',
 
   [int]$Lines = 200,
@@ -45,7 +46,7 @@ $LockFile    = Join-Path $UserLogDir 'daemon.lock'
 
 # Launcher (used by schtasks/startup/runkey fallbacks)
 $LauncherDir  = Join-Path $env:LOCALAPPDATA "$AppName"
-$LauncherCmd  = Join-Path $LauncherDir 'launch_daemon.cmd'
+$LauncherCmd  = Join-Path $LauncherDir 'launch_daemon.cmd'   # starts watchdog (hidden)
 
 # Per-user Startup & Run key fallbacks
 $StartupDir  = [Environment]::GetFolderPath('Startup')
@@ -67,23 +68,113 @@ function Get-Pythonw {
   throw "pythonw.exe not found. Create venv at .venv or install Python with pythonw on PATH."
 }
 
-# ---------- Safe getter for HKCU Run value (avoids StrictMode property lookup issues) ----------
+# ---------- Safe getter for HKCU Run value ----------
 function Get-RunKeyValue {
   $v = $null
   try { $v = Get-ItemPropertyValue -Path $RunKeyPath -Name $RunKeyName -ErrorAction SilentlyContinue } catch { }
   return $v
 }
 
-# ---------- Create a simple CMD launcher to avoid schtasks.exe quoting issues ----------
+# ---------- Process/lock helpers ----------
+function Get-LockPid {
+  if (Test-Path $LockFile) {
+    try {
+      $pidStr = (Get-Content -Path $LockFile -TotalCount 1).Trim()
+      if ($pidStr -match '^\d+$') { return [int]$pidStr }
+    } catch { }
+  }
+  return $null
+}
+
+function Get-DaemonProcesses {
+  # Try CIM first, then WMI (older boxes sometimes lack CIM)
+  try {
+    $ps = Get-CimInstance Win32_Process -ErrorAction Stop
+  } catch {
+    try { $ps = Get-WmiObject Win32_Process -ErrorAction Stop } catch { $ps = @() }
+  }
+  if (-not $ps) { return @() }
+
+  $repo = [regex]::Escape($RepoRoot)
+  $ps | Where-Object {
+    ($_.Name -ieq 'pythonw.exe' -or $_.Name -ieq 'python.exe') -and
+    ($_.CommandLine -match 'cfb_tix\.daemon') -and
+    ($_.CommandLine -match $repo)
+  }
+}
+
+function Is-DaemonRunning {
+  try { return [bool](Get-DaemonProcesses) } catch { return $false }
+}
+
+# ---------- Create a watchdog (powershell) and a simple CMD to start it ----------
 function New-LauncherCmd {
   New-Item -Force -ItemType Directory -Path $LauncherDir | Out-Null
-  $scriptPath = $PSCommandPath
+  $repoPath = $RepoRoot
+  $repoEsc   = $repoPath -replace '"','""'     # for quoting in command lines
+  $repoRegex = [regex]::Escape($repoPath)      # for -match in the inner script
+
+  # watchdog.ps1: keeps daemon running (checks every 60s)
+  $watchdogPs1 = Join-Path $LauncherDir 'watchdog.ps1'
+  $watchdog = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+
+function Get-DaemonProcesses {
+  try {
+    Get-CimInstance Win32_Process -ErrorAction Stop |
+      Where-Object {
+        (`$_.Name -ieq 'pythonw.exe' -or `$_.Name -ieq 'python.exe') -and
+        (`$_.CommandLine -match 'cfb_tix\.daemon') -and
+        (`$_.CommandLine -match '$repoRegex')
+      }
+  } catch {
+    try {
+      Get-WmiObject Win32_Process -ErrorAction Stop |
+        Where-Object {
+          (`$_.Name -ieq 'pythonw.exe' -or `$_.Name -ieq 'python.exe') -and
+          (`$_.CommandLine -match 'cfb_tix\.daemon') -and
+          (`$_.CommandLine -match '$repoRegex')
+        }
+    } catch { @() }
+  }
+}
+
+function Ensure-Env {
+  if (`$env:PYTHONPATH) { `$env:PYTHONPATH = '$repoEsc\src;' + `$env:PYTHONPATH } else { `$env:PYTHONPATH = '$repoEsc\src' }
+  if (-not `$env:REPO_DATA_LOCK)          { `$env:REPO_DATA_LOCK = '1' }
+  if (-not `$env:REPO_ALLOW_NON_REPO_OUT) { `$env:REPO_ALLOW_NON_REPO_OUT = '0' }
+  if (-not `$env:CFB_TIX_ENABLE_SYNC)     { `$env:CFB_TIX_ENABLE_SYNC = '0' }
+}
+
+function Launch-Daemon {
+  try {
+    Ensure-Env
+    Set-Location -Path '$repoEsc'
+    `$pyw = Join-Path '$repoEsc' '.venv\Scripts\pythonw.exe'
+    if (-not (Test-Path `$pyw)) {
+      `$cmd = Get-Command pythonw.exe -ErrorAction SilentlyContinue
+      if (`$cmd) { `$pyw = `$cmd.Source } else { return }
+    }
+    Start-Process -FilePath `$pyw -ArgumentList @('-m','cfb_tix.daemon','run','--no-gui') -WorkingDirectory '$repoEsc' -WindowStyle Hidden | Out-Null
+  } catch { }
+}
+
+while ($true) {
+  `$procs = Get-DaemonProcesses
+  if (-not `$procs -or `$procs.Count -eq 0) {
+    Launch-Daemon
+  }
+  Start-Sleep -Seconds 60
+}
+"@
+  Set-Content -Path $watchdogPs1 -Value $watchdog -Encoding UTF8
+
+  # launch_daemon.cmd: starts the watchdog hidden
   $cmdLines = @(
     '@echo off'
     'setlocal'
-    'REM Launch the daemon via PowerShell 5.1; working dir handled by _launch'
-    '""%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -ExecutionPolicy Bypass -File ' +
-      '"' + $scriptPath + '" _launch --no-gui'
+    '""%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ' +
+      '"' + $watchdogPs1 + '"'
   )
   Set-Content -Path $LauncherCmd -Value $cmdLines -Encoding ASCII
 }
@@ -92,7 +183,7 @@ function New-LauncherCmd {
 function New-StartupShortcut {
   param(
     [string]$Target,         # usually $LauncherCmd
-    [string]$Arguments = '', # leave empty when Target is a .cmd
+    [string]$Arguments = '',
     [string]$WorkingDir = $env:LOCALAPPDATA
   )
   $shell = New-Object -ComObject WScript.Shell
@@ -108,22 +199,25 @@ function New-StartupShortcut {
 
 # ---------- HKCU Run key helper ----------
 function Install-RunKey {
-  param(
-    [string]$CommandLine  # full command to execute at logon
-  )
+  param([string]$CommandLine)
   New-Item -Path $RunKeyPath -Force | Out-Null
   New-ItemProperty -Path $RunKeyPath -Name $RunKeyName -Value $CommandLine -PropertyType String -Force | Out-Null
 }
 
-# ---------- Launch the daemon headlessly ----------
+# ---------- Launch the daemon headlessly (guarded) ----------
 function Invoke-Launch {
+  if (Is-DaemonRunning) {
+    Write-Note "Daemon already running (detected). Skipping launch."
+    return
+  }
+
   Set-Location -Path $RepoRoot
 
   # Repo-locked environment + PYTHONPATH
   if ($env:PYTHONPATH) { $env:PYTHONPATH = "$SrcDir;$($env:PYTHONPATH)" } else { $env:PYTHONPATH = "$SrcDir" }
   if (-not $env:REPO_DATA_LOCK)          { $env:REPO_DATA_LOCK = '1' }
   if (-not $env:REPO_ALLOW_NON_REPO_OUT) { $env:REPO_ALLOW_NON_REPO_OUT = '0' }
-  if (-not $env:CFB_TIX_ENABLE_SYNC)     { $env:CFB_TIX_ENABLE_SYNC = '0' }  # flip to '1' to auto-commit/push
+  if (-not $env:CFB_TIX_ENABLE_SYNC)     { $env:CFB_TIX_ENABLE_SYNC = '0' }
 
   $pythonw = Get-Pythonw
   $args    = @('-m','cfb_tix.daemon','run')
@@ -143,7 +237,6 @@ function Install-Task {
   $trigger  = $null
   $settings = $null
 
-  # Only build ScheduledTasks objects if module loaded successfully
   if (Get-Module ScheduledTasks) {
     $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arg -WorkingDirectory $RepoRoot
     $trigger  = New-ScheduledTaskTrigger -AtLogOn
@@ -152,14 +245,13 @@ function Install-Task {
       -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
       -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 0)
 
-    # Remove existing Scheduled Task (ignore errors)
     try {
       $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
       if ($existing) { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false }
     } catch { }
   }
 
-  $mode = $null  # track which install path succeeded
+  $mode = $null
 
   # Stage A: ScheduledTasks with explicit principal
   if ($action -and $trigger -and $settings) {
@@ -190,59 +282,38 @@ function Install-Task {
     }
   }
 
-  # Stage C: schtasks.exe with robust .cmd launcher
+  # Stage C: schtasks.exe with robust .cmd launcher (watchdog)
   if (-not $mode) {
     New-LauncherCmd
     $trQuoted = '"' + $LauncherCmd + '"'
-    $schtasksArgs = @(
-      '/Create',
-      '/SC','ONLOGON',
-      '/TN',"$TaskName",
-      '/TR',$trQuoted,
-      '/RL','LIMITED',
-      '/F'
-    )
+    $schtasksArgs = @('/Create','/SC','ONLOGON','/TN',"$TaskName",'/TR',$trQuoted,'/RL','LIMITED','/F')
     & schtasks.exe @schtasksArgs | Out-Null
     if ($LASTEXITCODE -eq 0) {
-      # Verify presence
       $check = $null
       try { $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch { }
-      if ($check) {
-        $mode = 'schtasks_cmd'
-        Write-Note "Task registered via schtasks.exe fallback."
-      } else {
-        Write-Note "schtasks.exe reported success but task not found; will try Startup shortcut…"
-      }
+      if ($check) { $mode = 'schtasks_cmd'; Write-Note "Task registered via schtasks.exe fallback." }
+      else { Write-Note "schtasks.exe reported success but task not found; will try Startup shortcut…" }
     } else {
       Write-Note "schtasks.exe failed with exit code $LASTEXITCODE; will try Startup shortcut…"
     }
   }
 
-  # Stage D: Per-user Startup shortcut (.lnk)
+  # Stage D: Per-user Startup shortcut (.lnk) -> watchdog
   if (-not $mode) {
     New-LauncherCmd
     New-StartupShortcut -Target $LauncherCmd -WorkingDir $RepoRoot
-    if (Test-Path $StartupLnk) {
-      $mode = 'startup_shortcut'
-      Write-Note "Installed Startup shortcut: $StartupLnk"
-    } else {
-      Write-Note "Failed to create Startup shortcut; will try HKCU Run key…"
-    }
+    if (Test-Path $StartupLnk) { $mode = 'startup_shortcut'; Write-Note "Installed Startup shortcut: $StartupLnk" }
+    else { Write-Note "Failed to create Startup shortcut; will try HKCU Run key…" }
   }
 
-  # Stage E: HKCU Run registry (last resort)
+  # Stage E: HKCU Run registry (last resort) -> watchdog
   if (-not $mode) {
     New-LauncherCmd
     $cmdLine = '"' + $LauncherCmd + '"'
     Install-RunKey -CommandLine $cmdLine
-    # Verify safely (StrictMode-proof)
     $val = Get-RunKeyValue
-    if ($val) {
-      $mode = 'run_key'
-      Write-Note "Installed Run key entry at $RunKeyPath\$RunKeyName"
-    } else {
-      throw "Failed to register via all methods (policy blocks)."
-    }
+    if ($val) { $mode = 'run_key'; Write-Note "Installed Run key entry at $RunKeyPath\$RunKeyName" }
+    else { throw "Failed to register via all methods (policy blocks)." }
   }
 
   Write-Note "✅ Installed/updated autostart via: $mode"
@@ -253,15 +324,28 @@ function Install-Task {
   if ($mode -like 'scheduled_task*' -or $mode -eq 'schtasks_cmd') { Write-Note "  TaskName  : $TaskName" }
   if ($mode -eq 'run_key') { Write-Note "  RunKey    : $RunKeyPath\$RunKeyName" }
 
-  # Start a headless instance NOW so you don't have to log off
-  try { Invoke-Launch } catch { Write-Note "Launch now failed: $($_.Exception.Message)" }
+  # Start watchdog/daemon NOW only if not already running
+  if (-not (Is-DaemonRunning)) {
+    try {
+      New-LauncherCmd
+      Start-Process -FilePath $LauncherCmd -WindowStyle Hidden | Out-Null
+      Write-Note "Watchdog started."
+    } catch { Write-Note "Launch now failed: $($_.Exception.Message)" }
+  } else {
+    Write-Note "Already running; not launching another instance."
+  }
 }
 
 # ---------- Task controls ----------
 function Start-TaskSafe {
   $t = $null
   try { $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch { }
-  if (-not $t) { Write-Note "No Scheduled Task to start (using Startup/RunKey mode). Launching one-off…"; Invoke-Launch; return }
+  if (-not $t) {
+    Write-Note "No Scheduled Task present (using Startup/RunKey mode). Starting watchdog…"
+    New-LauncherCmd
+    Start-Process -FilePath $LauncherCmd -WindowStyle Hidden | Out-Null
+    return
+  }
   Start-ScheduledTask -TaskName $TaskName
   Write-Note "▶️  Started '$TaskName'."
 }
@@ -269,28 +353,23 @@ function Start-TaskSafe {
 function Stop-TaskSafe {
   $t = $null
   try { $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch { }
-  if (-not $t) { Write-Note "No Scheduled Task present. If a background instance is running, use 'kill'."; return }
-  try {
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    Write-Note "⏹️  Stopped '$TaskName'."
-  } catch {
-    Write-Note "Stop requested; if nothing was running, that's fine."
+  if ($t) {
+    try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue; Write-Note "⏹️  Stopped '$TaskName'." } catch { }
+  } else {
+    Write-Note "No Scheduled Task present. If a background instance is running, use 'kill'."
   }
 }
 
 function Uninstall-Task {
-  # Remove scheduled task if exists
   try {
     $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($t) { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false; Write-Note "🗑️  Uninstalled Scheduled Task '$TaskName'." }
   } catch { }
 
-  # Remove startup shortcut
   if (Test-Path $StartupLnk) {
     try { Remove-Item -Path $StartupLnk -Force; Write-Note "🗑️  Removed Startup shortcut." } catch { }
   }
 
-  # Remove Run key
   try {
     $existingVal = Get-RunKeyValue
     if ($existingVal) {
@@ -327,6 +406,8 @@ function Show-Status {
   } else {
     Write-Host "Status    : NOT INSTALLED"
   }
+
+  Write-Host ("Daemon    : {0}" -f ($(if (Is-DaemonRunning) { 'RUNNING' } else { 'NOT RUNNING' })))
   Write-Host "Log file  : $MainLog"
 }
 
@@ -381,6 +462,14 @@ switch ($Command) {
   'runonce'  { Invoke-Launch; Write-Note "✅ Launched one detached instance of the daemon." }
   'kill'     { Kill-FromLock }
   'cleanlock'{ Clean-Lock }
+  'restart'  {
+      Kill-FromLock
+      Start-Sleep -Seconds 1
+      Clean-Lock
+      New-LauncherCmd
+      Start-Process -FilePath $LauncherCmd -WindowStyle Hidden | Out-Null
+      Write-Note "🔄 Restarted daemon (via watchdog)."
+  }
   'uninstall'{ Uninstall-Task }
   default    { throw "Unknown command: $Command" }
 }
