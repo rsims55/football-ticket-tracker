@@ -4,40 +4,40 @@
 ## 🔍 Best Predictors of Ticket Price
 
 ### Top Transformed Features (expanded)
-- days until game was important, contributing 32.9% to predictions.
-- isRankedMatchup was important, contributing 20.5% to predictions.
-- capacity was important, contributing 14.6% to predictions.
-- week was important, contributing 8.9% to predictions.
-- awayTeamRank was important, contributing 6.1% to predictions.
+- days until game was important, contributing 32.4% to predictions.
+- isRankedMatchup was important, contributing 20.7% to predictions.
+- capacity was important, contributing 15.3% to predictions.
+- week was important, contributing 8.0% to predictions.
+- awayTeamRank was important, contributing 6.5% to predictions.
 - isRivalry was important, contributing 2.5% to predictions.
-- homeTeamRank was important, contributing 1.9% to predictions.
-- collectionSlot 00:00 category influenced predictions (~1.6%).
-- neutralSite was important, contributing 1.4% to predictions.
-- collectionSlot 12:00 category influenced predictions (~1.3%).
+- homeTeamRank was important, contributing 2.3% to predictions.
+- collectionSlot 00:00 category influenced predictions (~1.8%).
+- neutralSite was important, contributing 1.2% to predictions.
 - Teams from the SEC awayconference mattered, contributing 1.2%.
+- collectionSlot 18:00 category influenced predictions (~1.2%).
 - Teams from the Big Ten awayconference mattered, contributing 1.1%.
-- collectionSlot 18:00 category influenced predictions (~1.0%).
-- Teams from the Big 12 awayconference mattered, contributing 0.8%.
+- collectionSlot 12:00 category influenced predictions (~1.1%).
 - collectionSlot 06:00 category influenced predictions (~0.7%).
+- Teams from the Big 12 awayconference mattered, contributing 0.6%.
 - Teams from the ACC awayconference mattered, contributing 0.5%.
-- conferenceGame was important, contributing 0.4% to predictions.
+- conferenceGame was important, contributing 0.5% to predictions.
 - Teams from the Big 12 homeconference mattered, contributing 0.4%.
 - Teams from the SEC homeconference mattered, contributing 0.4%.
-- Teams from the Mountain West awayconference mattered, contributing 0.3%.
+- Teams from the American Athletic homeconference mattered, contributing 0.3%.
 
 ### Aggregated by Original Column
-- days_until: 0.3292
-- isRankedMatchup: 0.2050
-- capacity: 0.1459
-- week: 0.0886
-- awayTeamRank: 0.0615
-- collectionSlot: 0.0470
-- awayConference: 0.0443
-- isRivalry: 0.0252
-- homeTeamRank: 0.0189
-- homeConference: 0.0162
-- neutralSite: 0.0143
-- conferenceGame: 0.0040
+- days_until: 0.3242
+- isRankedMatchup: 0.2067
+- capacity: 0.1527
+- week: 0.0799
+- awayTeamRank: 0.0647
+- collectionSlot: 0.0472
+- awayConference: 0.0428
+- isRivalry: 0.0248
+- homeTeamRank: 0.0229
+- homeConference: 0.0175
+- neutralSite: 0.0120
+- conferenceGame: 0.0048
 
 **Possibly unrelated (near-zero importance):** conferenceGame
 
