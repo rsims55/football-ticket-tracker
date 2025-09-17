@@ -153,10 +153,31 @@ class TicketApp(QMainWindow):
             if not PRED_PATH.exists():
                 raise FileNotFoundError(f"Could not find predictions CSV at '{PRED_PATH}'")
             pred = pd.read_csv(PRED_PATH)
+
+            # Parse types from predictions
             if "startDateEastern" in pred.columns:
                 pred["startDateEastern"] = pd.to_datetime(pred["startDateEastern"], errors="coerce")
+
+            # New observed columns: ensure exist, parse
+            if "observed_lowest_price_num" not in pred.columns:
+                pred["observed_lowest_price_num"] = np.nan
+            pred["observed_lowest_price_num"] = pd.to_numeric(pred["observed_lowest_price_num"], errors="coerce")
+
+            if "observed_lowest_dt" not in pred.columns:
+                pred["observed_lowest_dt"] = ""
+
+            def _parse_iso(s):
+                try:
+                    return pd.to_datetime(s, errors="coerce")
+                except Exception:
+                    return pd.NaT
+
+            pred["observed_lowest_dt_parsed"] = pred["observed_lowest_dt"].apply(_parse_iso)
+
             if "event_id" not in pred.columns:
                 raise KeyError("Predictions must contain 'event_id'.")
+
+            # Merge snapshots (keeps your current behavior)
             snaps = getattr(self, "snapshots", None)
             if snaps is not None and "event_id" in snaps.columns:
                 merged = pred.merge(snaps, on="event_id", how="left", suffixes=("", "_snap"))
@@ -165,6 +186,7 @@ class TicketApp(QMainWindow):
             else:
                 merged = pred
 
+        # Final cleanups
         if "startDateEastern" in merged.columns:
             merged["startDateEastern"] = pd.to_datetime(merged["startDateEastern"], errors="coerce")
         if "week" in merged.columns:
@@ -176,6 +198,7 @@ class TicketApp(QMainWindow):
             merged["predicted_lowest_price"] = pd.to_numeric(merged["predicted_lowest_price_num"], errors="coerce")
         merged = merged.dropna(subset=["predicted_lowest_price"])
         return merged
+
 
     # ---------------- UI ----------------
     def init_ui(self):
@@ -312,6 +335,21 @@ class TicketApp(QMainWindow):
                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
         return "TBD"
 
+    def _fmt_money(self, x) -> str:
+        try:
+            return f"${float(x):,.2f}"
+        except Exception:
+            return "—"
+
+    def _fmt_dt(self, ts_like) -> str:
+        try:
+            ts = pd.to_datetime(ts_like)
+            if pd.isna(ts):
+                return "—"
+            return ts.strftime("%A, %B %d, %Y %I:%M %p").lstrip("0").replace(" 0", " ")
+        except Exception:
+            return "—"
+
     # ---------------- Prediction & rendering ----------------
     def get_prediction(self):
         try:
@@ -359,23 +397,63 @@ class TicketApp(QMainWindow):
         self.details_label.setText(self._details_html(row, traj_min_txt))
 
     def _details_html(self, row, forecast_min_text: str) -> str:
-        game_dt = pd.to_datetime(row["startDateEastern"]); stadium = row.get("stadium", "Unknown Venue")
+        game_dt = pd.to_datetime(row["startDateEastern"])
+        stadium = row.get("stadium", "Unknown Venue")
         kickoff = self._format_kickoff(row)
         opt_time_str = self._fmt_ampm_no_sec(row.get("optimal_purchase_time"))
-        opt_date_iso = row.get("optimal_purchase_date", ""); opt_date_fmt = self._fmt_full_date(opt_date_iso)
+        opt_date_iso = row.get("optimal_purchase_date", "")
+        opt_date_fmt = self._fmt_full_date(opt_date_iso)
         week_str = int(row["week"]) if pd.notna(row.get("week")) else "—"
+
+        # --- Predicted from model (CSV fields) ---
+        predicted_price = row.get("predicted_lowest_price", np.nan)
+
+        # --- Observed (ever) from CSV ---
+        observed_price = row.get("observed_lowest_price_num", np.nan)
+        # try parsed; fallback to raw string
+        obs_ts = row.get("observed_lowest_dt_parsed", pd.NaT)
+        if pd.isna(obs_ts) and "observed_lowest_dt" in row:
+            try:
+                obs_ts = pd.to_datetime(row.get("observed_lowest_dt"), errors="coerce")
+            except Exception:
+                obs_ts = pd.NaT
+
+        # Banner if observed < predicted
+        warn_html = ""
+        try:
+            if float(observed_price) < float(predicted_price):
+                warn_html = (
+                    "<div style='margin:0 0 8px 0; padding:6px 10px; "
+                    "background:#fdecea; color:#b00020; border:1px solid #f5c6cb; "
+                    "border-radius:6px; font-weight:700;'>"
+                    "⚠️ Cheaper price already observed than the model’s predicted minimum."
+                    "</div>"
+                )
+        except Exception:
+            pass
+
         return f"""
             <div style="font-size: 15px; line-height: 1.6;">
                 <h2 style="margin-bottom: 2px;">{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}</h2>
+
+                {warn_html}
+
                 <div style="font-size: 16px; font-weight: 700; color: #6a1b9a; margin: 4px 0 8px 0;">
                     Current Forecasted Minimum: {forecast_min_text}
-                </div><br>
-                <b>Optimal Purchase Date:</b> {opt_date_fmt}<br>
-                <b>Optimal Purchase Time:</b> {opt_time_str}<br>
-                <b>Game Week:</b> {week_str}<br>
-                <b>Game Date:</b> {game_dt.strftime('%A, %B %d, %Y')}<br>
-                <b>Kickoff Time:</b> {kickoff}<br>
-                <b>Venue:</b> {stadium}<br>
+                </div> <br>
+
+                <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
+                    <b>Observed (ever):</b><br>
+                    &nbsp;&nbsp;Price:&nbsp;{self._fmt_money(observed_price)}<br>
+                    &nbsp;&nbsp;When:&nbsp;{self._fmt_dt(obs_ts)}<br>
+                </div>
+
+                <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
+                    <b>Game Week:</b> {week_str}<br>
+                    <b>Game Date:</b> {game_dt.strftime('%A, %B %d, %Y')}<br>
+                    <b>Kickoff Time:</b> {kickoff}<br>
+                    <b>Venue:</b> {stadium}<br>
+                </div>
             </div>
         """
 
@@ -478,7 +556,7 @@ class TicketApp(QMainWindow):
 
         # **Critical fix:** disable constrained layout and add padding
         self.chart_canvas.figure.set_constrained_layout(False)
-        self.chart_canvas.figure.subplots_adjust(bottom=0.65)
+        self.chart_canvas.figure.subplots_adjust(bottom=0.1)
 
         self.chart_canvas.draw_idle()
 

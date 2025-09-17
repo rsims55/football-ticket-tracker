@@ -1,6 +1,11 @@
 # =============================
 # FILE: src/modeling/train_price_model.py
-# PURPOSE: Add time-of-day feature (collectionSlot) so optimal times vary
+# PURPOSE:
+#   Train a model using CONTINUOUS time features derived from each snapshot:
+#     - hours_until_game: (kickoff_ts - snapshot_ts) in hours (float > 0)
+#     - days_until_game : hours_until_game / 24
+#     - collection_hour_local: snapshot local clock time in hours [0,24)
+#   Target: lowest_price
 # =============================
 from __future__ import annotations
 
@@ -31,7 +36,6 @@ def _find_repo_root(start: Path) -> Path:
 
 _THIS    = Path(__file__).resolve()
 PROJ_DIR = _find_repo_root(_THIS)
-SRC_DIR  = PROJ_DIR / "src"
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -61,53 +65,97 @@ print(f"  SNAPSHOT_PATH: {SNAPSHOT_PATH}")
 print(f"  MODEL_PATH:    {MODEL_PATH}")
 
 # -----------------------------
-# Time-of-day slot derivation (NEW)
+# Helpers: timestamps & coercions
 # -----------------------------
-SLOT_LABELS = ["00:00", "06:00", "12:00", "18:00"]
+# Candidate columns to reconstruct the snapshot timestamp
+_DT_CANDIDATES = ["collected_at", "snapshot_datetime", "retrieved_at", "scraped_at"]
+_TIME_ONLY     = ["time_collected", "collection_time", "snapshot_time"]
 
-def _nearest_6h_slot(ts) -> str:
-    if pd.isna(ts):
-        return np.nan
-    t = pd.to_datetime(ts, errors="coerce")
-    if pd.isna(t):
-        return np.nan
-    minutes = t.hour * 60 + t.minute
-    idx = int(np.round(minutes / 360.0)) % 4
-    return SLOT_LABELS[idx]
-
-def _ensure_collection_slot(df: pd.DataFrame) -> pd.DataFrame:
-    """Populate df['collectionSlot'] from any available timestamp/time columns.
-    Priority:
-      1) 'collected_at' or 'snapshot_datetime' (datetime)
-      2) 'time_collected' / 'collection_time' / 'snapshot_time' (time)
-      3) 'date_collected' + 'time_local' (fallback)
-    If none are parseable, fill with '12:00'.
+def _best_snapshot_ts(df: pd.DataFrame) -> pd.Series:
     """
-    cand_dt = [c for c in ["collected_at", "snapshot_datetime"] if c in df.columns]
-    cand_t  = [c for c in ["time_collected", "collection_time", "snapshot_time"] if c in df.columns]
+    Build a best-effort snapshot timestamp per row using (in priority order):
+      1) a datetime-like column (e.g., 'collected_at')
+      2) 'date_collected' + (time-only column)
+      3) 'date_collected' (midnight)
+    Returns a tz-naive pandas.Timestamp Series (may contain NaT).
+    """
+    ts = None
 
-    slot = None
-    if cand_dt:
-        slot = df[cand_dt[0]].apply(_nearest_6h_slot)
-    elif cand_t:
-        slot = pd.to_datetime("1970-01-01 " + df[cand_t[0]].astype(str), errors="coerce").apply(_nearest_6h_slot)
-    elif "date_collected" in df.columns and "time_local" in df.columns:
-        combo = df["date_collected"].astype(str).str.strip() + " " + df["time_local"].astype(str).str.strip()
-        slot = pd.to_datetime(combo, errors="coerce").apply(_nearest_6h_slot)
+    # 1) Direct datetime-like columns
+    for c in _DT_CANDIDATES:
+        if c in df.columns:
+            ts = pd.to_datetime(df[c], errors="coerce")
+            if not ts.isna().all():
+                break
 
-    if slot is not None:
-        df["collectionSlot"] = slot
-    else:
-        df["collectionSlot"] = "12:00"
+    # 2) Combine date_collected + a time-only column
+    if ts is None or ts.isna().all():
+        tcol = next((c for c in _TIME_ONLY if c in df.columns), None)
+        if "date_collected" in df.columns and tcol:
+            combo = (
+                df["date_collected"].astype(str).str.strip()
+                + " "
+                + df[tcol].astype(str).str.strip()
+            )
+            ts = pd.to_datetime(combo, errors="coerce")
 
-    df["collectionSlot"] = df["collectionSlot"].fillna("12:00")
+    # 3) Fallback: just date_collected (midnight)
+    if ts is None or ts.isna().all():
+        if "date_collected" in df.columns:
+            ts = pd.to_datetime(df["date_collected"], errors="coerce")
+
+    if ts is None:
+        ts = pd.Series(pd.NaT, index=df.index)
+
+    # make tz-naive consistently
+    try:
+        ts = ts.dt.tz_localize(None)
+    except Exception:
+        pass
+
+    return ts
+
+def _kickoff_ts(row) -> pd.Timestamp:
+    date_str = str(row.get("date_local", "")).strip()
+    time_str = str(row.get("time_local", "")).strip()
+    dt_str = f"{date_str} {time_str}" if time_str and time_str.lower() != "nan" else date_str
+    ts = pd.to_datetime(dt_str, errors="coerce")
+    try:
+        ts = ts.tz_localize(None)
+    except Exception:
+        pass
+    return ts
+
+def _coerce_booleans(df: pd.DataFrame, bool_cols=None) -> pd.DataFrame:
+    if bool_cols is None:
+        bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
+    truth_map = {
+        True: True, False: False,
+        "true": True, "false": False, "True": True, "False": False,
+        "yes": True, "no": False, "YES": True, "NO": False,
+        "y": True, "n": False, "Y": True, "N": False,
+        1: True, 0: False, "1": True, "0": False,
+        "t": True, "f": False, "T": True, "F": False,
+        np.nan: np.nan,
+    }
+    for c in [c for c in bool_cols if c in df.columns]:
+        s = df[c]
+        if not pd.api.types.is_bool_dtype(s):
+            s = s.map(truth_map).astype("boolean")
+        df[c] = s.fillna(False).astype(bool)
     return df
 
 # -----------------------------
-# Features
+# Feature schema
 # -----------------------------
-NUMERIC_FEATURES = [
-    "days_until_game",
+# Continuous time features
+TIME_FEATURES = [
+    "hours_until_game",      # continuous time-to-kickoff in hours
+    "days_until_game",       # hours_until_game / 24
+    "collection_hour_local", # local clock-time at collection (0-24)
+]
+
+NUMERIC_FEATURES = TIME_FEATURES + [
     "capacity",
     "neutralSite",
     "conferenceGame",
@@ -117,64 +165,31 @@ NUMERIC_FEATURES = [
     "awayTeamRank",
     "week",
 ]
-CATEGORICAL_FEATURES = ["homeConference", "awayConference", "collectionSlot"]  # NEW
 
+CATEGORICAL_FEATURES = ["homeConference", "awayConference"]
 TARGET = "lowest_price"
-# REQUIRED: do not include derived 'collectionSlot'
-REQUIRED = NUMERIC_FEATURES + ["homeConference", "awayConference", TARGET]
 
-def _coerce_booleans(df, bool_cols=None):
-    """
-    Make boolean-like columns robust against NaN/strings/0/1 before casting.
-    If bool_cols is not passed, it uses a default list.
-    (NaN-safe and accepts optional list.)
-    """
-    import numpy as np
-    import pandas as pd
+REQUIRED_BASE = [
+    "event_id",
+    "date_local",  # time_local optional but recommended
+    "homeConference", "awayConference",
+    "capacity",
+    "neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup",
+    "homeTeamRank", "awayTeamRank", "week",
+    TARGET,
+]
 
-    if bool_cols is None:
-        bool_cols = ["neutral_site", "rivalry", "conference_game", "is_weeknight"]
-
-    bool_cols = [c for c in bool_cols if c in df.columns]
-
-    truth_map = {
-        True: True, False: False,
-        "true": True, "false": False,
-        "True": True, "False": False,
-        "yes": True, "no": False,
-        "YES": True, "NO": False,
-        "y": True, "n": False,
-        1: True, 0: False, "1": True, "0": False,
-        "t": True, "f": False, "T": True, "F": False,
-        np.nan: np.nan,
-    }
-
-    for c in bool_cols:
-        s = df[c]
-        if not pd.api.types.is_bool_dtype(s):
-            s = s.map(truth_map).astype("boolean")
-        df[c] = s.fillna(False).astype(bool)
-
-    return df
-
-def _coerce_numerics(df: pd.DataFrame, cols):
-    """Coerce numerics; non-numeric -> NaN for imputation."""
-    for c in cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
-
+# -----------------------------
+# Training
+# -----------------------------
 def train_model():
     if not SNAPSHOT_PATH.exists():
         raise FileNotFoundError(f"Snapshot data not found at '{SNAPSHOT_PATH}'")
 
     df = pd.read_csv(SNAPSHOT_PATH)
 
-    # Derive collectionSlot BEFORE schema check (NEW)
-    df = _ensure_collection_slot(df)
-
-    # Schema check (without collectionSlot)
-    missing = [c for c in REQUIRED if c not in df.columns]
+    # Basic schema check
+    missing = [c for c in REQUIRED_BASE if c not in df.columns]
     if missing:
         raise ValueError(
             f"CSV is missing required columns: {missing}\n"
@@ -182,28 +197,48 @@ def train_model():
         )
 
     # Clean types
-    df = _coerce_booleans(
-        df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
-    )
-    df = _coerce_numerics(
-        df, ["days_until_game", "capacity", "homeTeamRank", "awayTeamRank", "home_last_point_diff_at_snapshot", "away_last_point_diff_at_snapshot"]
+    df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
+    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week", TARGET]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Build timestamps
+    df["_kickoff_ts"] = df.apply(_kickoff_ts, axis=1)
+    df["_snapshot_ts"] = _best_snapshot_ts(df)
+
+    # Compute continuous features
+    delta_hours = (df["_kickoff_ts"] - df["_snapshot_ts"]).dt.total_seconds() / 3600.0
+    df["hours_until_game"] = pd.to_numeric(delta_hours, errors="coerce")
+
+    df["days_until_game"] = df["hours_until_game"] / 24.0
+
+    # local clock hour of the snapshot (e.g., 13.5 for ~1:30pm)
+    # if time-only available, _best_snapshot_ts already handled that
+    snap = pd.to_datetime(df["_snapshot_ts"], errors="coerce")
+    df["collection_hour_local"] = (
+        snap.dt.hour.fillna(0).astype(float)
+        + (snap.dt.minute.fillna(0).astype(float) / 60.0)
+        + (snap.dt.second.fillna(0).astype(float) / 3600.0)
     )
 
-    # Keep only relevant cols (includes derived collectionSlot via CATEGORICAL_FEATURES)
-    df = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]].copy()
-
-    # Drop rows with missing target
+    # Filter to valid rows: target present, positive horizon, known kickoff/snapshot
     before = len(df)
-    df = df.dropna(subset=[TARGET])
+    df = df.dropna(subset=[TARGET, "hours_until_game", "days_until_game", "collection_hour_local", "_kickoff_ts", "_snapshot_ts"]).copy()
+    df = df[df["hours_until_game"] > 0]
     after = len(df)
+
     if after == 0:
-        raise ValueError("No rows with 'lowest_price' after dropping NA.")
+        raise ValueError("No valid rows remain after filtering for continuous time features and target.")
+
+    # Final training frame
+    use_cols = NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET]
+    train_df = df[use_cols].copy()
 
     # Split X/y
-    X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
-    y = df[TARGET]
+    X = train_df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
+    y = train_df[TARGET]
 
-    # Preprocessing: imputers + one-hot for conferences + time slot
+    # Preprocessing
     numeric_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="median")),
     ])
@@ -226,7 +261,7 @@ def train_model():
     )
 
     model = RandomForestRegressor(
-        n_estimators=200,
+        n_estimators=300,
         random_state=42,
         n_jobs=-1,
     )
@@ -249,9 +284,20 @@ def train_model():
     )
     print(f"Test MSE: {mse:.2f} | R²: {r2:.3f}")
 
-    # Save the whole pipeline (encoder + model)
+    # Save pipeline
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(pipe, MODEL_PATH)
+    joblib.dump(
+        {
+            "pipeline": pipe,
+            "feature_schema": {
+                "numeric": NUMERIC_FEATURES,
+                "categorical": CATEGORICAL_FEATURES,
+                "target": TARGET,
+            },
+            "notes": "Continuous time features: hours_until_game, days_until_game, collection_hour_local",
+        },
+        MODEL_PATH
+    )
     print(f"Model saved to {MODEL_PATH}")
 
 if __name__ == "__main__":

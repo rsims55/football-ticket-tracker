@@ -1,7 +1,6 @@
-# src/modeling/predict_trajectory.py
+# src/modeling/predict_trajectory.py — continuous-time version
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from functools import lru_cache
 from typing import List, Dict, Iterable, Optional, Tuple
@@ -14,10 +13,9 @@ _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]
 DEFAULT_MODEL_PATH = PROJ_DIR / "models" / "ticket_price_model.pkl"
 
-# ---- Parity with predict_price.py (do NOT change without changing predict_price) ----
-# These names/values MUST match the training/prediction pipeline.
-NUMERIC_FEATURES = [
-    "days_until_game",
+# ---------- Feature schema (matches train/predict) ----------
+TIME_FEATURES = ["hours_until_game", "days_until_game", "collection_hour_local"]
+NUMERIC_FEATURES = TIME_FEATURES + [
     "capacity",
     "neutralSite",
     "conferenceGame",
@@ -27,12 +25,8 @@ NUMERIC_FEATURES = [
     "awayTeamRank",
     "week",
 ]
-CATEGORICAL_FEATURES = ["homeConference", "awayConference", "collectionSlot"]
+CATEGORICAL_FEATURES = ["homeConference", "awayConference"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-
-# EXACT grid & order used by predict_price.py
-COLLECTION_TIMES: List[str] = ["06:00", "12:00", "18:00", "00:00"]  # same order
-MAX_DAYS_OUT: int = 30
 
 # ---------- Robust model loader ----------
 @lru_cache(maxsize=1)
@@ -43,10 +37,14 @@ def _load_model(model_path: str | Path | None = None):
 
     last_err: Optional[Exception] = None
 
-    # 1) joblib (preferred for sklearn)
+    # 1) joblib (preferred)
     try:
         import joblib  # type: ignore
-        return joblib.load(path)
+        obj = joblib.load(path)
+        # unwrap dict wrapper from training
+        if isinstance(obj, dict) and "pipeline" in obj:
+            return obj["pipeline"]
+        return obj
     except Exception as e:
         last_err = e
 
@@ -54,7 +52,10 @@ def _load_model(model_path: str | Path | None = None):
     try:
         import cloudpickle  # type: ignore
         with open(path, "rb") as f:
-            return cloudpickle.load(f)
+            obj = cloudpickle.load(f)
+            if isinstance(obj, dict) and "pipeline" in obj:
+                return obj["pipeline"]
+            return obj
     except Exception as e:
         last_err = e
 
@@ -62,7 +63,10 @@ def _load_model(model_path: str | Path | None = None):
     try:
         import pickle
         with open(path, "rb") as f:
-            return pickle.load(f)
+            obj = pickle.load(f)
+            if isinstance(obj, dict) and "pipeline" in obj:
+                return obj["pipeline"]
+            return obj
     except Exception as e:
         raise RuntimeError(
             f"Failed to load model at {path} with joblib/cloudpickle/pickle. "
@@ -85,8 +89,7 @@ def _to_float(x):
         return np.nan
 
 def _coerce_booleans(df: pd.DataFrame, bool_cols=None) -> pd.DataFrame:
-    """NaN-safe boolean coercion (parity with predict_price)."""
-    import numpy as np
+    """NaN-safe boolean coercion."""
     if bool_cols is None:
         bool_cols = ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"]
     bool_cols = [c for c in bool_cols if c in df.columns]
@@ -106,26 +109,20 @@ def _coerce_booleans(df: pd.DataFrame, bool_cols=None) -> pd.DataFrame:
         df[c] = s.fillna(False).astype(bool)
     return df
 
-def _nearest_slot_label(ts: pd.Timestamp) -> str:
-    """Map any timestamp to one of the EXACT labels the model knows."""
-    if pd.isna(ts):
-        return "12:00"
-    minutes = ts.hour * 60 + ts.minute
-    idx = int(np.round(minutes / 360.0)) % 4
-    return ["00:00", "06:00", "12:00", "18:00"][idx]
-
-def _kickoff_date(row: Dict) -> pd.Timestamp:
-    # Accept a handful of common keys and coerce
+def _kickoff_ts(row: Dict) -> pd.Timestamp:
+    """Accept several common keys for kickoff; return tz-naive Timestamp or NaT."""
     for key in ("startDateEastern", "kickoff_ts", "start_time", "startDate", "date_local"):
         if key in row and pd.notna(row[key]):
             dt = _to_dt(row[key])
             if pd.notna(dt):
-                return dt
+                try:
+                    return dt.tz_localize(None)
+                except Exception:
+                    return dt
     return pd.NaT
 
 def _alias_row_to_required(row: Dict) -> Dict:
-    """Accept common aliases in your data and produce the exact keys FEATURES expect."""
-    # Start with passthroughs or common alt names
+    """Normalize incoming row keys to model feature keys (except time features)."""
     out = {
         "homeConference": row.get("homeConference", row.get("home_conference")),
         "awayConference": row.get("awayConference", row.get("away_conference")),
@@ -138,140 +135,78 @@ def _alias_row_to_required(row: Dict) -> Dict:
         "awayTeamRank":   _to_float(row.get("awayTeamRank", row.get("away_rank", row.get("awayRanking")))),
         "week":           int(_to_float(row.get("week"))) if row.get("week") is not None else 0,
     }
-    # boolean coercion happens later on the DataFrame
     return out
 
-def _build_sim_grid_like_predict_price(kickoff: pd.Timestamp) -> pd.DataFrame:
-    """Produce the exact (days x 4 slots) grid used by predict_price.py for a single game."""
-    if pd.isna(kickoff):
-        raise ValueError("startDateEastern/kickoff is missing or invalid for trajectory simulation.")
-
-    game_date = kickoff.date()
-    days = np.arange(1, MAX_DAYS_OUT + 1, dtype=int)
-
-    # Repeat days for each slot in the SAME ORDER as predict_price.py
-    sim_days = np.repeat(days, len(COLLECTION_TIMES))
-    sim_slots = np.tile(np.array(COLLECTION_TIMES, dtype=object), len(days))
-
-    # For convenience, also carry the timestamp we are "simulating from"
-    # (not used by the model, just helpful for plotting/inspection)
-    sim_dates = [pd.Timestamp(game_date) - pd.Timedelta(int(d), "D") for d in sim_days]
-    # Represent a wall-clock for plotting by combining date + slot (00:00/06:00/12:00/18:00)
-    sim_ts = [pd.to_datetime(f"{d.date().isoformat()} {slot}") for d, slot in zip(sim_dates, sim_slots)]
-
-    return pd.DataFrame(
-        {
-            "days_until_game": sim_days,
-            "collectionSlot": sim_slots,
-            "prediction_time": sim_ts,  # not used by the model; good for charts
-        }
-    )
-
-def _assemble_feature_frame(base_row: Dict, kickoff: pd.Timestamp, sim_grid: pd.DataFrame) -> pd.DataFrame:
-    """Combine static game fields with sim grid to match the model's FEATURES exactly."""
-    static = _alias_row_to_required(base_row)
-    static_df = pd.DataFrame({k: [v] * len(sim_grid) for k, v in static.items()})
-    df = pd.concat([sim_grid.reset_index(drop=True), static_df.reset_index(drop=True)], axis=1)
-
-    # Coerce numerics & booleans (parity with predict_price)
-    for col in ["capacity", "homeTeamRank", "awayTeamRank", "week"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
-
-    # Ensure columns and order; add any missing with NaN (pipeline imputes/one-hots)
-    for f in FEATURES:
-        if f not in df.columns:
-            df[f] = np.nan
-    df = df[FEATURES + ["prediction_time"]]  # keep prediction_time for caller
-    return df
-
-# ---------- Public APIs ----------
+# ---------- Public API ----------
 def predict_for_times(row: Dict, times: Iterable[pd.Timestamp], model_path: str | Path | None = None) -> List[float]:
     """
-    Predict prices for arbitrary timestamps, mapped to the model's exact features.
-    NOTE: For *parity* with predict_price.py's "lowest", use predict_grid_like_optimal().
+    Predict prices for arbitrary timestamps using the CONTINUOUS-TIME feature schema:
+      - hours_until_game = (kickoff - t) in hours
+      - days_until_game  = hours_until_game / 24
+      - collection_hour_local = local clock-hour of t (fractional)
     """
     model = _load_model(model_path)
-    kickoff = _kickoff_date(row)
+    kickoff = _kickoff_ts(row)
     if pd.isna(kickoff):
-        raise ValueError("Row must include a valid 'startDateEastern' (or alias) to compute days_until_game.")
+        raise ValueError("Row must include a valid 'startDateEastern' (or alias) to compute time until game.")
 
-    # Build a small frame where each time maps to (days_until_game, collectionSlot)
+    # Ensure times are pandas Timestamps (tz-naive ok)
     times = [pd.Timestamp(t) for t in times]
-    days_until = [(kickoff.date() - t.date()).days for t in times]
-    slots = [_nearest_slot_label(t) for t in times]
 
+    # Continuous time features
+    hours_until = np.array([(kickoff - t).total_seconds() / 3600.0 for t in times], dtype=float)
+    days_until = hours_until / 24.0
+    clock_hour = np.array([t.hour + t.minute/60.0 + t.second/3600.0 for t in times], dtype=float)
+
+    # Static features
     base = _alias_row_to_required(row)
-    df = pd.DataFrame(
-        {
-            "days_until_game": days_until,
-            "collectionSlot": slots,
-            **{k: base[k] for k in base},
-        }
-    )
+    n = len(times)
+    df = pd.DataFrame({
+        "hours_until_game": hours_until,
+        "days_until_game":  days_until,
+        "collection_hour_local": clock_hour,
+        **{k: [base[k]] * n for k in base},
+    })
+
     # Coercions and ordering
     for col in ["capacity", "homeTeamRank", "awayTeamRank", "week"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     df = _coerce_booleans(df, ["neutralSite", "conferenceGame", "isRivalry", "isRankedMatchup"])
+
+    # Ensure all expected cols exist (pipeline will impute / one-hot as needed)
     for f in FEATURES:
         if f not in df.columns:
             df[f] = np.nan
     df = df[FEATURES]
 
     yhat = model.predict(df)
-    return pd.to_numeric(pd.Series(yhat), errors="coerce").astype(float).tolist()
+    yhat = np.maximum(pd.to_numeric(pd.Series(yhat), errors="coerce").astype(float), 0.0)
+    return yhat.tolist()
 
-def predict_grid_like_optimal(row: Dict, model_path: str | Path | None = None, max_days: int = MAX_DAYS_OUT) -> Tuple[pd.DataFrame, Dict[str, object]]:
+
+# Optional convenience: generate an hourly grid back from kickoff
+def predict_trajectory(row: Dict, hours_back: int = 24 * 30, step_hours: int = 6, model_path: str | Path | None = None) -> Tuple[pd.DataFrame, Dict[str, object]]:
     """
-    Build the SAME grid (days 1..max_days × slots 06/12/18/00) used by predict_price.py,
-    predict every point, and return:
-      - a DataFrame with columns: prediction_time, days_until_game, collectionSlot, yhat
-      - a dict {predicted_lowest_price, optimal_purchase_date, optimal_purchase_time}
-    Using this function ensures the argmin matches predict_price.py exactly.
+    Build a grid of times: kickoff - [1h..hours_back] and predict each.
+    Returns (df, summary) where df includes columns: when, yhat.
     """
-    # allow caller to shrink horizon if desired
-    global MAX_DAYS_OUT
-    original = MAX_DAYS_OUT
-    MAX_DAYS_OUT = int(max_days)
-    try:
-        model = _load_model(model_path)
-        kickoff = _kickoff_date(row)
-        sim_grid = _build_sim_grid_like_predict_price(kickoff)
-        feat_df = _assemble_feature_frame(row, kickoff, sim_grid)
+    model = _load_model(model_path)
+    kickoff = _kickoff_ts(row)
+    if pd.isna(kickoff):
+        raise ValueError("Missing/invalid kickoff timestamp for trajectory simulation.")
 
-        yhat = model.predict(feat_df[FEATURES])
-        sim_grid = sim_grid.assign(yhat=pd.to_numeric(yhat, errors="coerce").astype(float))
+    hours = np.arange(1, int(hours_back) + 1, int(step_hours), dtype=int)
+    ts_grid = [kickoff - pd.Timedelta(int(h), "h") for h in hours]
+    y = predict_for_times(row, ts_grid, model_path=model_path)
 
-        # Find argmin exactly like predict_price.py: over the (days, slots) flattened in this order
-        best_idx = int(np.nanargmin(sim_grid["yhat"].values))
-        best_row = sim_grid.iloc[best_idx]
-
-        predicted_lowest_price = round(float(best_row["yhat"]), 2)
-        # Convert "days_until_game" back to a calendar date (kickoff_date - delta_days)
-        best_date = (kickoff.normalize() - pd.Timedelta(int(best_row["days_until_game"]), "D")).date().isoformat()
-        best_time = str(best_row["collectionSlot"])
-
-        summary = {
-            "predicted_lowest_price": predicted_lowest_price,
-            "optimal_purchase_date": best_date,
-            "optimal_purchase_time": best_time,
-            "optimal_source": "model",  # parity label
-        }
-
-        # Also expose a convenient trajectory frame for plotting
-        # (Each row is one simulated timestamp’s prediction.)
-        # Columns: prediction_time, days_until_game, collectionSlot, yhat
-        out_df = sim_grid[["prediction_time", "days_until_game", "collectionSlot", "yhat"]].copy()
-        return out_df, summary
-    finally:
-        MAX_DAYS_OUT = original
-
-# Backwards-compatible short name
-def predict_trajectory(row: Dict, model_path: str | Path | None = None, max_days: int = MAX_DAYS_OUT):
-    """
-    Convenience wrapper: returns (trajectory_df, summary_dict).
-    The summary_dict fields align with predict_price.py output.
-    """
-    return predict_grid_like_optimal(row, model_path=model_path, max_days=max_days)
+    df = pd.DataFrame({"when": ts_grid, "yhat": y})
+    best_idx = int(np.nanargmin(df["yhat"].values))
+    best_row = df.iloc[best_idx]
+    summary = {
+        "predicted_lowest_price": round(float(best_row["yhat"]), 2),
+        "optimal_purchase_date": pd.Timestamp(best_row["when"]).date().isoformat(),
+        "optimal_purchase_time": pd.Timestamp(best_row["when"]).strftime("%H:%M"),
+        "optimal_source": "model",
+    }
+    return df, summary
