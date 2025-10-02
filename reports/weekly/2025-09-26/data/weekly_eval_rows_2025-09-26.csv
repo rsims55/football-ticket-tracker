@@ -1,0 +1,2 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7017317,2025-09-25,East Carolina Pirates,Army West Point Black Knights,16.87,8.0,8.870000000000001,1.10875,2025-09-09 03:00:00,2025-09-25 00:00:07,381.00194444444446,-381.00194444444446

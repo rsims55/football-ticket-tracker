@@ -1,0 +1,2 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7017188,2025-09-18,Charlotte 49ers,Rice Owls,5.17,2.0,3.17,1.585,2025-09-08 20:00:00,2025-09-15 16:30:52,164.51444444444445,-164.51444444444445
