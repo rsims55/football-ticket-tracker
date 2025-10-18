@@ -1,0 +1,4 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6976458,2025-10-08,Middle Tennessee Blue Raiders,Missouri State Bears,15.21,6.0,9.21,1.535,2025-09-09 11:00:00,2025-10-06 18:00:00,655.0,-655.0
+6976355,2025-10-08,UTEP Miners,Liberty Flames,17.7,10.0,7.699999999999999,0.7699999999999999,2025-10-08 09:00:00,2025-10-08 12:00:03,3.000833333333333,-3.000833333333333
+7016280,2025-10-09,Georgia Southern Eagles,Southern Miss Golden Eagles,17.51,14.0,3.5100000000000016,0.2507142857142858,2025-10-05 23:00:00,2025-09-27 12:00:08,202.99777777777777,202.99777777777777

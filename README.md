@@ -196,6 +196,23 @@ You can set these in a `.env` file in the repo root (the token prompt writes her
 - **No uploads**: Add a token via `pythonw -m cfb_tix.windows.data_sync ensure_token` or set `GITHUB_TOKEN`.
 - **GUI won’t start**: Try `python -m gui.ticket_predictor_gui` from the venv to see errors in the console.
 - **Daemon not syncing**: Check `logs/cfb_tix.log`.
+- **Daemon locked**: Run: 
+$lockDir = "$env:LOCALAPPDATA\cfb-tix\Logs"
+if (Test-Path $lockDir) {
+  "Removing locks from: $lockDir" | Write-Host
+  Get-ChildItem $lockDir -Filter 'daemon*.lock' -Force -ErrorAction SilentlyContinue |
+    Select-Object FullName, LastWriteTime
+  Get-ChildItem $lockDir -Filter 'daemon*.lock' -Force -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+$repoLock = Join-Path (Resolve-Path .) '.cfb_tix_daemon.lock'
+if (Test-Path $repoLock) { Remove-Item $repoLock -Force }
+
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$env:CFB_TIX_LOG_LEVEL = 'INFO'
+$env:PYTHONUNBUFFERED = '1'
+& ".\.venv\Scripts\python.exe" -u -m cfb_tix.daemon
 
 ---
 

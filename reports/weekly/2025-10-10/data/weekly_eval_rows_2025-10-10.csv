@@ -1,0 +1,4 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6976403,2025-10-09,Kennesaw State Owls,Louisiana Tech Bulldogs,18.49,5.0,13.489999999999998,2.6979999999999995,2025-10-08 19:00:00,2025-10-09 18:00:03,23.000833333333333,-23.000833333333333
+6976342,2025-10-09,Sam Houston State Bearkats,Jacksonville State Gamecocks,17.84,13.0,4.84,0.3723076923076923,2025-09-14 13:00:00,2025-09-24 06:00:00,233.0,-233.0
+7017461,2025-10-09,Tulane Green Wave,East Carolina Pirates,5.57,2.0,3.5700000000000003,1.785,2025-09-09 20:00:00,2025-10-06 18:00:00,646.0,-646.0
