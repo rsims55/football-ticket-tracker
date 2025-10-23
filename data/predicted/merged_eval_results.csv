@@ -1,3 +1,3 @@
 event_id,startDateEastern,week,homeConference,awayConference,predicted_lowest_price,predicted_lowest_price_num,optimal_source,optimal_purchase_date,optimal_purchase_time,predicted_optimal_dt,actual_lowest_price,actual_lowest_dt,abs_error,percent_error,timing_abs_error_hours,timing_signed_error_hours
-6976306,2025-10-21 18:00:00,9.0,Conference USA,Conference USA,17.73,17.73,model,2025-09-21,20:00,2025-09-21 20:00:00,7.0,2025-10-21 12:00:00,10.73,1.532857142857143,712.0,-712.0
-6976290,2025-10-21 19:00:00,9.0,Conference USA,Conference USA,13.37,13.37,model,2025-09-22,03:00,2025-09-22 03:00:00,6.0,2025-10-20 12:00:00,7.369999999999999,1.2283333333333333,681.0,-681.0
+6976496,2025-10-22 19:00:00,9.0,Conference USA,Conference USA,25.2,25.2,model,2025-10-15,23:00,2025-10-15 23:00:00,17.0,2025-10-14 18:00:00,8.2,0.48235294117647054,29.0,29.0
+6976380,2025-10-22 19:00:00,9.0,Conference USA,Conference USA,17.08,17.08,model,2025-09-25,00:00,2025-09-25 00:00:00,5.0,2025-10-22 18:00:03,12.079999999999998,2.4159999999999995,666.0008333333334,-666.0008333333334
