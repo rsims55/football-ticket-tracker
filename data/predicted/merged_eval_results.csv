@@ -1,3 +1,3 @@
 event_id,startDateEastern,week,homeConference,awayConference,predicted_lowest_price,predicted_lowest_price_num,optimal_source,optimal_purchase_date,optimal_purchase_time,predicted_optimal_dt,actual_lowest_price,actual_lowest_dt,abs_error,percent_error,timing_abs_error_hours,timing_signed_error_hours
-7016410,2025-10-28 18:00:00,10.0,Sun Belt,Sun Belt,16.25,16.25,model,2025-10-28,17:00,2025-10-28 17:00:00,2.0,2025-10-27 12:00:03,14.25,7.125,28.999166666666667,28.999166666666667
-6976407,2025-10-28 19:00:00,10.0,Conference USA,Conference USA,18.35,18.35,model,2025-10-27,13:00,2025-10-27 13:00:00,6.0,2025-10-27 18:00:00,12.350000000000001,2.0583333333333336,5.0,-5.0
+6976462,2025-10-29 18:00:00,10.0,Conference USA,Conference USA,17.4,17.4,model,2025-09-30,10:00,2025-09-30 10:00:00,3.0,2025-10-29 12:00:00,14.399999999999999,4.8,698.0,-698.0
+6976484,2025-10-29 19:00:00,10.0,Conference USA,Conference USA,23.68,23.68,model,2025-10-28,14:00,2025-10-28 14:00:00,18.0,2025-10-27 00:00:03,5.68,0.31555555555555553,37.99916666666667,37.99916666666667
