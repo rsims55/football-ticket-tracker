@@ -1,0 +1,5 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6890272,2025-10-18,Notre Dame Fighting Irish,USC Trojans,190.1,45.0,145.1,3.2244444444444444,2025-10-18 13:00:00,2025-09-09 12:00:03,936.9991666666666,936.9991666666666
+6957148,2025-10-18,Stanford Cardinal,Florida State Seminoles,95.91,25.0,70.91,2.8364,2025-10-17 07:00:00,2025-10-17 20:45:00,13.75,-13.75
+6863608,2025-10-18,Virginia Cavaliers,Washington State Cougars,66.26,21.0,45.260000000000005,2.1552380952380954,2025-09-19 09:00:00,2025-10-17 20:45:00,683.75,-683.75
+7001863,2025-10-18,Air Force Falcons,Wyoming Cowboys,21.04,18.0,3.039999999999999,0.1688888888888888,2025-09-24 00:00:00,2025-10-18 00:00:03,576.0008333333334,-576.0008333333334

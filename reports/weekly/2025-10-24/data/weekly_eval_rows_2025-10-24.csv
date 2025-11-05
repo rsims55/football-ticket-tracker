@@ -1,0 +1,2 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7016207,2025-10-23,Georgia State Panthers,South Alabama Jaguars,10.0,7.0,3.0,0.4285714285714285,2025-10-23 18:00:00,2025-10-11 00:00:03,305.99916666666667,305.99916666666667

@@ -1,0 +1,3 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6976462,2025-10-29,Middle Tennessee Blue Raiders,Jacksonville State Gamecocks,17.4,3.0,14.4,4.8,2025-09-30 10:00:00,2025-10-29 12:00:00,698.0,-698.0
+6976484,2025-10-29,Missouri State Bears,Florida International Panthers,23.68,18.0,5.68,0.3155555555555555,2025-10-28 14:00:00,2025-10-27 00:00:03,37.99916666666667,37.99916666666667

@@ -1,0 +1,4 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7017548,2025-10-30,UTSA Roadrunners,Tulane Green Wave,22.47,6.0,16.47,2.745,2025-10-20 14:00:00,2025-10-29 18:00:03,220.00083333333333,-220.00083333333333
+7017375,2025-10-31,Rice Owls,Memphis Tigers,22.6,29.0,6.399999999999999,0.2206896551724137,2025-10-03 00:00:00,2025-10-13 12:00:01,252.00027777777777,-252.00027777777777
+7016270,2025-10-30,Coastal Carolina Chanticleers,Marshall Thundering Herd,18.45,18.0,0.4499999999999993,0.0249999999999999,2025-10-30 18:00:00,2025-08-24 01:06:00,1624.9,1624.9

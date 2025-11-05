@@ -1,0 +1,5 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7001685,2025-10-25,Wyoming Cowboys,Colorado State Rams,168.96,54.0,114.96,2.128888888888889,2025-10-12 13:00:00,2025-10-24 00:00:00,275.0,-275.0
+7017349,2025-10-25,Navy Midshipmen,Florida Atlantic Owls,42.13,26.0,16.130000000000003,0.6203846153846155,2025-10-25 00:00:00,2025-10-19 18:00:00,126.0,126.0
+6861930,2025-10-25,Washington State Cougars,Toledo Rockets,37.86,24.0,13.86,0.5775,2025-10-25 01:00:00,2025-10-25 00:00:01,0.9997222222222222,0.9997222222222222
+6879226,2025-10-25,Purdue Boilermakers,Rutgers Scarlet Knights,10.68,3.0,7.68,2.56,2025-09-26 11:00:00,2025-10-21 18:00:03,607.0008333333334,-607.0008333333334

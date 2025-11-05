@@ -1,0 +1,3 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6976306,2025-10-21,Louisiana Tech Bulldogs,Western Kentucky Hilltoppers,17.73,7.0,10.73,1.532857142857143,2025-09-21 20:00:00,2025-10-21 12:00:00,712.0,-712.0
+6976290,2025-10-21,Florida International Panthers,Kennesaw State Owls,13.37,6.0,7.369999999999999,1.2283333333333333,2025-09-22 03:00:00,2025-10-20 12:00:00,681.0,-681.0
