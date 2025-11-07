@@ -1,3 +1,2 @@
 event_id,startDateEastern,week,homeConference,awayConference,predicted_lowest_price,predicted_lowest_price_num,optimal_source,optimal_purchase_date,optimal_purchase_time,predicted_optimal_dt,actual_lowest_price,actual_lowest_dt,abs_error,percent_error,timing_abs_error_hours,timing_signed_error_hours
-7016217,2025-11-06 03:00:00,11.0,Sun Belt,Sun Belt,45.26,45.26,model,2025-11-05,23:00,2025-11-05 23:00:00,38.0,2025-10-27 12:00:03,7.259999999999998,0.1910526315789473,226.99916666666667,226.99916666666667
-7017496,2025-11-06 03:00:00,11.0,American Athletic,American Athletic,19.07,19.07,model,2025-10-09,11:00,2025-10-09 11:00:00,10.0,2025-08-28 18:00:02,9.07,0.907,1000.9994444444444,1000.9994444444444
+6970957,2025-11-07 03:00:00,11.0,Big 12,Big 12,24.4,24.4,model,2025-10-09,10:00,2025-10-09 10:00:00,12.0,2025-10-07 00:00:03,12.399999999999999,1.0333333333333332,57.99916666666667,57.99916666666667
