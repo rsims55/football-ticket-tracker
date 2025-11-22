@@ -1,0 +1,2 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+6970957,2025-11-07,UCF Knights,Houston Cougars,24.4,12.0,12.4,1.0333333333333332,2025-10-09 10:00:00,2025-10-07 00:00:03,57.99916666666667,57.99916666666667

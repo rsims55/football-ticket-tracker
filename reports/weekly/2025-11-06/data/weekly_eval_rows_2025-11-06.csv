@@ -1,0 +1,3 @@
+id,startDateEastern,homeTeam_sched,awayTeam_sched,predicted_lowest_price,actual_lowest_price,abs_error,percent_error,predicted_optimal_dt,actual_lowest_dt,timing_abs_error_hours,timing_signed_error_hours
+7017496,2025-11-06,South Florida Bulls,UTSA Roadrunners,19.07,10.0,9.07,0.907,2025-10-09 11:00:00,2025-08-28 18:00:02,1000.9994444444444,1000.9994444444444
+7016217,2025-11-06,Appalachian State Mountaineers,Georgia Southern Eagles,45.26,38.0,7.259999999999998,0.1910526315789473,2025-11-05 23:00:00,2025-10-27 12:00:03,226.99916666666667,226.99916666666667
