@@ -1,17 +1,36 @@
-# src/fetchers/results_fetcher.py
+"""Fetch completed FBS games and point differentials from CFBD."""
 from __future__ import annotations
 
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
-import requests
 from dotenv import load_dotenv
+
+# Allow running as a script without installing the package.
+SRC_DIR = Path(__file__).resolve().parents[1]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from utils.http import build_session
+from utils.logging_utils import get_logger
 
 load_dotenv()
 API_KEY = os.getenv("CFD_API_KEY")
+API_BASE = os.getenv("CFD_API_BASE", "https://api.collegefootballdata.com").rstrip("/")
+API_BASES = [b.strip().rstrip("/") for b in os.getenv("CFD_API_BASES", "").split(",") if b.strip()]
+
+LOG = get_logger("results_fetcher")
 
 OUT_DIR = os.path.join("data", "weekly")
 os.makedirs(OUT_DIR, exist_ok=True)
+
+
+def _base_candidates() -> list[str]:
+    return API_BASES if API_BASES else [API_BASE]
 
 
 def fetch_completed_fbs_games(year: int) -> pd.DataFrame:
@@ -21,12 +40,35 @@ def fetch_completed_fbs_games(year: int) -> pd.DataFrame:
     then filter to FBS-vs-FBS using home/awayClassification.
     Compute signed point differentials.
     """
-    url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=both"
-    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
-    r = requests.get(url, headers=headers, timeout=30)
-    r.raise_for_status()
+    if not API_KEY:
+        raise RuntimeError("CFD_API_KEY is not set; cannot fetch completed games.")
 
-    df = pd.DataFrame(r.json())
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    params: dict[str, Any] = {"year": year, "seasonType": "both"}
+
+    data: list[dict[str, Any]] | None = None
+    session = build_session()
+    for base in _base_candidates():
+        url = f"{base}/games"
+        r = session.get(url, headers=headers, params=params, timeout=30)
+        if r.status_code != 200:
+            LOG.error("Games API failed: %s (base=%s params=%s)", r.status_code, base, params)
+            if r.text:
+                LOG.error("Response body: %s", r.text[:500])
+            continue
+        try:
+            data = r.json()
+        except Exception as e:
+            LOG.error("Non-JSON response from games API: %s", e)
+            if r.text:
+                LOG.error("Response body: %s", r.text[:500])
+            continue
+        break
+
+    if data is None:
+        raise RuntimeError("Failed to fetch completed games from CFBD.")
+
+    df = pd.DataFrame(data)
 
     # Normalize timestamp
     if "startDate" in df.columns:
@@ -43,7 +85,10 @@ def fetch_completed_fbs_games(year: int) -> pd.DataFrame:
         df["awayPoints"] = df["away_points"]
 
     # Only completed games
-    mask_done = df.get("homePoints").notna() & df.get("awayPoints").notna()
+    if "homePoints" not in df.columns or "awayPoints" not in df.columns:
+        LOG.warning("homePoints/awayPoints missing in games API response; returning empty dataframe.")
+        return df.head(0)
+    mask_done = df["homePoints"].notna() & df["awayPoints"].notna()
     df = df.loc[mask_done].copy()
 
     # ---- FBS filter (reliable) ----
@@ -62,7 +107,7 @@ def fetch_completed_fbs_games(year: int) -> pd.DataFrame:
     before = len(df)
     df = df.loc[fbs_mask].copy()
     after = len(df)
-    print(f"ℹ️ Filtered to FBS-vs-FBS: {after:,}/{before:,} completed games remain")
+    LOG.info("Filtered to FBS-vs-FBS: %s/%s completed games remain", f"{after:,}", f"{before:,}")
 
     # Compute signed differentials
     df["homePointDiff"] = df["homePoints"] - df["awayPoints"]
@@ -80,24 +125,12 @@ def fetch_completed_fbs_games(year: int) -> pd.DataFrame:
     cols = [c for c in preferred_cols if c in df.columns] + [c for c in df.columns if c not in preferred_cols]
     return df[cols]
 
-def save_completed_fbs_games(year: int) -> str:
-    df = fetch_completed_fbs_games(year)
-    out_path = os.path.join(OUT_DIR, f"completed_games_{year}.csv")
-
-    if os.path.exists(out_path):
-        print(f"♻️ Overwriting existing file: {out_path}")
-    else:
-        print(f"💾 Creating new file: {out_path}")
-
-    df.to_csv(out_path, index=False)
-    print(f"✅ Saved {len(df):,} completed FBS-vs-FBS games with differentials → {out_path}")
-    return out_path
 
 def save_completed_fbs_games(year: int) -> str:
     df = fetch_completed_fbs_games(year)
     out_path = os.path.join(OUT_DIR, f"completed_games_{year}.csv")
     df.to_csv(out_path, index=False)
-    print(f"✅ Saved {len(df):,} completed FBS-vs-FBS games with differentials → {out_path}")
+    LOG.info("Saved %s completed games with differentials → %s", f"{len(df):,}", out_path)
     return out_path
 
 

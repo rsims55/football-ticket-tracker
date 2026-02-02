@@ -1,22 +1,42 @@
-# src/fetchers/rivalry_scraper.py
+"""Scrape NCAA college football rivalry pairs from Wikipedia."""
+from __future__ import annotations
+
+import json
 import os
 import re
-import json
-import pandas as pd
 from collections import defaultdict
+from io import StringIO
+from pathlib import Path
+import sys
+from typing import Dict, Set, Tuple
+
+import pandas as pd
+
+# Allow running as a script without installing the package.
+SRC_DIR = Path(__file__).resolve().parents[1]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from utils.http import build_session
+from utils.logging_utils import get_logger
+
 
 ALIAS_JSON = os.path.join("data", "permanent", "team_aliases.json")
 
+
 class RivalryScraper:
-    def __init__(self, alias_path: str = ALIAS_JSON):
+    def __init__(self, alias_path: str = ALIAS_JSON, timeout: int = 30, session=None):
         self.url = "https://en.wikipedia.org/wiki/List_of_NCAA_college_football_rivalry_games"
         self.alias_path = alias_path
         self.alias_map = self._load_alias_map(alias_path)
         self.rivalries = {}        # dict[str, list[str]]
         self.rivalry_pairs = set() # set[tuple[str, str]]
+        self.timeout = int(timeout)
+        self.session = session or build_session()
+        self.log = get_logger(self.__class__.__name__)
 
     # ---------- alias helpers ----------
-    def _load_alias_map(self, path: str) -> dict:
+    def _load_alias_map(self, path: str) -> Dict[str, str]:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -39,9 +59,12 @@ class RivalryScraper:
         return s
 
     # ---------- scrape ----------
-    def scrape(self):
-        tables = pd.read_html(self.url)
-        pairs = set()
+    def scrape(self) -> Dict[str, list]:
+        # Wikipedia blocks default UAs; shared session provides headers + retry/backoff.
+        resp = self.session.get(self.url, timeout=self.timeout)
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text))
+        pairs: Set[Tuple[str, str]] = set()
 
         for table in tables:
             colnames_lower = [str(col).lower() for col in table.columns]
@@ -76,9 +99,9 @@ class RivalryScraper:
         return self.rivalries
 
     # ---------- save ----------
-    def save(self, filename: str = "data/rivalries.csv"):
+    def save(self, filename: str = "data/rivalries.csv") -> None:
         if not self.rivalry_pairs and not self.rivalries:
-            print("⚠️ No rivalries to save")
+            self.log.warning("No rivalries to save")
             return
 
         # write unique, de-duplicated pairs
@@ -86,12 +109,13 @@ class RivalryScraper:
         df = pd.DataFrame(rows)
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         df.to_csv(filename, index=False)
-        print(f"✅ Saved {len(df)} rivalry pairs to {filename}")
+        self.log.info("Saved %d rivalry pairs to %s", len(df), filename)
 
 
 # 🔍 Test run
 if __name__ == "__main__":
+    log = get_logger("rivalry_scraper")
     scraper = RivalryScraper()
     rivalries = scraper.scrape()
-    print(f"Found rivalries for {len(rivalries)} teams")
+    log.info("Found rivalries for %d teams", len(rivalries))
     scraper.save()

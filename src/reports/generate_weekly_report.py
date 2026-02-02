@@ -18,11 +18,14 @@ NEW:
 import os
 import warnings
 from datetime import datetime, timedelta
+from typing import Optional
 from time import perf_counter
+from zoneinfo import ZoneInfo
 
 import joblib
 import numpy as np
 import pandas as pd
+from utils.status import read_status, write_status
 
 # -----------------------
 # Paths / Config
@@ -35,13 +38,41 @@ MERGED_OUTPUT = os.getenv("MERGED_OUTPUT", "data/predicted/merged_eval_results.c
 
 REPORT_DIR = os.getenv("REPORT_DIR", "reports")
 WEEKLY_DIR = os.path.join(REPORT_DIR, "weekly")
+TZ = ZoneInfo("America/New_York")
+
+
+def _season_state() -> str:
+    now = datetime.now(TZ)
+    year = now.year
+    start = datetime(year, 8, 1, tzinfo=TZ)
+    end = datetime(year + 1, 2, 1, tzinfo=TZ)
+    return "In-season" if start <= now < end else "Offseason"
+
+
+def _fmt_mtime(path: str) -> str:
+    try:
+        ts = os.path.getmtime(path)
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return "missing"
 WEEK_WINDOW_DAYS = int(os.getenv("WEEK_WINDOW_DAYS", "7"))
+
+# Data sources for ID→teams mapping
+SEASON_YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
+SCHEDULE_CSV = os.getenv("SCHEDULE_CSV", f"data/weekly/full_{SEASON_YEAR}_schedule.csv")
+PRICE_SNAPSHOTS_CSV = os.getenv("PRICE_SNAPSHOTS_CSV", "data/daily/price_snapshots.csv")
+SNAP_PATH = PRICE_SNAPSHOTS_CSV
+PRED_PATH = os.getenv("PRED_PATH", "data/predicted/predicted_prices_optimal.csv")
+
+# Latest CatBoost training artifacts (optional)
+CATBOOST_REPORT = os.getenv("CATBOOST_REPORT_PATH", f"reports/catboost_report_{SEASON_YEAR}.csv")
+CATBOOST_FEATURES = os.getenv("CATBOOST_FEATURES_PATH", f"reports/catboost_features_{SEASON_YEAR}.csv")
 
 # Optional email recipient
 REPORT_RECIPIENT = os.getenv("WEEKLY_REPORT_EMAIL", "")
 
 # Advanced diagnostics controls
-ENABLE_ADV_DIAGNOSTICS = os.getenv("ENABLE_ADV_DIAGNOSTICS", "1") == "1"
+ENABLE_ADV_DIAGNOSTICS = os.getenv("ENABLE_ADV_DIAGNOSTICS", "0") == "1"
 PERM_SOURCE_PATH = os.getenv("PERM_SOURCE_PATH", MERGED_OUTPUT)
 # Caps & budgets (tunable via env)
 REPORT_MAX_SECONDS = int(os.getenv("REPORT_MAX_SECONDS", "300"))      # whole build cap (sec)
@@ -56,11 +87,6 @@ TOP_FEATURES_FOR_PLOTS = int(os.getenv("TOP_FEATURES_FOR_PLOTS", "6"))
 IMG_FMT = os.getenv("REPORT_IMG_FMT", "png")  # png|svg
 
 TZ_LABEL = "ET"  # display-only label for times
-
-# Data sources for ID→teams mapping
-SEASON_YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
-SCHEDULE_CSV = os.getenv("SCHEDULE_CSV", f"data/weekly/full_{SEASON_YEAR}_schedule.csv")
-PRICE_SNAPSHOTS_CSV = os.getenv("PRICE_SNAPSHOTS_CSV", "data/daily/price_snapshots.csv")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Small timing helpers
@@ -131,6 +157,44 @@ def _read_csv_safe(path: str):
         return None
 
 
+def _read_float_csv(path: str):
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        return pd.read_csv(path)
+    except Exception as e:
+        print(f"⚠️ failed reading '{path}': {e}")
+        return None
+
+
+def _maybe_add_catboost_summary(report, today_str):
+    rep = _read_float_csv(CATBOOST_REPORT)
+    feats = _read_float_csv(CATBOOST_FEATURES)
+    if rep is None or feats is None or rep.empty or feats.empty:
+        return
+
+    rep_row = rep.tail(1).iloc[0]
+    feats = feats.copy()
+    feats["importance"] = pd.to_numeric(feats["importance"], errors="coerce").fillna(0.0)
+    feats = feats.sort_values("importance", ascending=False)
+    total = feats["importance"].sum() or 1.0
+
+    report.append("## 🧠 Latest CatBoost Training Summary\n")
+    report.append(f"- Rows evaluated: **{int(rep_row.get('rows_total_used', 0))}**")
+    if "gap_pct_mae" in rep_row:
+        report.append(f"- gap_pct MAE: **{rep_row['gap_pct_mae']:.4f}**")
+        report.append(f"- gap_pct within 0.05: **{rep_row['gap_pct_within_0p05']:.4f}**")
+    if "price_mae" in rep_row:
+        report.append(f"- Price MAE: **{_format_currency(rep_row['price_mae'])}**")
+        report.append(f"- Price RMSE: **{_format_currency(rep_row['price_rmse'])}**")
+        report.append(f"- Price within 5%: **{rep_row['price_within_5pct']:.4f}**")
+    if "time_mae_hours" in rep_row:
+        report.append(f"- Timing MAE (hours): **{rep_row['time_mae_hours']:.2f} h**")
+        report.append(f"- Timing within 24h: **{rep_row['time_within_24h']:.4f}**")
+
+    # Feature importance list lives in the "Best Predictors" section below.
+
+
 def _extract_teams_from_title(title: str) -> tuple[str, str]:
     """Parse 'Home vs. Away' / 'Home vs Away' / 'Home at Away' from a title."""
     if not title:
@@ -148,7 +212,7 @@ def _extract_teams_from_title(title: str) -> tuple[str, str]:
     return "", ""
 
 
-def _load_price_snapshots() -> pd.DataFrame | None:
+def _load_price_snapshots() -> Optional[pd.DataFrame]:
     """Load price snapshots; build id → (home, away)."""
     global _SNAP_CACHE
     if _SNAP_CACHE is not None:
@@ -197,7 +261,7 @@ def _load_price_snapshots() -> pd.DataFrame | None:
     return df
 
 
-def _load_schedule_df() -> pd.DataFrame | None:
+def _load_schedule_df() -> Optional[pd.DataFrame]:
     """Load season schedule; provide id → (home, away) fallback."""
     global _SCHED_CACHE
     if _SCHED_CACHE is not None:
@@ -606,7 +670,21 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
 
     importances = getattr(estimator, "feature_importances_", None)
     if importances is None:
-        return "❌ Model does not expose feature_importances_.", []
+        feats = _read_float_csv(CATBOOST_FEATURES)
+        if feats is None or feats.empty or "feature" not in feats.columns or "importance" not in feats.columns:
+            return "❌ Model does not expose feature_importances_.", []
+        feats = feats.copy()
+        feats["importance"] = pd.to_numeric(feats["importance"], errors="coerce").fillna(0.0)
+        feats = feats.sort_values("importance", ascending=False)
+        total = feats["importance"].sum() or 1.0
+        lines = [f"- {r['feature']}: {r['importance']:.4f} (~{r['importance'] / total * 100.0:.1f}%)"
+                 for _, r in feats.head(top_k).iterrows()]
+        weak = feats[feats["importance"] <= 0.0001]["feature"].tolist()
+        md = []
+        md.extend(lines if lines else ["(none)"])
+        if weak:
+            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak[:20]))
+        return "\n".join(md), weak
 
     importances = np.asarray(importances)
 
@@ -897,6 +975,18 @@ def build_report() -> str:
 
     report = [f"# 📈 Weekly Ticket Price Model Report\n**Date:** {today_str}\n"]
 
+    # Latest CatBoost training snapshot (works even in offseason)
+    _maybe_add_catboost_summary(report, today_str)
+    _maybe_add_pipeline_status(report)
+
+    # Season + freshness
+    report.append("## 🗓️ Season State & Data Freshness\n")
+    report.append(f"- Season state: **{_season_state()}**")
+    report.append(f"- Snapshots last updated: **{_fmt_mtime(SNAP_PATH)}**")
+    report.append(f"- Predictions last updated: **{_fmt_mtime(PRED_PATH)}**")
+    report.append("- Postseason games are **excluded** from model + GUI (for now).")
+    report.append("")
+
     # 1) Feature Importance
     _log_step("loading model / feature importances", t0_total)
     fi_text, weak_features = get_feature_importance()
@@ -939,7 +1029,34 @@ def build_report() -> str:
                 report.append("Top features by mean importance:\n")
                 for _, r in topN.iterrows():
                     report.append(f"- {r['feature']}: {r['mean_importance']:.6f} (±{r['std_importance']:.6f})")
-                report.append("")
+    report.append("")
+
+
+def _maybe_add_pipeline_status(report):
+    status = read_status()
+    if not status:
+        return
+    report.append("## ✅ Pipeline Status (Latest)\n")
+    order = [
+        "annual_setup",
+        "weekly_update",
+        "daily_snapshot",
+        "model_train",
+        "weekly_report",
+    ]
+    keys = [k for k in order if k in status] + [k for k in status.keys() if k not in order]
+    for k in keys:
+        entry = status.get(k, {})
+        st = entry.get("status", "unknown")
+        detail = entry.get("detail", "")
+        updated = entry.get("updated_at", "")
+        line = f"- **{k}**: **{st}**"
+        if updated:
+            line += f" (_{updated}_)"
+        if detail:
+            line += f" — {detail}"
+        report.append(line)
+    report.append("")
                 report.append(f"_Saved full table → `{_md_rel(report_dir_for_date, perm_csv_path)}`_\n")
                 top_for_plots = [f for f in perm_df.head(TOP_FEATURES_FOR_PLOTS)["feature"].tolist() if f in (X_perm.columns if X_perm is not None else [])]
             else:
@@ -979,7 +1096,8 @@ def build_report() -> str:
                 report.append("")
 
         except Exception as e:
-            report.append(f"### ⚠️ Advanced diagnostics skipped\nReason: {e}\n")
+            # Diagnostics are optional; skip without adding noise to the report.
+            pass
 
     # 2) Accuracy (past week) + TIMING
     _log_step("loading recent evaluation rows", t0_total)
@@ -1101,6 +1219,12 @@ def build_report() -> str:
         f.write("\n".join(report))
 
     print(f"✅ Weekly report saved to {report_md_path}")
+    write_status(
+        "weekly_report",
+        "success",
+        f"Weekly report generated: {report_md_path}",
+        {"path": report_md_path},
+    )
     if not df.empty and os.path.exists(recent_csv_path):
         print(f"🗂  Weekly eval rows saved to {recent_csv_path}")
     if 'perm_csv_path' in locals() and perm_csv_path and os.path.exists(perm_csv_path):
@@ -1121,4 +1245,8 @@ def build_report() -> str:
 
 
 if __name__ == "__main__":
-    build_report()
+    try:
+        build_report()
+    except Exception as e:
+        write_status("weekly_report", "failed", str(e))
+        raise

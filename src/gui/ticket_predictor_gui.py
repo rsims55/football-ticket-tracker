@@ -5,11 +5,15 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover
+    ZoneInfo = None
 
 import pandas as pd
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QLabel, QComboBox, QPushButton, QMessageBox, QListView, QSizePolicy, QScrollArea
+    QLabel, QComboBox, QPushButton, QMessageBox, QListView, QSizePolicy, QScrollArea, QHBoxLayout
 )
 from PyQt5.QtCore import Qt, QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -22,6 +26,8 @@ import numpy as np
 # -----------------------------
 _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]  # .../repo root
+# Default to current year unless overridden via env var
+SEASON_YEAR = int(os.getenv("SEASON_YEAR", str(datetime.now(ZoneInfo("America/New_York")).year if ZoneInfo else datetime.now().year)))
 
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
@@ -41,7 +47,8 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
         return p
     return PROJ_DIR / default_rel
 
-SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily/price_snapshots.csv"))
+SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily") / f"price_snapshots_{SEASON_YEAR}.csv")
+SNAPSHOT_FALLBACK = _resolve_file("SNAPSHOT_PATH_FALLBACK", Path("data/daily/price_snapshots.csv"))
 PRED_PATH     = _resolve_file("OUTPUT_PATH",  Path("data/predicted/predicted_prices_optimal.csv"))
 MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_with_context.csv"))
 
@@ -70,8 +77,20 @@ def _fmt_mtime(p: Path) -> str:
     except FileNotFoundError:
         return "missing"
 
+def _season_state() -> str:
+    now = datetime.now(ZoneInfo("America/New_York")) if ZoneInfo else datetime.now()
+    year = now.year
+    start = datetime(year, 8, 1)
+    end = datetime(year + 1, 2, 1)
+    return "In-season" if start <= now < end else "Offseason"
+
+
 def get_status_text() -> str:
-    return f"Snapshots: {_fmt_mtime(SNAPSHOT_PATH)}   |   Predictions: {_fmt_mtime(PRED_PATH)}"
+    season_state = _season_state()
+    return (
+        f"{season_state} • Snapshots: {_fmt_mtime(SNAPSHOT_PATH)}   |   "
+        f"Predictions: {_fmt_mtime(PRED_PATH)}   |   Postseason excluded"
+    )
 
 # =========================================================
 
@@ -99,6 +118,7 @@ class TicketApp(QMainWindow):
         try:
             self.snapshots = self.load_snapshot_data()
             self.df = self.load_and_merge_data()
+            self.kickoff_lookup, self.schedule_df = self._build_kickoff_lookup()
         except Exception as e:
             QMessageBox.critical(self, "Startup Error", f"{e}")
             raise
@@ -128,10 +148,63 @@ class TicketApp(QMainWindow):
                 return ts
         return pd.Series(pd.NaT, index=snaps.index)
 
+    def _coerce_datetime(self, series: pd.Series) -> pd.Series:
+        if series is None:
+            return pd.Series(pd.NaT)
+        s = series.copy()
+        has_tz = s.astype(str).str.contains(r"(Z|[+-]\d{2}:?\d{2})").any()
+        if has_tz:
+            dt = pd.to_datetime(s, errors="coerce", utc=True)
+        else:
+            dt = pd.to_datetime(s, errors="coerce")
+        if dt.dtype == object:
+            dt = pd.to_datetime(s, errors="coerce", utc=True)
+        if getattr(dt.dt, "tz", None) is not None:
+            dt = dt.dt.tz_convert("America/New_York").dt.tz_localize(None)
+        return dt
+
+    def _is_postseason_row(self, df: pd.DataFrame) -> pd.Series:
+        if "is_postseason" in df.columns:
+            return df["is_postseason"].fillna(False).astype(bool)
+        if "title" in df.columns:
+            return df["title"].fillna("").astype(str).str.contains(
+                r"\b(bowl|playoff|first round|quarterfinal|semifinal|final|championship|cfp)\b",
+                case=False,
+                regex=True,
+            )
+        return pd.Series(False, index=df.index)
+
+    def _confidence_label(self, row: dict) -> str:
+        # Simple heuristic based on feature completeness and time to game.
+        try:
+            hours = float(row.get("hours_until_game", np.nan))
+        except Exception:
+            hours = np.nan
+        signals = [
+            pd.notna(row.get("capacity")),
+            pd.notna(row.get("week")),
+            pd.notna(row.get("home_last_point_diff_at_snapshot")),
+            pd.notna(row.get("away_last_point_diff_at_snapshot")),
+        ]
+        completeness = sum(1 for s in signals if s)
+        if pd.notna(hours) and hours <= 168 and completeness >= 3:
+            return "High"
+        if pd.notna(hours) and hours <= 336 and completeness >= 2:
+            return "Medium"
+        return "Low"
+
+    def _recommended_window(self, predicted_min_time: pd.Timestamp) -> str:
+        if pd.isna(predicted_min_time):
+            return "—"
+        start = predicted_min_time - pd.Timedelta(hours=6)
+        end = predicted_min_time + pd.Timedelta(hours=6)
+        return f"{start.strftime('%a, %b %d %I:%M %p')} → {end.strftime('%a, %b %d %I:%M %p')}"
+
     def load_snapshot_data(self) -> pd.DataFrame:
-        if not SNAPSHOT_PATH.exists():
-            raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}'")
-        snaps = pd.read_csv(SNAPSHOT_PATH)
+        path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else SNAPSHOT_FALLBACK
+        if not path.exists():
+            raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}' or '{SNAPSHOT_FALLBACK}'")
+        snaps = pd.read_csv(path, low_memory=False)
         snaps["lowest_price"] = pd.to_numeric(snaps.get("lowest_price"), errors="coerce")
         snaps["collected_dt"] = self._infer_collected_dt(snaps)
         if "startDateEastern" not in snaps.columns:
@@ -140,30 +213,40 @@ class TicketApp(QMainWindow):
                     snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"].astype(str)+" "+snaps["time_local"].astype(str), errors="coerce")
                 else:
                     snaps["startDateEastern"] = pd.to_datetime(snaps["date_local"], errors="coerce")
+        if "startDateEastern" in snaps.columns:
+            snaps["startDateEastern"] = self._coerce_datetime(snaps["startDateEastern"])
         if "homeTeam" not in snaps.columns and "home_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"home_team_guess": "homeTeam"})
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"away_team_guess": "awayTeam"})
+        snaps = snaps[~self._is_postseason_row(snaps)].copy()
+        # Filter to current season window (Aug 1 -> Feb 1 next year)
+        if "startDateEastern" in snaps.columns:
+            start = pd.Timestamp(f"{SEASON_YEAR}-08-01")
+            end = pd.Timestamp(f"{SEASON_YEAR+1}-02-01")
+            snaps = snaps[(snaps["startDateEastern"] >= start) & (snaps["startDateEastern"] < end)]
         return snaps
 
     def load_and_merge_data(self) -> pd.DataFrame:
         if MERGED_PATH.exists():
             merged = pd.read_csv(MERGED_PATH)
         else:
-            if not PRED_PATH.exists():
-                raise FileNotFoundError(f"Could not find predictions CSV at '{PRED_PATH}'")
-            pred = pd.read_csv(PRED_PATH)
+            if PRED_PATH.exists():
+                pred = pd.read_csv(PRED_PATH)
+            else:
+                pred = None
 
             # Parse types from predictions
-            if "startDateEastern" in pred.columns:
-                pred["startDateEastern"] = pd.to_datetime(pred["startDateEastern"], errors="coerce")
+            if pred is not None and "startDateEastern" in pred.columns:
+                pred["startDateEastern"] = self._coerce_datetime(pred["startDateEastern"])
 
             # New observed columns: ensure exist, parse
-            if "observed_lowest_price_num" not in pred.columns:
-                pred["observed_lowest_price_num"] = np.nan
-            pred["observed_lowest_price_num"] = pd.to_numeric(pred["observed_lowest_price_num"], errors="coerce")
+            if pred is not None:
+                if "observed_lowest_price_num" not in pred.columns:
+                    pred["observed_lowest_price_num"] = np.nan
+                pred["observed_lowest_price_num"] = pd.to_numeric(pred["observed_lowest_price_num"], errors="coerce")
 
-            if "observed_lowest_dt" not in pred.columns:
+            if pred is not None and "observed_lowest_dt" not in pred.columns:
                 pred["observed_lowest_dt"] = ""
 
             def _parse_iso(s):
@@ -172,23 +255,26 @@ class TicketApp(QMainWindow):
                 except Exception:
                     return pd.NaT
 
-            pred["observed_lowest_dt_parsed"] = pred["observed_lowest_dt"].apply(_parse_iso)
+            if pred is not None:
+                pred["observed_lowest_dt_parsed"] = pred["observed_lowest_dt"].apply(_parse_iso)
 
-            if "event_id" not in pred.columns:
+            if pred is not None and "event_id" not in pred.columns:
                 raise KeyError("Predictions must contain 'event_id'.")
 
             # Merge snapshots (keeps your current behavior)
             snaps = getattr(self, "snapshots", None)
-            if snaps is not None and "event_id" in snaps.columns:
+            if pred is not None and snaps is not None and "event_id" in snaps.columns:
                 merged = pred.merge(snaps, on="event_id", how="left", suffixes=("", "_snap"))
                 if "startDateEastern" not in merged and "startDateEastern_snap" in merged:
                     merged["startDateEastern"] = merged["startDateEastern_snap"]
+            elif snaps is not None:
+                merged = snaps.copy()
             else:
-                merged = pred
+                merged = pred if pred is not None else pd.DataFrame()
 
         # Final cleanups
         if "startDateEastern" in merged.columns:
-            merged["startDateEastern"] = pd.to_datetime(merged["startDateEastern"], errors="coerce")
+            merged["startDateEastern"] = self._coerce_datetime(merged["startDateEastern"])
         if "week" in merged.columns:
             merged["week"] = pd.to_numeric(merged["week"], errors="coerce").astype("Int64")
         for tcol in ("homeTeam", "awayTeam"):
@@ -196,45 +282,146 @@ class TicketApp(QMainWindow):
                 merged[tcol] = pd.NA
         if "predicted_lowest_price" not in merged.columns and "predicted_lowest_price_num" in merged.columns:
             merged["predicted_lowest_price"] = pd.to_numeric(merged["predicted_lowest_price_num"], errors="coerce")
-        merged = merged.dropna(subset=["predicted_lowest_price"])
+        merged = merged[~self._is_postseason_row(merged)].copy()
         return merged
+
+    def _build_kickoff_lookup(self):
+        weekly_dir = PROJ_DIR / "data" / "weekly"
+        files = sorted(weekly_dir.glob("full_*_schedule.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not files:
+            return {}, pd.DataFrame()
+        f = files[0]
+        try:
+            cols = pd.read_csv(f, nrows=1).columns
+            use_cols = [c for c in ["id", "homeTeam", "awayTeam", "startDateEastern", "kickoffTimeStr", "startDate", "game_date"] if c in cols]
+            df = pd.read_csv(f, usecols=use_cols)
+        except Exception:
+            return {}, pd.DataFrame()
+        if "id" not in df.columns:
+            return {}, pd.DataFrame()
+        df["id"] = df["id"].astype(str)
+        lookup = {}
+        for _, r in df.iterrows():
+            lookup[str(r.get("id"))] = {
+                "kickoffTimeStr": r.get("kickoffTimeStr"),
+                "startDateEastern": r.get("startDateEastern"),
+                "startDate": r.get("startDate"),
+                "game_date": r.get("game_date"),
+            }
+        return lookup, df
+
+    def _find_schedule_match(self, row):
+        if self.schedule_df is None or self.schedule_df.empty:
+            return None
+        home = row.get("homeTeam")
+        away = row.get("awayTeam")
+        if not home or not away:
+            return None
+        df = self.schedule_df
+        # Base matchup filter
+        m = (df["homeTeam"] == home) & (df["awayTeam"] == away)
+        if not m.any():
+            # fallback: swapped home/away (neutral site or inconsistent sources)
+            m = (df["homeTeam"] == away) & (df["awayTeam"] == home)
+        cand = df[m]
+        if cand.empty:
+            return None
+
+        # Try to match on date if available
+        date_val = None
+        for dcol in ("date_local", "startDateEastern", "startDate", "game_date"):
+            if dcol in row and pd.notna(row[dcol]):
+                date_val = pd.to_datetime(row[dcol], errors="coerce")
+                if pd.notna(date_val):
+                    date_val = date_val.date()
+                    break
+        if date_val is not None:
+            def _row_date(x):
+                dt = pd.to_datetime(x, errors="coerce")
+                return dt.date() if pd.notna(dt) else None
+            if "startDateEastern" in cand.columns:
+                cand = cand.copy()
+                cand["_date"] = cand["startDateEastern"].apply(_row_date)
+                exact = cand[cand["_date"] == date_val]
+                if not exact.empty:
+                    return exact.iloc[0]
+        return cand.iloc[0] if not cand.empty else None
 
 
     # ---------------- UI ----------------
     def init_ui(self):
-        self.central_widget = QWidget(); self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(); self.central_widget.setLayout(self.layout)
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(16)
+        self.central_widget.setLayout(main_layout)
 
-        container = QWidget(); container_layout = QVBoxLayout(); container.setLayout(container_layout)
-        container.setStyleSheet("""
-            background-color: white; border-radius: 12px; padding: 20px; margin: 16px; border: 1px solid #ccc;
+        self.setStyleSheet("""
+            QMainWindow { background-color: #f3f5f7; font-family: "Segoe UI", Arial, sans-serif; }
+            QLabel { color: #1f2933; }
+            QComboBox { font-size: 14px; padding: 2px 8px; border: 1px solid #cbd2d9; border-radius: 6px; background: #ffffff; }
+            QComboBox::drop-down { width: 26px; border: 0px; }
+            QComboBox::down-arrow { width: 10px; height: 10px; }
+            QPushButton { background-color: #1a73e8; color: white; padding: 10px 12px; font-size: 14px; font-weight: 700; border: none; border-radius: 8px; }
+            QPushButton:hover { background-color: #1669c1; }
         """)
-        container_layout.setSpacing(8); self.layout.addWidget(container)
 
-        title = QLabel("🎟️ Ticket Price Predictor"); title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("QLabel { font-size: 26px; font-weight: bold; margin-bottom: 6px; }")
-        container_layout.addWidget(title)
+        # Top panel (controls + details)
+        top_panel = QWidget()
+        top_layout = QVBoxLayout()
+        top_layout.setSpacing(10)
+        top_panel.setLayout(top_layout)
+        top_panel.setStyleSheet("""
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #e4e7eb;
+        """)
+        main_layout.addWidget(top_panel, stretch=3)
 
-        # Home
+        title = QLabel("🎟️ Ticket Price Predictor")
+        title.setAlignment(Qt.AlignLeft)
+        title.setStyleSheet("QLabel { font-size: 24px; font-weight: 800; margin-bottom: 4px; }")
+        top_layout.addWidget(title)
+
+        status = QLabel(get_status_text())
+        status.setStyleSheet("QLabel { font-size: 12px; color: #52606d; }")
+        top_layout.addWidget(status)
+
+        # Controls row (compact)
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(12)
+
         self.home_combo = QComboBox(); self.home_combo.setView(QListView())
-        self.home_combo.addItem("-- Select Home Team --")
+        self.home_combo.addItem("Select Home Team")
         homes = sorted(self.df["homeTeam"].dropna().unique()); self.home_combo.addItems(homes)
         self.home_combo.currentIndexChanged.connect(self.update_away_teams)
-        self.home_combo.setStyleSheet("QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }")
-        container_layout.addWidget(self.home_combo)
+        
+        self.home_combo.setMinimumHeight(50)
+        self.home_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        # Away
         self.away_combo = QComboBox(); self.away_combo.setView(QListView())
-        self.away_combo.addItem("-- Select Away Team --")
-        self.away_combo.setStyleSheet("QComboBox { font-size: 14px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: white; }")
-        container_layout.addWidget(self.away_combo)
+        self.away_combo.addItem("Select Away Team")
+        self.away_combo.setMinimumHeight(50)
+        self.away_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        # Predict
-        self.predict_button = QPushButton("Get Prediction"); self.predict_button.clicked.connect(self.get_prediction)
-        self.predict_button.setStyleSheet("""
-            QPushButton { background-color: #1a73e8; color: white; padding: 8px 10px; font-size: 14px; font-weight: bold; border: none; border-radius: 6px; }
-            QPushButton:hover { background-color: #1669c1; }
-        """); container_layout.addWidget(self.predict_button)
+        self.predict_button = QPushButton()
+        self.predict_button.setText("Run Prediction")
+        self.predict_button.clicked.connect(self.get_prediction)
+        self.predict_button.setFixedHeight(50)
+        self.predict_button.setMinimumWidth(180)
+        self.predict_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.predict_button.setStyleSheet(
+            "QPushButton { background-color: #1a73e8; color: #ffffff; font-size: 14px; font-weight: 700; "
+            "border: none; border-radius: 8px; padding: 8px 14px; }"
+            "QPushButton:hover { background-color: #1669c1; }"
+        )
+
+        controls_row.addWidget(self.home_combo, 1)
+        controls_row.addWidget(self.away_combo, 1)
+        controls_row.addWidget(self.predict_button, 1)
+        top_layout.addLayout(controls_row)
 
         # Details (scrollable; at least as tall as chart)
         self.details_label = QLabel("")
@@ -242,7 +429,7 @@ class TicketApp(QMainWindow):
         self.details_label.setWordWrap(True)
         self.details_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.details_label.setStyleSheet(
-            "QLabel { background-color: #fafafa; border: 1px solid #ddd; padding: 12px; font-size: 15px; border-radius: 8px; }"
+            "QLabel { background-color: #fafafa; border: 1px solid #e4e7eb; padding: 12px; font-size: 14px; border-radius: 8px; }"
         )
         self.details_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -251,20 +438,33 @@ class TicketApp(QMainWindow):
         self.details_scroll.setWidgetResizable(True)
         self.details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.details_scroll.setStyleSheet("QScrollArea { border: 0; }")
-        container_layout.addWidget(self.details_scroll, stretch=0)
+        self.details_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        top_layout.addWidget(self.details_scroll, stretch=1)
 
         # Countdown
         self.countdown_label = QLabel(""); self.countdown_label.setTextFormat(Qt.RichText); self.countdown_label.setAlignment(Qt.AlignLeft)
-        self.countdown_label.setStyleSheet("QLabel { font-size: 14px; padding: 2px 0 8px 2px; }")
-        container_layout.addWidget(self.countdown_label, stretch=0)
+        self.countdown_label.setStyleSheet("QLabel { font-size: 13px; color: #52606d; padding: 2px 0 8px 2px; }")
+        top_layout.addWidget(self.countdown_label, stretch=0)
+
+        # Bottom panel (chart)
+        chart_panel = QWidget()
+        chart_layout = QVBoxLayout()
+        chart_layout.setSpacing(8)
+        chart_panel.setLayout(chart_layout)
+        chart_panel.setStyleSheet("""
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid #e4e7eb;
+        """)
+        main_layout.addWidget(chart_panel, stretch=2)
 
         # Chart
         self.chart_canvas = FigureCanvas(Figure(constrained_layout=True))
         self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.chart_canvas.setMinimumHeight(340)
+        self.chart_canvas.setMinimumHeight(300)
         self.ax = self.chart_canvas.figure.add_subplot(111)
-        container_layout.addWidget(self.chart_canvas, stretch=1)
-        self.details_scroll.setMinimumHeight(self.chart_canvas.minimumHeight())
+        chart_layout.addWidget(self.chart_canvas, stretch=1)
 
         # Hover
         self.chart_canvas.mpl_connect("motion_notify_event", self.on_mouse_move)
@@ -322,16 +522,84 @@ class TicketApp(QMainWindow):
         parts.append(f"{m}m"); parts.append(f"{s}s")
         return sign + " ".join(parts)
 
+    def _to_eastern(self, ts_like):
+        t = pd.to_datetime(ts_like, errors="coerce")
+        if pd.isna(t):
+            return t
+        if ZoneInfo is None:
+            return t
+        try:
+            if t.tzinfo is None:
+                return t.tz_localize(ZoneInfo("America/New_York"))
+            return t.tz_convert(ZoneInfo("America/New_York"))
+        except Exception:
+            return t
+
+    def _fmt_time_from_dt(self, dt_like) -> str:
+        dt = self._to_eastern(dt_like)
+        try:
+            if pd.isna(dt):
+                return "TBD"
+            t = pd.to_datetime(dt).time()
+            return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
+        except Exception:
+            return "TBD"
+
     def _format_kickoff(self, row) -> str:
-        for cand in ["kickoffTimeStr", "kickoff_time", "time_local"]:
+        # Check schedule lookup by event_id/id first
+        event_id = row.get("event_id") or row.get("id")
+        if event_id is not None:
+            ref = self.kickoff_lookup.get(str(event_id))
+            if ref:
+                for cand in ("kickoffTimeStr",):
+                    v = ref.get(cand)
+                    if pd.notna(v) and str(v).strip():
+                        t = self._parse_time_hhmm(str(v))
+                        if t:
+                            return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
+                for dt_key in ("startDateEastern", "startDate", "game_date"):
+                    v = ref.get(dt_key)
+                    if pd.notna(v):
+                        dt = self._to_eastern(v)
+                        if pd.notna(dt):
+                            t = pd.to_datetime(dt).time()
+                            if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
+                                return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
+
+        # Fallback: match by teams/date in schedule file
+        sched = self._find_schedule_match(row)
+        if sched is not None:
+            v = sched.get("kickoffTimeStr")
+            if pd.notna(v) and str(v).strip():
+                t = self._parse_time_hhmm(str(v))
+                if t:
+                    return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
+            for dt_key in ("startDateEastern", "startDate", "game_date"):
+                if dt_key in sched and pd.notna(sched[dt_key]):
+                    dt = self._to_eastern(sched[dt_key])
+                    if pd.notna(dt):
+                        t = pd.to_datetime(dt).time()
+                        if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
+                            return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
+
+        # Prefer explicit time fields first (avoid placeholder midnight/3am)
+        for cand in ("kickoffTimeStr", "kickoff_time", "time_local", "start_time", "startTime", "startTimeEastern"):
             if cand in row and pd.notna(row[cand]) and str(row[cand]).strip():
                 t = self._parse_time_hhmm(str(row[cand]))
-                if t and not (t.hour == 3 and t.minute == 0):
+                if t:
                     return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
-                return "TBD"
-        if "startDateEastern" in row and pd.notna(row["startDateEastern"]):
-            t = pd.to_datetime(row["startDateEastern"]).time()
-            if t and not (t.hour == 3 and t.minute == 0):
+
+        # Fall back to datetime fields
+        base_dt = None
+        for dt_key in ("startDateEastern", "start_date", "startDate", "date_local", "gameDate"):
+            if dt_key in row and pd.notna(row[dt_key]):
+                base_dt = self._to_eastern(row[dt_key])
+                if pd.notna(base_dt):
+                    break
+
+        if base_dt is not None and pd.notna(base_dt):
+            t = pd.to_datetime(base_dt).time()
+            if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
         return "TBD"
 
@@ -343,10 +611,10 @@ class TicketApp(QMainWindow):
 
     def _fmt_dt(self, ts_like) -> str:
         try:
-            ts = pd.to_datetime(ts_like)
+            ts = self._to_eastern(ts_like)
             if pd.isna(ts):
                 return "—"
-            return ts.strftime("%A, %B %d, %Y %I:%M %p").lstrip("0").replace(" 0", " ")
+            return pd.to_datetime(ts).strftime("%A, %B %d, %Y %I:%M %p").lstrip("0").replace(" 0", " ")
         except Exception:
             return "—"
 
@@ -357,7 +625,9 @@ class TicketApp(QMainWindow):
             if home.startswith("--") or away.startswith("--"):
                 self.details_label.setText("<b>❌ Please select both a home and away team.</b>"); self.countdown_label.setText(""); return
 
-            match = self.df[(self.df["homeTeam"] == home) & (self.df["awayTeam"] == away)].sort_values("startDateEastern")
+            match = self.df[(self.df["homeTeam"] == home) & (self.df["awayTeam"] == away)].copy()
+            match["startDateEastern"] = self._coerce_datetime(match["startDateEastern"])
+            match = match.sort_values("startDateEastern")
             if match.empty:
                 self.details_label.setText("<b>❌ No prediction found for this matchup.</b>"); self.countdown_label.setText(""); return
 
@@ -390,14 +660,23 @@ class TicketApp(QMainWindow):
     def render_details(self, row):
         # compute min from trajectory
         traj_min_txt = "—"
+        predicted_min_price = np.nan
+        predicted_min_time = pd.NaT
         if self.traj_times and self.traj_prices:
             idx = int(np.nanargmin(pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")))
             ts_min = pd.to_datetime(self.traj_times[idx]); p_min = float(self.traj_prices[idx])
             traj_min_txt = f"${p_min:,.2f} on {ts_min.strftime('%a, %b %d, %Y %I:%M %p')}"
-        self.details_label.setText(self._details_html(row, traj_min_txt))
+            predicted_min_price = p_min
+            predicted_min_time = ts_min
+        kickoff = pd.to_datetime(row.get("startDateEastern"), errors="coerce")
+        if pd.notna(kickoff) and kickoff < pd.Timestamp.now():
+            traj_min_txt = "Post-Kickoff"
+            predicted_min_time = pd.NaT
+            predicted_min_price = np.nan
+        self.details_label.setText(self._details_html(row, traj_min_txt, predicted_min_price, predicted_min_time))
 
-    def _details_html(self, row, forecast_min_text: str) -> str:
-        game_dt = pd.to_datetime(row["startDateEastern"])
+    def _details_html(self, row, forecast_min_text: str, predicted_min_price=np.nan, predicted_min_time=pd.NaT) -> str:
+        game_dt = self._to_eastern(row["startDateEastern"])
         stadium = row.get("stadium", "Unknown Venue")
         kickoff = self._format_kickoff(row)
         opt_time_str = self._fmt_ampm_no_sec(row.get("optimal_purchase_time"))
@@ -406,17 +685,12 @@ class TicketApp(QMainWindow):
         week_str = int(row["week"]) if pd.notna(row.get("week")) else "—"
 
         # --- Predicted from model (CSV fields) ---
-        predicted_price = row.get("predicted_lowest_price", np.nan)
+        predicted_price = predicted_min_price if pd.notna(predicted_min_price) else row.get("predicted_lowest_price", np.nan)
 
-        # --- Observed (ever) from CSV ---
-        observed_price = row.get("observed_lowest_price_num", np.nan)
-        # try parsed; fallback to raw string
-        obs_ts = row.get("observed_lowest_dt_parsed", pd.NaT)
-        if pd.isna(obs_ts) and "observed_lowest_dt" in row:
-            try:
-                obs_ts = pd.to_datetime(row.get("observed_lowest_dt"), errors="coerce")
-            except Exception:
-                obs_ts = pd.NaT
+        # --- Observed (ever) from CSV or snapshots ---
+        observed_price, obs_ts = self._observed_lowest(self.current_event_id, row=row, cutoff_dt=None)
+        confidence = self._confidence_label(row)
+        rec_window = "Post-Kickoff" if forecast_min_text == "Post-Kickoff" else self._recommended_window(predicted_min_time)
 
         # Banner if observed < predicted
         warn_html = ""
@@ -441,6 +715,11 @@ class TicketApp(QMainWindow):
                 <div style="font-size: 16px; font-weight: 700; color: #6a1b9a; margin: 4px 0 8px 0;">
                     Current Forecasted Minimum: {forecast_min_text}
                 </div> <br>
+
+                <div style="margin-top:4px;">
+                    <b>Recommended Buy Window:</b> {rec_window}<br>
+                    <b>Confidence:</b> {confidence}
+                </div>
 
                 <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
                     <b>Observed (ever):</b><br>
@@ -602,31 +881,8 @@ class TicketApp(QMainWindow):
         ax = self.ax or self.chart_canvas.figure.add_subplot(111)
         ax.clear(); ax.axis("off")
 
-        # Compute observed lowest price up to kickoff from snapshots (fallbacks included)
-        min_price_txt = "—"
-        try:
-            df = self.snapshots.copy()
-            if "event_id" in df.columns:
-                df = df[df["event_id"] == event_id]
-            if not df.empty:
-                df["collected_dt"]  = pd.to_datetime(df.get("collected_dt"), errors="coerce")
-                df["lowest_price"]  = pd.to_numeric(df.get("lowest_price"), errors="coerce")
-                if df["collected_dt"].notna().any():
-                    df = df[df["collected_dt"] <= kickoff] if pd.notna(kickoff) else df
-                mp = df["lowest_price"].min()
-                if pd.notna(mp):
-                    min_price_txt = f"${float(mp):,.2f}"
-        except Exception:
-            pass
-
-        # Fallbacks from merged row if snapshots were missing
-        if min_price_txt == "—":
-            for k in ("actual_lowest_price", "observed_lowest_price", "final_lowest_price"):
-                if k in row and pd.notna(row[k]):
-                    try:
-                        min_price_txt = f"${float(row[k]):,.2f}"; break
-                    except Exception:
-                        continue
+        observed_price, _obs_ts = self._observed_lowest(event_id, row=row, cutoff_dt=None)
+        min_price_txt = self._fmt_money(observed_price)
 
         matchup = f"{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}"
         date_str = pd.to_datetime(row.get("startDateEastern")).strftime("%A, %B %d, %Y") if pd.notna(row.get("startDateEastern")) else "Game date unknown"
@@ -638,6 +894,49 @@ class TicketApp(QMainWindow):
 
         self.details_label.setText(self._details_html(row, forecast_min_text="—") + "<div style='margin-top:8px;color:#444;'>Game has concluded.</div>")
         self.chart_canvas.draw_idle()
+
+    def _observed_from_snapshots(self, event_id, cutoff_dt=None):
+        try:
+            df = self.snapshots.copy()
+            if "event_id" not in df.columns:
+                return (np.nan, pd.NaT)
+            df = df[df["event_id"] == event_id]
+            if df.empty:
+                return (np.nan, pd.NaT)
+            df["collected_dt"] = pd.to_datetime(df.get("collected_dt"), errors="coerce")
+            df["lowest_price"] = pd.to_numeric(df.get("lowest_price"), errors="coerce")
+            if cutoff_dt is not None and df["collected_dt"].notna().any():
+                df = df[df["collected_dt"] <= cutoff_dt]
+            if df["lowest_price"].notna().any():
+                idx = df["lowest_price"].idxmin()
+                return (df.loc[idx, "lowest_price"], df.loc[idx, "collected_dt"])
+        except Exception:
+            return (np.nan, pd.NaT)
+        return (np.nan, pd.NaT)
+
+    def _observed_lowest(self, event_id, row=None, cutoff_dt=None):
+        observed_price = np.nan
+        obs_ts = pd.NaT
+        if row is not None:
+            observed_price = pd.to_numeric(row.get("observed_lowest_price_num", np.nan), errors="coerce")
+            obs_ts = row.get("observed_lowest_dt_parsed", pd.NaT)
+            if pd.isna(obs_ts) and "observed_lowest_dt" in row:
+                obs_ts = pd.to_datetime(row.get("observed_lowest_dt"), errors="coerce")
+        if (pd.isna(observed_price) or pd.isna(obs_ts)) and event_id:
+            snap_price, snap_dt = self._observed_from_snapshots(event_id, cutoff_dt=cutoff_dt)
+            if pd.isna(observed_price) and pd.notna(snap_price):
+                observed_price = snap_price
+            if pd.isna(obs_ts) and pd.notna(snap_dt):
+                obs_ts = snap_dt
+        if pd.isna(observed_price) and row is not None:
+            for k in ("actual_lowest_price", "observed_lowest_price", "final_lowest_price"):
+                if k in row and pd.notna(row[k]):
+                    try:
+                        observed_price = float(row[k])
+                        break
+                    except Exception:
+                        continue
+        return observed_price, obs_ts
 
     # ---------------- Live countdown ----------------
     def update_countdown_live(self):

@@ -1,232 +1,276 @@
 # 🎟️ College Football Ticket Price Tracker
 
-A cross-platform toolkit to track, model, and visualize college football ticket prices. Priority platform: **Windows** (silent background daemon, Start Menu/Desktop shortcuts, and automatic icon packaging). Linux quickstart included.
+A cross‑platform toolkit to **collect**, **model**, and **visualize** college football ticket prices with a clean, automated pipeline.  
+Primary goals: daily price snapshots, robust modeling, and a GUI predictor.
 
 ---
 
-## ✨ What you get
+## ✅ Quickstart (Windows + Linux)
 
-- **GUI app**: “Ticket Price Predictor” (PyQt5), launched windowlessly via a Start Menu/Desktop shortcut.
-- **Background daemon**: “CFB Ticket Tracker (Background)” runs **silently** (no console window) and:
-  - Pulls the latest `data/daily/price_snapshots.csv` at startup.
-  - Runs a **daily sync at 7:10 AM** local time (pull → push if you have a token).
-  - Scrapes ticket prices four times a day **6:00AM, 12:00PM, 6:00PM, 12:00AM**
-  - Renders an updated model **twice a day at 6:45 AM and 6:45 PM**
-  - Runs a weekly update **Wednesday at 5:45 AM to update kickoff times and rankings**
-  - Runs an annual updater **May 1st at 5:00 AM to update the current year's rivalries and schedules**
-- **Icons & shortcuts**: Installed via `cfb-tix-shortcuts` (no PowerShell popups).
-- **One source of truth** for snapshots: a GitHub Release asset (`snapshots-latest` → `price_snapshots.csv`) with safe ETag caching.
-
----
-
-## 📦 Project layout (key parts)
-
-- `src/gui/` — GUI (`ticket_predictor_gui.py`)
-- `src/cfb_tix/daemon.py` — headless daemon (`cfb-tix run --no-gui`), schedules the 7:00 AM sync
-- `src/cfb_tix/launchers.py` — windowless Windows launcher for the daemon
-- `src/cfb_tix/windows/create_shortcuts.py` — creates Start Menu, Desktop, Startup shortcuts (icons, no console)
-- `src/cfb_tix/windows/data_sync.py` — pull/push `price_snapshots.csv` against GitHub Releases; can prompt for token
-- `assets/icons/` — source icons; packaged copies live under `src/cfb_tix/assets/icons/`
-- `data/` — local data folder (daemon/GUI read & write here)
-
----
-
-## Secrets configuration (`secrets.txt` in the project root)
-
-Create a file named **`secrets.txt`** in the project root (same folder as `pyproject.toml`) with `KEY=VALUE` lines:
-
-SNAP_GH_TOKEN=
-
-GITHUB_TOKEN=
-
-CFD_API_KEY=
-GMAIL_APP_PASSWORD=
-GMAIL_ADDRESS=
-TO_EMAIL=
-
-
-The Windows installer will require this file, prompt to create it if missing, mirror the repo into `%LocalAppData%\cfb-tix\app`, create a per-user venv, write an `.env`, register the background daemon (on logon), create a Start Menu shortcut for the GUI, and run `daily_snapshot` & `weekly_update` once.
-
----
-
-## 🪟 Windows Quickstart (recommended)
-
-1) **Install prerequisites**
-   - Install Git for Windows.
-   - Install **Python 3.11 (64-bit)** and check “Add python.exe to PATH".
-
-2) **Clone & create a virtual environment**
-   - `git clone https://github.com/rsims55/football-ticket-tracker.git`
-   - `cd football-ticket-tracker`
-   - `python -m venv venv`
-   - `.\venv\Scripts\Activate` (PowerShell) or run the equivalent in your shell.
-
-3) **Install the package (editable)**
-   - `python -m pip install --upgrade pip wheel setuptools`
-   - `pip install -e .`
-
-4) **Create shortcuts (icons, no console)**
-   - `cfb-tix-shortcuts`
-   - This adds:
-     - Start Menu → **CFB Ticket Tracker**
-       - **Ticket Price Predictor** (GUI)
-       - **CFB Ticket Tracker (Background)** (daemon, silent)
-     - Desktop → **Ticket Price Predictor**
-     - Startup → **CFB-Ticket-Tracker** (daemon auto-starts every login)
-
-5) **First-run token (optional but recommended)**
-   - If you installed via the Windows installer, it already prompted you for a GitHub token.
-   - If you installed manually, you can add it now:
-     - `.\venv\Scripts\pythonw.exe -m cfb_tix.windows.data_sync ensure_token`
-     - This stores `GITHUB_TOKEN=<your token>` in `.env` at the repo root.
-   - The token is **required only for uploads**; downloads work without it (subject to GitHub rate limits).
-
-6) **Run**
-   - GUI: Start Menu → **Ticket Price Predictor**.
-   - Background daemon (silent): Start Menu → **CFB Ticket Tracker (Background)**. It also auto-starts at login.
-
-7) **Data locations**
-   - Snapshots live at `data/daily/price_snapshots.csv`.
-   - The daemon performs an initial pull at start, then a **daily sync at 7:00 AM** local time.
-
----
-
-## 🐧 Linux Quickstart
-
-1) **Prereqs**: Git, Python 3.11.
-2) **Clone & venv**:
-   - `git clone https://github.com/rsims55/football-ticket-tracker.git`
-   - `cd football-ticket-tracker`
-   - `python3 -m venv venv`
-   - `source venv/bin/activate`
-3) **Install**:
-   - `pip install --upgrade pip`
-   - `pip install -e .`
-4) **Run**:
-   - GUI: `python -m gui.ticket_predictor_gui`
-   - Daemon (foreground): `python -m cfb_tix run --no-gui`
-5) **Optional autostart (systemd user)**:
-   - Copy `packaging/linux/cfb-tix.service` to `~/.config/systemd/user/cfb-tix.service`
-   - `systemctl --user enable --now cfb-tix.service`
-6) **Token prompt** (optional for uploads):
-   - `python -m cfb_tix.windows.data_sync ensure_token` (works on Linux too; stores to `.env`)
-
----
-
-## 🔁 Data sync model
-
-- **Remote source**: GitHub Release tag `snapshots-latest`, asset name `price_snapshots.csv`.
-- **On start**: the daemon pulls the latest file using conditional requests (ETag / Last-Modified).
-- **Daily at 7:00 AM**: pull latest → push local (push requires token).
-- **Token**: read from `SNAP_GH_TOKEN` or `GITHUB_TOKEN` env vars, or `.env` at repo root.
-- **Manual commands** (all platforms):
-  - Ensure token: `python -m cfb_tix.windows.data_sync ensure_token`
-  - Pull only: `python -m cfb_tix.windows.data_sync pull`
-  - Push only: `python -m cfb_tix.windows.data_sync push`
-  - Pull → Push: `python -m cfb_tix.windows.data_sync pull_push`
-
-### For GitHub Token
-
-The Windows daemon pulls on startup and runs a daily pull → push at **7:00 AM local**. To push back to GitHub, it needs a Personal Access Token (PAT). You can use a **Fine‑grained token (recommended)** or a **Classic token**.
-
-### Option A — Fine‑grained token (recommended, least privilege)
-1. GitHub → **Settings → Developer settings → Personal access tokens → Fine‑grained tokens → Generate new token**
-2. **Token name:** `cfb-tix sync`
-3. **Expiration:** choose your rotation policy (e.g., 90 days)
-4. **Repository access:** **Only select repositories** → select **`rsims55/football-ticket-tracker`**
-5. **Repository permissions:**
-   - **Contents:** **Read and write** ✅
-   - **Metadata:** **Read‑only** ✅
-   - **Actions:** **Read and write** ⬜ *(optional, only if you need to trigger/manage workflows)*
-   - **Pull requests:** **Read and write** ⬜ *(optional, only if you push branches that open PRs)*
-6. **Generate** and **copy** the token value.
-
-### Option B — Classic token
-1. GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**
-2. **Note:** `cfb-tix sync`
-3. **Expiration:** choose (e.g., 90 days)
-4. **Scopes:**
-   - **`repo`** ✅ *(required for pull/push)*
-   - **`workflow`** ⬜ *(optional; trigger/manage GitHub Actions)*
-
-### Save the token locally (Windows)
-From the project root in an active virtual environment:
-```powershell
-.\venv\Scripts\pythonw.exe -m cfb_tix.windows.data_sync ensure_token
+1) **Clone repo**
 ```
----
+git clone https://github.com/rsims55/football-ticket-tracker.git
+cd football-ticket-tracker
+```
 
-## 🧰 Commands & entry points
+2) **Create `.env`**
+```
+cp configs/.env.example .env
+```
+Fill in required secrets in `.env` (see below).
 
-- GUI (module): `python -m gui.ticket_predictor_gui`
-- Daemon (module): `python -m cfb_tix run --no-gui`
-- GUI desktop app (Windows shim): Start Menu → **Ticket Price Predictor**
-- Background daemon (Windows shim): Start Menu → **CFB Ticket Tracker (Background)**
-- Shortcut creator: `cfb-tix-shortcuts`
+3) **Setup environment**
+- **Linux**
+```
+bin/setup_linux.sh
+```
+- **Windows**
+```
+bin/setup_windows.cmd
+```
 
----
+4) **Run everything (scheduler + GUI ready)**
+- **Linux**
+```
+bin/run_all_linux.sh
+```
+- **Windows**
+```
+bin/run_all_windows.cmd
+```
 
-## 🔧 Configuration (env)
-
-- `SNAP_OWNER` (default `rsims55`)
-- `SNAP_REPO` (default `football-ticket-tracker`)
-- `SNAP_TAG` (default `snapshots-latest`)
-- `SNAP_ASSET` (default `price_snapshots.csv`)
-- `SNAP_DEST` (default `data/daily/price_snapshots.csv`)
-- `SNAP_GH_TOKEN` or `GITHUB_TOKEN` (required for uploads; optional for downloads)
-
-You can set these in a `.env` file in the repo root (the token prompt writes here automatically).
-
----
-
-## 🖼 Icons & packaging
-
-- Icons are included in wheels and sdists:
-  - `src/cfb_tix/assets/icons/cfb-tix_gui.ico`
-  - `src/cfb_tix/assets/icons/cfb-tix_daemon.ico`
-- `cfb-tix-shortcuts` assigns these icons to Start Menu/Desktop/Startup shortcuts on Windows.
-- Launchers use **GUI-style executables** (via `[project.gui-scripts]`) to avoid console windows.
-
----
-
-## 🧪 Troubleshooting
-
-- **No shortcuts created**: Ensure the venv is active and run `cfb-tix-shortcuts` again.
-- **Icons missing on shortcuts**: Confirm the `.ico` files exist under `src/cfb_tix/assets/icons/` and reinstall `pip install -e .`.
-- **No uploads**: Add a token via `pythonw -m cfb_tix.windows.data_sync ensure_token` or set `GITHUB_TOKEN`.
-- **GUI won’t start**: Try `python -m gui.ticket_predictor_gui` from the venv to see errors in the console.
-- **Daemon not syncing**: Check `logs/cfb_tix.log`.
-- **Daemon locked**: Run: 
-$lockDir = "$env:LOCALAPPDATA\cfb-tix\Logs"
-if (Test-Path $lockDir) {
-  "Removing locks from: $lockDir" | Write-Host
-  Get-ChildItem $lockDir -Filter 'daemon*.lock' -Force -ErrorAction SilentlyContinue |
-    Select-Object FullName, LastWriteTime
-  Get-ChildItem $lockDir -Filter 'daemon*.lock' -Force -ErrorAction SilentlyContinue |
-    Remove-Item -Force -ErrorAction SilentlyContinue
-}
-
-$repoLock = Join-Path (Resolve-Path .) '.cfb_tix_daemon.lock'
-if (Test-Path $repoLock) { Remove-Item $repoLock -Force }
-
-$env:PYTHONPATH = (Resolve-Path .\src).Path
-$env:CFB_TIX_LOG_LEVEL = 'INFO'
-$env:PYTHONUNBUFFERED = '1'
-& ".\.venv\Scripts\python.exe" -u -m cfb_tix.daemon
+5) **Launch GUI only**
+- **Linux**: `bin/run_gui_linux.sh`
+- **Windows**: `bin/run_gui_windows.cmd`
 
 ---
 
-## 📝 Development notes
+## 🔐 Required `.env` secrets
 
-- GUI lives under `src/gui/` (not under `cfb_tix`). Entry points are configured accordingly.
-- Daemon honors `--with-gui` if you want to route through the same process (dev convenience).
-- Packaging uses:
-  - `[project.gui-scripts]` for windowless Windows shims.
-  - `include-package-data = true` and `[tool.setuptools.package-data] cfb_tix = ["assets/icons/*.ico"]`.
-  - `MANIFEST.in` to include icons in sdists.
+Edit `.env` at repo root:
+
+```
+CFD_API_KEY=
+TICKPICK_EMAIL=
+TICKPICK_PASSWORD=
+GMAIL_ADDRESS=
+GMAIL_APP_PASSWORD=
+TO_EMAIL=
+```
+
+Optional:
+```
+# SEASON_YEAR=2026
+ALLOW_OFFSEASON_SCRAPE=0
+```
 
 ---
 
-## 📄 License
+## 🧠 Pipeline Schedule (EDT)
 
-Proprietary (see `pyproject.toml`).
+All time rules use **America/New_York (EDT/EST)**.
+
+### 1) Annual Setup  
+**Runs Mar 1 @ 4:30 AM**  
+Also runs later in March+ if annual files are missing.
+
+### 2) Weekly Update  
+**Mondays @ 5:30 AM**  
+Uses **current year** if March+; else prior year.  
+Overwrites same‑year weekly outputs.
+
+### 3) Daily Scraper  
+**4 random runs/day**, ≥4 hours apart  
+Only runs if **March+** in current year.  
+Skips any game **after kickoff**.
+
+### 4) Model Training  
+**Mondays @ 7:00 AM**
+
+### 5) Weekly Report + Email  
+Runs after model training; emailed to `TO_EMAIL`.
+
+---
+
+## ⚠️ Postseason Rules (Current)
+
+- **Postseason games are excluded from:**
+  - Model training
+  - GUI display
+- **Postseason can still be scraped** but is ignored downstream.
+- We’ll revisit postseason logic after next season.
+
+---
+
+## ✅ Status Reporting
+
+Each pipeline step writes to:
+```
+data/permanent/pipeline_status.json
+```
+
+The **weekly report email** includes the latest success/skip/fail status for:
+- annual_setup  
+- weekly_update  
+- daily_snapshot  
+- model_train  
+- weekly_report  
+ - health_check
+
+---
+
+## 🩺 Health Check
+
+Weekly health check validates required columns and basic freshness:
+```
+python scripts/health_check.py
+```
+Results are written to `data/permanent/pipeline_status.json` and included in the weekly report.
+
+---
+
+## 🗄️ Backups
+
+`price_snapshots.csv` is backed up automatically before each write:
+```
+data/daily/backups/price_snapshots.csv.YYYYMMDD_HHMMSS.bak
+```
+The last **7** backups are kept.
+
+---
+
+## 🛠️ System Daemons (optional)
+
+### Linux (systemd user)
+```
+mkdir -p ~/.config/systemd/user
+cp configs/systemd/cfb-ticket-tracker.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now cfb-ticket-tracker.service
+```
+
+### Windows (Task Scheduler)
+1) Edit `configs/windows/cfb-ticket-tracker.xml`  
+   Replace `C:\path\to\repo` with your repo location.
+2) Import the task in Task Scheduler.
+
+### Keep Awake
+- **Linux**: systemd-inhibit is built into the service (prevents sleep while running).
+- **Windows**: daemon runner uses `SetThreadExecutionState` to prevent sleep.
+
+---
+
+## ✅ Daemon Activation (VERY CLEAR)
+
+When the system daemon starts, it **immediately runs all pipeline steps once**:
+- annual setup
+- weekly update
+- daily snapshot (will skip in offseason)
+- model training
+- weekly report
+- email send
+
+It then continues running the scheduler loop.
+
+### Linux activation (one‑time)
+```
+mkdir -p ~/.config/systemd/user
+cp configs/systemd/cfb-ticket-tracker.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now cfb-ticket-tracker.service
+```
+
+### Windows activation (one‑time)
+1) Edit `configs/windows/cfb-ticket-tracker.xml`  
+   Replace `C:\path\to\repo` with your repo path.
+2) Import into Task Scheduler.
+
+### Manual activation (if needed)
+- Linux: `bin/run_daemon_linux.sh`
+- Windows: `bin/run_daemon_windows.cmd`
+
+---
+
+## 🔄 Update / Upgrade
+
+```
+git pull
+```
+Then re-run setup if dependencies changed:
+- Linux: `bin/setup_linux.sh`
+- Windows: `bin/setup_windows.cmd`
+
+---
+
+## 📂 Project Structure (clean)
+
+```
+assets/                 icons, UI assets
+bin/                    cross‑platform launcher scripts
+configs/                .env.example + templates
+data/                   all data outputs + permanent state
+docs/                   documentation
+reports/                weekly reports + model outputs
+scripts/                one‑off maintenance scripts
+src/                    main codebase (builders, models, GUI)
+```
+
+---
+
+## ✅ Core Commands (manual)
+
+**Daily snapshot**
+```
+python src/builders/daily_snapshot.py
+```
+
+**Weekly update**
+```
+python src/builders/weekly_update.py
+```
+
+**Train model**
+```
+python src/modeling/train_catboost_min.py
+```
+
+**Generate weekly report**
+```
+python src/reports/generate_weekly_report.py
+```
+
+**Run GUI**
+```
+python src/gui/ticket_predictor_gui.py
+```
+
+---
+
+## 🧩 Notes
+
+- Daily scraping **won’t run in offseason** (March+ rule).
+- If no events exist, the daily script prints a clear “skipped” message.
+- All scripts emit **clean success/failure logs**.
+
+---
+
+## ✅ Troubleshooting
+
+**GUI crashes on datetime compare**  
+Make sure `startDateEastern` is present; GUI now coerces mixed timezones safely.
+
+**No report email**
+Check `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, and `TO_EMAIL` in `.env`.
+
+**No daily scraping**
+Likely offseason rule or not a collection window; check console output.
+
+---
+
+## 👇 Next steps (optional)
+
+If you want system‑level daemon registration:
+- **Linux:** systemd user service  
+- **Windows:** Task Scheduler XML  
+
+Just say the word and we’ll generate those.

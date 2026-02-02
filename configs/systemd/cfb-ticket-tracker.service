@@ -1,0 +1,10 @@
+[Unit]
+Description=CFB Ticket Tracker Scheduler
+
+[Service]
+Type=simple
+WorkingDirectory=%h/football-ticket-tracker
+ExecStart=/usr/bin/systemd-inhibit --what=sleep --why="CFB Ticket Tracker daemon" %h/football-ticket-tracker/.venv/bin/python %h/football-ticket-tracker/scripts/daemon_loop.py
+Restart=always
+RestartSec=30
+Environment=PYTHONUNBUFFERED=1

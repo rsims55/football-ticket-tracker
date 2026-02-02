@@ -1,29 +1,31 @@
-# src/builders/annual_setup.py
 #!/usr/bin/env python3
+# src/builders/annual_setup.py
 """
-Annual setup script:
-- Scrape stadium data
-- Scrape rivalry pairs
+Annual setup:
+  - Scrape stadium data
+  - Scrape rivalry pairs
 
 Run:
-  python src/builders/annual_setup.py --year 2025
-  # optional override (kept inside repo unless REPO_ALLOW_NON_REPO_OUT=1):
-  python src/builders/annual_setup.py --outdir C:\path\to\repo\data\annual
+  python src/builders/annual_setup.py --year 2026
+  # Optional override (kept inside repo unless REPO_ALLOW_NON_REPO_OUT=1):
+  python src/builders/annual_setup.py --outdir C:\\path\\to\\repo\\data\\annual
 """
 from __future__ import annotations
 
-import os
-import sys
 import argparse
+import os
+import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
+
 import pandas as pd
 
 # --- Robust project path handling (run from anywhere) ---
 CURRENT_DIR = Path(__file__).resolve().parent
-SRC_DIR     = CURRENT_DIR.parent                 # .../src
-PROJ_DIR    = SRC_DIR.parent                     # repo root
+SRC_DIR = CURRENT_DIR.parent  # .../src
+PROJ_DIR = SRC_DIR.parent     # repo root
 for p in (SRC_DIR, PROJ_DIR):
     p_str = str(p)
     if p_str not in sys.path:
@@ -32,10 +34,14 @@ for p in (SRC_DIR, PROJ_DIR):
 # --- Project imports ---
 from scrapers.stadium_scraper import StadiumScraper
 from scrapers.rivalry_scraper import RivalryScraper
+from utils.logging_utils import get_logger
 
 # --- Repo-lock flags (same behavior as other scripts) ---
 REPO_DATA_LOCK = os.getenv("REPO_DATA_LOCK", "1") == "1"
 ALLOW_ESCAPE   = os.getenv("REPO_ALLOW_NON_REPO_OUT", "0") == "1"
+
+log = get_logger("annual_setup")
+
 
 def _under_repo(p: Path) -> bool:
     try:
@@ -49,7 +55,7 @@ def ensure_dir(path: Path) -> None:
 def safe_to_csv(df: pd.DataFrame, path: Path) -> None:
     ensure_dir(path)
     df.to_csv(path, index=False)
-    print(f"✅ Saved {len(df):,} rows to {path}")
+    log.info("Saved %d rows to %s", len(df), path)
 
 def build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Annual data setup for stadiums and rivalries")
@@ -73,18 +79,35 @@ def _resolve_outdir(cli_outdir: str) -> Path:
         outdir = default
         # If user passed something else, warn that we're ignoring it
         if cli_outdir and Path(cli_outdir).resolve() != outdir.resolve():
-            print("⚠️  REPO_DATA_LOCK=1 → ignoring --outdir; writing under repo data/annual")
+            log.warning("REPO_DATA_LOCK=1 → ignoring --outdir; writing under repo data/annual")
     else:
         outdir = Path(cli_outdir).expanduser()
         if not _under_repo(outdir) and not ALLOW_ESCAPE:
-            print(f"🚫 --outdir resolves outside repo: {outdir}")
-            print("    Forcing repo path; set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
+            log.warning("--outdir resolves outside repo: %s", outdir)
+            log.warning("Forcing repo path; set REPO_ALLOW_NON_REPO_OUT=1 to permit.")
             outdir = default
     outdir.mkdir(parents=True, exist_ok=True)
     return outdir
 
+def _archive_old_csvs(outdir: Path) -> None:
+    """Move existing CSVs in outdir into data/annual/archive with a timestamp prefix."""
+    archive_dir = outdir / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    for p in outdir.glob("*.csv"):
+        # Skip files already in archive (defensive) and avoid moving new outputs later.
+        if archive_dir in p.parents:
+            continue
+        target = archive_dir / f"{stamp}__{p.name}"
+        try:
+            shutil.move(str(p), str(target))
+            log.info("Archived %s -> %s", p.name, target)
+        except Exception as e:
+            log.warning("Could not archive %s: %s", p.name, e)
+
 def scrape_stadiums(year: int, outdir: Path) -> pd.DataFrame:
-    print("🏟️ Scraping stadium data…")
+    """Pull the FBS stadium list and persist to data/annual."""
+    log.info("Scraping stadium data…")
     df = StadiumScraper().scrape()
     # Expect columns like: ['school','stadium','capacity','city','state', ...]
     if "school" in df.columns:
@@ -94,7 +117,8 @@ def scrape_stadiums(year: int, outdir: Path) -> pd.DataFrame:
     return df
 
 def scrape_rivalries(year: int, outdir: Path) -> pd.DataFrame:
-    print("🔥 Scraping rivalry data…")
+    """Pull rivalry pairs and persist to data/annual."""
+    log.info("Scraping rivalry data…")
     rivals_map: Dict[str, list] = RivalryScraper().scrape()  # dict[str, list[str]]
     pair_set = set()
     for team, rivals in (rivals_map or {}).items():
@@ -119,21 +143,23 @@ def main():
     year = int(args.year)
     outdir = _resolve_outdir(args.outdir)
 
-    print("[annual_setup] Paths resolved:")
-    print(f"  PROJ_DIR: {PROJ_DIR}")
-    print(f"  OUTDIR:   {outdir} (REPO_DATA_LOCK={'1' if REPO_DATA_LOCK else '0'}, ALLOW_ESCAPE={'1' if ALLOW_ESCAPE else '0'})")
+    log.info("[annual_setup] Paths resolved:")
+    log.info("  PROJ_DIR: %s", PROJ_DIR)
+    log.info("  OUTDIR:   %s (REPO_DATA_LOCK=%s, ALLOW_ESCAPE=%s)", outdir, "1" if REPO_DATA_LOCK else "0", "1" if ALLOW_ESCAPE else "0")
+
+    _archive_old_csvs(outdir)
 
     try:
         scrape_stadiums(year, outdir)
     except Exception as e:
-        print(f"❌ Stadium scraping failed: {e}")
+        log.error("Stadium scraping failed: %s", e)
 
     try:
         scrape_rivalries(year, outdir)
     except Exception as e:
-        print(f"❌ Rivalry scraping failed: {e}")
+        log.error("Rivalry scraping failed: %s", e)
 
-    print("🎉 Annual setup complete.")
+    log.info("Annual setup complete.")
 
 if __name__ == "__main__":
     main()

@@ -230,6 +230,36 @@ def send_report(filepath: str):
     except Exception as e:
         _fail(f"Unexpected error sending email: {e}")
 
+
+def send_markdown_report(md_text: str, subject: str) -> None:
+    # Convert Markdown to HTML
+    html_core = md_to_html(md_text)
+    html_core = _force_table_borders(html_core)
+    html_body = _wrap_html(html_core, subject)
+
+    outer = MIMEMultipart("related")
+    outer["Subject"] = subject
+    outer["From"] = GMAIL_ADDRESS
+    outer["To"] = TO_EMAIL
+
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(md_text, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+    outer.attach(alt)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_ADDRESS, APP_PASSWORD)
+            server.send_message(outer)
+        print(f"📧 Email sent to {TO_EMAIL}")
+    except smtplib.SMTPAuthenticationError:
+        _fail("Gmail authentication failed. Check GMAIL_ADDRESS and GMAIL_APP_PASSWORD "
+              "(must be a Gmail **App Password** with 2-Step Verification).")
+    except smtplib.SMTPResponseException as e:
+        _fail(f"SMTP error {e.smtp_code}: {e.smtp_error!r}")
+    except Exception as e:
+        _fail(f"Unexpected error sending email: {e}")
+
 if __name__ == "__main__":
     _validate_env()
     report_path = _find_report_path()

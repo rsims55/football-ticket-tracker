@@ -199,6 +199,10 @@ class TickPickPricer:
         respect_robots: bool = True,
         cloudflare_stop_after: int = 5,
         cloudflare_window_s: int = 15 * 60,
+        backoff_base_s: float = 1.5,
+        backoff_mult: float = 2.0,
+        backoff_max_s: float = 60.0,
+        backoff_jitter_s: float = 0.4,
     ):
         self.team_urls = list(team_urls)
         self.output_dir = output_dir
@@ -238,6 +242,10 @@ class TickPickPricer:
 
         # polite config
         self.retry_after_cap_s = int(retry_after_cap_s)
+        self.backoff_base_s = float(backoff_base_s)
+        self.backoff_mult = float(backoff_mult)
+        self.backoff_max_s = float(backoff_max_s)
+        self.backoff_jitter_s = float(backoff_jitter_s)
         self.cache_ttl_s = int(cache_ttl_s)
         self.respect_robots = bool(respect_robots)
         self._robots_cache: Dict[str, Dict[str, Any]] = {}
@@ -415,7 +423,7 @@ class TickPickPricer:
 
             try:
                 if delay:
-                    time.sleep(delay)
+                    time.sleep(delay + random.uniform(0, self.backoff_jitter_s))
 
                 resp = self.session.get(
                     url,
@@ -434,7 +442,7 @@ class TickPickPricer:
                         time.sleep(min(self.retry_after_cap_s, sleep_s))
                     # mark failure to encourage rotation next loop
                     self._rotator.mark_request(success=False)
-                    delay = max(0.75, (delay or 0.6) * 1.8)
+                    delay = self._next_backoff(delay)
                     consecutive_failures += 1
                     continue
 
@@ -448,7 +456,8 @@ class TickPickPricer:
                     if self.verbose:
                         print(f"  ⚠️ HTTP {resp.status_code}; backoff & rotate")
                     self._rotator.mark_request(success=False)
-                    delay = max(0.75, (delay or 0.6) * 1.8)
+                    penalty = 1.5 if resp.status_code == 403 else 1.0
+                    delay = self._next_backoff(delay, penalty=penalty)
                     consecutive_failures += 1
                     continue
 
@@ -459,7 +468,7 @@ class TickPickPricer:
             except Exception as e:
                 last_err = e
                 self._rotator.mark_request(success=False)
-                delay = max(0.75, (delay or 0.6) * 1.8)
+                delay = self._next_backoff(delay)
                 consecutive_failures += 1
                 continue
 
@@ -473,6 +482,12 @@ class TickPickPricer:
                     time.sleep(cool)
 
         raise RuntimeError(f"GET failed for {url}: {last_err}")
+
+    def _next_backoff(self, current: float, penalty: float = 1.0) -> float:
+        """Exponential backoff with cap and optional penalty multiplier."""
+        base = self.backoff_base_s if current <= 0 else current * self.backoff_mult
+        base *= penalty
+        return min(self.backoff_max_s, base)
 
     @staticmethod
     def _parse_retry_after(value: str) -> int:

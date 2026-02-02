@@ -1,16 +1,44 @@
-import pandas as pd
-import re
-import os
+"""Scrape FBS stadium data from Wikipedia, with alias cleanup."""
+from __future__ import annotations
+
 import json
+import os
+import re
+from io import StringIO
+from pathlib import Path
+import sys
+from typing import Dict
+
+import pandas as pd
+
+# Allow running as a script without installing the package.
+SRC_DIR = Path(__file__).resolve().parents[1]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from utils.http import build_session
+from utils.logging_utils import get_logger
+
 
 class StadiumScraper:
-    def __init__(self, alias_path="data/permanent/team_aliases.json"):
-        self.url = "https://en.wikipedia.org/wiki/List_of_NCAA_Division_I_FBS_football_stadiums"
-        self.df = None
-        self.alias_path = alias_path
-        self.alias_map = self._load_aliases()
+    """Pulls the NCAA Division I FBS stadium list and normalizes names."""
 
-    def _load_aliases(self):
+    URL = "https://en.wikipedia.org/wiki/List_of_NCAA_Division_I_FBS_football_stadiums"
+
+    def __init__(
+        self,
+        alias_path: str = "data/permanent/team_aliases.json",
+        timeout: int = 30,
+        session=None,
+    ):
+        self.df: pd.DataFrame | None = None
+        self.alias_path = alias_path
+        self.log = get_logger(self.__class__.__name__)
+        self.alias_map = self._load_aliases()
+        self.timeout = int(timeout)
+        self.session = session or build_session()
+
+    def _load_aliases(self) -> Dict[str, str]:
         if os.path.exists(self.alias_path):
             try:
                 with open(self.alias_path, "r", encoding="utf-8") as f:
@@ -27,11 +55,14 @@ class StadiumScraper:
                                 alias_map[raw.strip()] = k.strip()
                 return alias_map
             except Exception as e:
-                print(f"⚠️ Could not load alias file {self.alias_path}: {e}")
+                self.log.warning("Could not load alias file %s: %s", self.alias_path, e)
         return {}
 
-    def scrape(self):
-        tables = pd.read_html(self.url, header=0)
+    def scrape(self) -> pd.DataFrame:
+        # Wikipedia blocks default UAs; shared session provides headers + retry/backoff.
+        resp = self.session.get(self.URL, timeout=self.timeout)
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text), header=0)
         df = tables[0]
 
         # Auto-map column names
@@ -76,16 +107,17 @@ class StadiumScraper:
         self.df = df
         return df
 
-    def save(self, filename="data/stadiums_full.csv"):
+    def save(self, filename: str = "data/stadiums_full.csv") -> None:
         if self.df is not None:
             self.df.to_csv(filename, index=False)
-            print(f"✅ Stadium info saved to {filename}")
+            self.log.info("Stadium info saved to %s", filename)
         else:
-            print("⚠️ No data to save")
+            self.log.warning("No data to save")
 
 # 🔍 Test run
 if __name__ == "__main__":
+    log = get_logger("stadium_scraper")
     scraper = StadiumScraper()
     df = scraper.scrape()
-    print(df.head())
+    log.info("\n%s", df.head().to_string(index=False))
     scraper.save()

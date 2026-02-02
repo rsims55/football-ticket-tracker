@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CFB Ticket Tracker Scheduler every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=30s
+Unit=cfb-ticket-tracker.service
+
+[Install]
+WantedBy=timers.target
