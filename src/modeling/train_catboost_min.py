@@ -84,6 +84,7 @@ USE_NEUTRAL_SITE = os.getenv("USE_NEUTRAL_SITE", "1") == "1"
 USE_CONFERENCE_GAME = os.getenv("USE_CONFERENCE_GAME", "0") == "1"
 USE_RIVALRY = os.getenv("USE_RIVALRY", "1") == "1"
 USE_RANKED_MATCHUP = os.getenv("USE_RANKED_MATCHUP", "1") == "1"
+USE_HOME_RANK = os.getenv("USE_HOME_RANK", "1") == "1"
 USE_AWAY_RANK = os.getenv("USE_AWAY_RANK", "0") == "1"
 USE_KICKOFF_DAY = os.getenv("USE_KICKOFF_DAY", "1") == "1"
 USE_AWAY_TEAM = os.getenv("USE_AWAY_TEAM", "1") == "1"
@@ -106,6 +107,8 @@ if USE_RIVALRY:
     NUMERIC_FEATURES.append("isRivalry")
 if USE_RANKED_MATCHUP:
     NUMERIC_FEATURES.append("isRankedMatchup")
+if USE_HOME_RANK:
+    NUMERIC_FEATURES.append("homeTeamRank")
 if USE_AWAY_RANK:
     NUMERIC_FEATURES.append("awayTeamRank")
 if USE_KICKOFF_DAY:
@@ -120,6 +123,14 @@ if USE_AWAY_TEAM:
     CATEGORICAL_FEATURES.append("awayTeam")
 if USE_STADIUM:
     CATEGORICAL_FEATURES.append("stadium")
+
+# Features that survive importance pruning regardless of their score.
+# homeTeamRank: high-cardinality signal that reads as low importance when
+#   often missing, but its _missing indicator proves the column matters.
+# awayTeam / awayConference: matchup identity is critical for marquee games
+#   and gets pruned unfairly when overall distribution is home-dominated.
+PINNED_NUMERIC: set = {"hours_until_game", "homeTeamRank"}
+PINNED_CATEGORICAL: set = {"homeTeam", "awayTeam", "homeConference"}
 
 FUTURE_MIN_PRICE = "future_min_price"
 TARGET_PRICE = "gap_pct"
@@ -155,8 +166,8 @@ def _prune_by_importance(
         if len(keep) < len(feats):
             keep.append(feats.loc[len(keep), "feature"])
         keep_set = set(keep)
-        num_kept = [c for c in numeric_features if c in keep_set]
-        cat_kept = [c for c in categorical_features if c in keep_set]
+        num_kept = [c for c in numeric_features if c in keep_set or c in PINNED_NUMERIC]
+        cat_kept = [c for c in categorical_features if c in keep_set or c in PINNED_CATEGORICAL]
         return num_kept, cat_kept
     except Exception:
         return numeric_features, categorical_features
@@ -538,9 +549,6 @@ def train():
     price_train = train_inner[train_inner[TARGET_PRICE_LOG].notna()].copy()
     price_val = val_df[val_df[TARGET_PRICE_LOG].notna()].copy()
     price_test = test_df[test_df[TARGET_PRICE_LOG].notna()].copy()
-    time_train = train_inner[train_inner[TARGET_TIME_LOG].notna()].copy()
-    time_val = val_df[val_df[TARGET_TIME_LOG].notna()].copy()
-    time_test = test_df[test_df[TARGET_TIME_LOG].notna()].copy()
 
     # Sample weights: event-balance + extra emphasis on low-price games.
     w_price = _event_weights(price_train)
@@ -550,15 +558,11 @@ def train():
         base = 1.0 / np.maximum(lp.to_numpy(), PRICE_WEIGHT_MIN)
         price_scale = np.power(base, PRICE_WEIGHT_ALPHA)
         w_price = w_price * price_scale
-    w_time = _event_weights(time_train)
 
     # Build CatBoost pools
     X_price_train = price_train[numeric_features + categorical_features].copy()
     X_price_val = price_val[numeric_features + categorical_features].copy()
     X_price_test = price_test[numeric_features + categorical_features].copy()
-    X_time_train = time_train[numeric_features + categorical_features].copy()
-    X_time_val = time_val[numeric_features + categorical_features].copy()
-    X_time_test = time_test[numeric_features + categorical_features].copy()
 
     # CatBoost requires categorical values to be strings (no NaN).
     for c in categorical_features:
@@ -566,9 +570,6 @@ def train():
             X_price_train.loc[:, c] = X_price_train[c].astype(str).fillna("NA")
             X_price_val.loc[:, c] = X_price_val[c].astype(str).fillna("NA")
             X_price_test.loc[:, c] = X_price_test[c].astype(str).fillna("NA")
-            X_time_train.loc[:, c] = X_time_train[c].astype(str).fillna("NA")
-            X_time_val.loc[:, c] = X_time_val[c].astype(str).fillna("NA")
-            X_time_test.loc[:, c] = X_time_test[c].astype(str).fillna("NA")
 
     cat_features = [X_price_train.columns.get_loc(c) for c in categorical_features if c in X_price_train.columns]
     # Monotonic constraints: price gap should generally decrease as kickoff approaches.
@@ -600,29 +601,8 @@ def train():
         use_best_model=True,
     )
 
-    # Time model
-    time_model = CatBoostRegressor(
-        loss_function="MAE",
-        iterations=2000,
-        depth=9,
-        learning_rate=0.035,
-        random_seed=42,
-        od_type="Iter",
-        od_wait=200,
-        verbose=False,
-    )
-    time_model.fit(
-        X_time_train,
-        time_train[TARGET_TIME_LOG],
-        cat_features=cat_features,
-        sample_weight=w_time,
-        eval_set=(X_time_val, time_val[TARGET_TIME_LOG]),
-        use_best_model=True,
-    )
-
     # Evaluate
     y_pred_gap = np.expm1(price_model.predict(X_price_test)).clip(0, 1)
-    y_pred_time = np.expm1(time_model.predict(X_time_test))
 
     price_metrics = _evaluate_gap_pct(price_test[TARGET_PRICE].to_numpy(), y_pred_gap, tol_abs=0.05)
     # Convert gap_pct back to predicted min price for reporting
@@ -630,16 +610,12 @@ def train():
     pred_min_price = price_test["lowest_price"].to_numpy() * (1.0 - y_pred_gap)
     price_abs_metrics = _evaluate_price(true_min_price, pred_min_price, tol_frac=0.05)
     price_bucket_metrics = _bucketed_price_mae(true_min_price, pred_min_price)
-    time_mae = np.nanmean(np.abs(time_test[TARGET_TIME].to_numpy() - y_pred_time))
-    time_within = np.nanmean(np.abs(time_test[TARGET_TIME].to_numpy() - y_pred_time) <= 24.0)
 
     report = pd.DataFrame([
         {
             "year": YEAR,
             "n_train_price": len(price_train),
             "n_test_price": len(price_test),
-            "n_train_time": len(time_train),
-            "n_test_time": len(time_test),
             "rows_total_used": len(df),
             "gap_pct_mae": price_metrics["mae"],
             "gap_pct_rmse": price_metrics["rmse"],
@@ -648,8 +624,6 @@ def train():
             "price_rmse": price_abs_metrics["rmse"],
             "price_within_5pct": price_abs_metrics["within"],
             **price_bucket_metrics,
-            "time_mae_hours": time_mae,
-            "time_within_24h": time_within,
         }
     ])
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -658,7 +632,6 @@ def train():
     # Save models
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     price_model.save_model(str(MODEL_DIR / f"catboost_price_min_{YEAR}.cbm"))
-    time_model.save_model(str(MODEL_DIR / f"catboost_time_to_min_{YEAR}.cbm"))
     # Save feature importances for debugging/pruning
     feat_importances = pd.DataFrame(
         {"feature": X_price_train.columns, "importance": price_model.get_feature_importance()}
@@ -673,8 +646,6 @@ def train():
     print(f"rows_total_used: {int(row['rows_total_used'])}")
     print(f"n_train_price: {int(row['n_train_price'])}")
     print(f"n_test_price: {int(row['n_test_price'])}")
-    print(f"n_train_time: {int(row['n_train_time'])}")
-    print(f"n_test_time: {int(row['n_test_time'])}")
     print(f"gap_pct_mae: {row['gap_pct_mae']:.4f}")
     print(f"gap_pct_rmse: {row['gap_pct_rmse']:.4f}")
     print(f"gap_pct_within_0p05: {row['gap_pct_within_0p05']:.4f}")
@@ -684,8 +655,6 @@ def train():
     for k in [k for k in row.keys() if k.startswith('price_mae_')]:
         v = row[k]
         print(f"{k}: {v:.4f}" if isinstance(v, (int, float)) and not np.isnan(v) else f"{k}: NA")
-    print(f"time_mae_hours: {row['time_mae_hours']:.4f}")
-    print(f"time_within_24h: {row['time_within_24h']:.4f}")
     print("-" * 72)
 
     write_status(
