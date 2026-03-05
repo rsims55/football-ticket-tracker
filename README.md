@@ -114,8 +114,8 @@ The **weekly report email** includes the latest success/skip/fail status for:
 - weekly_update  
 - daily_snapshot  
 - model_train  
-- weekly_report  
- - health_check
+- weekly_report
+- health_check
 
 ---
 
@@ -207,11 +207,10 @@ Then re-run setup if dependencies changed:
 ```
 assets/                 icons, UI assets
 bin/                    cross‑platform launcher scripts
-configs/                .env.example + templates
+configs/                .env.example + system daemon templates
 data/                   all data outputs + permanent state
-docs/                   documentation
 reports/                weekly reports + model outputs
-scripts/                one‑off maintenance scripts
+scripts/                one‑off maintenance utilities
 src/                    main codebase (builders, models, GUI)
 ```
 
@@ -229,7 +228,7 @@ python src/builders/daily_snapshot.py
 python src/builders/weekly_update.py
 ```
 
-**Train model**
+**Train price model**
 ```
 python src/modeling/train_catboost_min.py
 ```
@@ -267,10 +266,26 @@ Likely offseason rule or not a collection window; check console output.
 
 ---
 
-## 👇 Next steps (optional)
+## 🤖 Model
 
-If you want system‑level daemon registration:
-- **Linux:** systemd user service  
-- **Windows:** Task Scheduler XML  
+Trains a **CatBoost regressor** (`src/modeling/train_catboost_min.py`) to predict the **future minimum ticket price** from a live snapshot.
 
-Just say the word and we’ll generate those.
+**Target:** `gap_pct` — the % drop from the current lowest price to the future minimum (log-transformed for stability).
+
+**Key features:**
+
+| Feature | Type | Notes |
+|---------|------|-------|
+| `homeTeam` | categorical | Strongest signal (~26% importance) |
+| `week` | numeric | Season week |
+| `capacity` | numeric | Stadium capacity |
+| `kickoff_hour` | numeric | Affects demand patterns |
+| `hours_until_game` | numeric | Monotonic constraint applied |
+| `homeConference` | categorical | |
+| `homeTeamRank` / `awayTeamRank` | numeric | Missing indicator included |
+| `awayTeam` | categorical | Critical for marquee matchups |
+| `home/away_last_point_diff` | numeric | Recent team form |
+
+Pinned features (`homeTeam`, `homeTeamRank`, `awayTeam`, `homeConference`, `hours_until_game`) are never dropped by the importance pruner regardless of score.
+
+The **GUI derives predicted timing** from the price trajectory curve — a separate time-to-min model is not needed.
