@@ -13,7 +13,6 @@ from pathlib import Path
 from math import exp
 
 import pandas as pd
-from utils.status import write_status
 
 # ---------------------------
 # Paths & imports so this runs from anywhere
@@ -24,6 +23,8 @@ PROJ_DIR = os.path.abspath(os.path.join(SRC_DIR, ".."))           # project root
 for p in (SRC_DIR, PROJ_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+from utils.status import write_status
 
 TIMEZONE = ZoneInfo("America/New_York")
 YEAR = int(os.getenv("SEASON_YEAR", datetime.now(TIMEZONE).year))
@@ -764,6 +765,7 @@ def backfill_kickoff_times_from_schedule(snap: pd.DataFrame, schedule_csv_path: 
     m2 = m2.sort_values("snap_idx").drop_duplicates(subset=["snap_idx"], keep="first")
 
     # Prefer schedule-provided fields when present (avoid using snapshot fields with same names)
+    fields = ["startDateEastern", "kickoffTimeStr"]
     for f in fields:
         sched_col = f"{f}_sched"
         if sched_col in m1.columns:
@@ -1799,7 +1801,7 @@ def fallback_fill_unmatched_snapshots(snap: pd.DataFrame, schedule_csv_path: str
     sched["awayTeam"] = sched["awayTeam"].apply(_strip_team_suffix)
 
     # Keys
-    sched["startDateEastern"] = pd.to_datetime(sched["startDateEastern"], errors="coerce")
+    sched["startDateEastern"] = pd.to_datetime(sched["startDateEastern"], errors="coerce", utc=True).dt.tz_localize(None)
     sched["date_key"] = sched["startDateEastern"].dt.strftime("%Y-%m-%d")
     sched["__sched_id"] = sched.index
 

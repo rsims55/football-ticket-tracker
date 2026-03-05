@@ -2,7 +2,19 @@
 setlocal
 set ROOT_DIR=%~dp0\..
 cd /d %ROOT_DIR%
+
+rem Bootstrap venv if missing or empty
+if not exist ".venv\Scripts\activate" (
+  echo Creating .venv...
+  python -m venv .venv
+)
 call .venv\Scripts\activate
+python -c "import pandas" >nul 2>&1
+if errorlevel 1 (
+  echo Installing dependencies...
+  pip install --upgrade pip -q
+  pip install -r requirements.txt -q
+)
 
 python src\builders\annual_setup.py
 python src\builders\weekly_update.py

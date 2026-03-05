@@ -22,10 +22,7 @@ except Exception as e:  # pragma: no cover
 # ---------- Repo paths ----------
 _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]
-YEAR = int(os.getenv("SEASON_YEAR", "2025"))
-DEFAULT_MODEL_PATH = PROJ_DIR / "models" / "best" / f"catboost_price_min_{YEAR}.cbm"
-if not DEFAULT_MODEL_PATH.exists():
-    DEFAULT_MODEL_PATH = PROJ_DIR / "models" / f"catboost_price_min_{YEAR}.cbm"
+DEFAULT_MODEL_PATH = PROJ_DIR / "models" / "catboost_price_min.cbm"
 
 
 def _to_dt(x):

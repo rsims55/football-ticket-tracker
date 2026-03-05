@@ -5,6 +5,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+
+class _SafeEncoder(json.JSONEncoder):
+    """Coerce numpy/pandas scalar types that standard json can't handle."""
+    def default(self, o: Any) -> Any:
+        try:
+            import numpy as np
+            if isinstance(o, (np.bool_,)):
+                return bool(o)
+            if isinstance(o, np.integer):
+                return int(o)
+            if isinstance(o, np.floating):
+                return float(o)
+        except ImportError:
+            pass
+        return super().default(o)
+
 _STATUS_PATH = Path("data") / "permanent" / "pipeline_status.json"
 
 
@@ -33,7 +49,7 @@ def write_status(
         "extra": extra or {},
         "updated_at": _now_iso(),
     }
-    target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True, cls=_SafeEncoder), encoding="utf-8")
 
 
 def read_status(path: Path | None = None) -> dict[str, Any]:

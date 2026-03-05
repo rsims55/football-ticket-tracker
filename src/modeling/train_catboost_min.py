@@ -9,13 +9,22 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import sys
+
 import numpy as np
 import pandas as pd
-from utils.status import write_status
 import re
+
+# Ensure src/ is on sys.path so utils is importable when run from any cwd
+_SRC_DIR = str(Path(__file__).resolve().parents[1])
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from utils.status import write_status
 
 try:
     from catboost import CatBoostRegressor
@@ -61,13 +70,12 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
     return PROJ_DIR / default_rel
 
 
-YEAR = int(os.getenv("SEASON_YEAR", "2025"))
-SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data") / "daily" / f"price_snapshots_{YEAR}.csv")
-SNAPSHOT_FALLBACK = _resolve_file("SNAPSHOT_PATH_FALLBACK", Path("data") / "daily" / "price_snapshots.csv")
+YEAR = int(os.getenv("SEASON_YEAR", datetime.now().year))
+SNAPSHOT_DIR = PROJ_DIR / "data" / "daily"   # glob all price_snapshots_YYYY.csv here
 MODEL_DIR = _resolve_file("MODEL_DIR", Path("models"))
 REPORT_PATH = _resolve_file("MODEL_REPORT_PATH", Path("reports") / f"catboost_report_{YEAR}.csv")
-DATASET_PATH = _resolve_file("TRAIN_DATASET_PATH", Path("data") / "modeling" / f"train_rows_{YEAR}.csv")
-FEATURES_PATH = _resolve_file("MODEL_FEATURES_PATH", Path("reports") / f"catboost_features_{YEAR}.csv")
+DATASET_PATH = _resolve_file("TRAIN_DATASET_PATH", Path("data") / "modeling" / "train_rows_combined.csv")
+FEATURES_PATH = _resolve_file("MODEL_FEATURES_PATH", Path("reports") / "catboost_features.csv")
 PRICE_GAP_CLIP_PCT = float(os.getenv("PRICE_GAP_CLIP_PCT", "99.5"))
 VAL_FRAC = float(os.getenv("VAL_FRAC", "0.1"))
 PRICE_WEIGHT_MIN = float(os.getenv("PRICE_WEIGHT_MIN", "10"))
@@ -92,6 +100,7 @@ USE_STADIUM = os.getenv("USE_STADIUM", "0") == "1"
 
 NUMERIC_FEATURES = [
     "hours_until_game",
+    "season_year",
     "capacity",
     "week",
     "kickoff_hour",
@@ -129,7 +138,7 @@ if USE_STADIUM:
 #   often missing, but its _missing indicator proves the column matters.
 # awayTeam / awayConference: matchup identity is critical for marquee games
 #   and gets pruned unfairly when overall distribution is home-dominated.
-PINNED_NUMERIC: set = {"hours_until_game", "homeTeamRank"}
+PINNED_NUMERIC: set = {"hours_until_game", "homeTeamRank", "season_year"}
 PINNED_CATEGORICAL: set = {"homeTeam", "awayTeam", "homeConference"}
 
 FUTURE_MIN_PRICE = "future_min_price"
@@ -498,13 +507,49 @@ def _bucketed_price_mae(y_true: np.ndarray, y_pred: np.ndarray, bins=None) -> di
     return out
 
 
+def _load_all_snapshots() -> pd.DataFrame:
+    """
+    Discover all price_snapshots_YYYY* files across data/daily/ and data/daily/archives/,
+    pick the best file per year (main dir preferred over archives), then combine.
+    Handles filename quirks like 'price_snapshots_2025csv' (missing dot).
+    """
+    candidates: dict[int, Path] = {}  # year -> best file path
+
+    search_dirs = [SNAPSHOT_DIR, SNAPSHOT_DIR / "archives"]
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        for f in d.iterdir():
+            m = re.search(r"price_snapshots_(\d{4})", f.name)
+            if not m:
+                continue
+            year = int(m.group(1))
+            # Prefer main dir over archives; within same dir, prefer later (higher version)
+            if year not in candidates or d == SNAPSHOT_DIR:
+                candidates[year] = f
+
+    if not candidates:
+        raise FileNotFoundError(f"No price_snapshots_YYYY* files found in {SNAPSHOT_DIR}")
+
+    dfs = []
+    for year, f in sorted(candidates.items()):
+        try:
+            part = pd.read_csv(f, low_memory=False)
+            part["season_year"] = year
+            print(f"  📂 {f.name}: {len(part):,} rows (season_year={year})")
+            dfs.append(part)
+        except Exception as e:
+            print(f"  ⚠️  Skipping {f.name}: {e}")
+
+    if not dfs:
+        raise FileNotFoundError("No snapshot files could be loaded.")
+    combined = pd.concat(dfs, ignore_index=True)
+    print(f"  📊 Combined: {len(combined):,} rows from {len(dfs)} file(s)")
+    return combined
+
+
 def train():
-    if SNAPSHOT_PATH.exists():
-        df = pd.read_csv(SNAPSHOT_PATH)
-    elif SNAPSHOT_FALLBACK.exists():
-        df = pd.read_csv(SNAPSHOT_FALLBACK, low_memory=False)
-    else:
-        raise FileNotFoundError("No snapshot file found.")
+    df = _load_all_snapshots()
 
     # Exclude postseason games from modeling
     df = df[~_is_postseason_row(df)].copy()
@@ -631,7 +676,7 @@ def train():
 
     # Save models
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    price_model.save_model(str(MODEL_DIR / f"catboost_price_min_{YEAR}.cbm"))
+    price_model.save_model(str(MODEL_DIR / "catboost_price_min.cbm"))
     # Save feature importances for debugging/pruning
     feat_importances = pd.DataFrame(
         {"feature": X_price_train.columns, "importance": price_model.get_feature_importance()}

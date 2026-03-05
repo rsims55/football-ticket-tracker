@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 import json
@@ -143,7 +143,7 @@ def main() -> None:
     args = p.parse_args()
 
     snapshots = Path(args.snapshots)
-    rankings = Path(args.rankings) if args.rankings else Path("data/weekly") / "rankings_history_2025.csv"
+    rankings = Path(args.rankings) if args.rankings else Path("data/weekly") / f"rankings_history_{datetime.now().year}.csv"
     aliases = Path(args.aliases)
 
     df = backfill_rankings_by_week(

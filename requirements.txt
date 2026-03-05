@@ -6,6 +6,7 @@ numpy>=1.24
 requests>=2.31
 urllib3>=2.0
 beautifulsoup4>=4.12
+lxml>=4.9
 cloudscraper==1.2.71
 
 # Scheduling

@@ -1,0 +1,68 @@
+{
+  "daily_snapshot": {
+    "detail": "Snapshot appended (36 new rows). Total now: 210",
+    "extra": {
+      "events_total": 36,
+      "rows_new": 36,
+      "rows_total": 210,
+      "scraped_fail": 0,
+      "scraped_ok": 3,
+      "started_at": "2026-03-05 13:01:30"
+    },
+    "status": "success",
+    "updated_at": "2026-03-05 13:01:45"
+  },
+  "health_check": {
+    "detail": "Potential issues detected",
+    "extra": {
+      "date_format_ok": true,
+      "freshness_ok": false,
+      "last_collected": "2025-11-22 00:00:00",
+      "missing_cols": [],
+      "rows": 107688,
+      "time_format_ok": true
+    },
+    "status": "warning",
+    "updated_at": "2026-03-05 13:03:30"
+  },
+  "model_train": {
+    "detail": "CatBoost training complete for 2026",
+    "extra": {
+      "gap_pct_mae": 0.20325626917311201,
+      "gap_pct_rmse": 0.240577039297042,
+      "gap_pct_within_0p05": 0.11320631179205133,
+      "n_test_price": 30546.0,
+      "n_train_price": 61034.0,
+      "price_mae": 14.676222039271117,
+      "price_mae_$0\u201320": 5.904674400330308,
+      "price_mae_$100\u2013200": 25.67963618410803,
+      "price_mae_$200\u2013inf": 152.40417417140043,
+      "price_mae_$20\u201350": 10.340041838977882,
+      "price_mae_$50\u2013100": 17.83365495058829,
+      "price_rmse": 48.91899230423379,
+      "price_within_5pct": 0.06822497217311596,
+      "rows_total_used": 107788.0,
+      "year": 2026.0
+    },
+    "status": "success",
+    "updated_at": "2026-03-05 13:03:27"
+  },
+  "weekly_report": {
+    "detail": "Weekly report generated: reports/weekly/2026-03-05/weekly_report_2026-03-05.md",
+    "extra": {
+      "path": "reports/weekly/2026-03-05/weekly_report_2026-03-05.md"
+    },
+    "status": "success",
+    "updated_at": "2026-03-05 13:03:28"
+  },
+  "weekly_update": {
+    "detail": "Weekly update complete for 2026",
+    "extra": {
+      "output": "/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker/data/weekly/full_2026_schedule.csv",
+      "rows": 626,
+      "year": 2026
+    },
+    "status": "success",
+    "updated_at": "2026-03-05 13:01:29"
+  }
+}

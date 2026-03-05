@@ -16,8 +16,10 @@ NEW:
 """
 
 import os
+import sys
 import warnings
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 from time import perf_counter
 from zoneinfo import ZoneInfo
@@ -25,6 +27,12 @@ from zoneinfo import ZoneInfo
 import joblib
 import numpy as np
 import pandas as pd
+
+# Ensure src/ is on sys.path so utils is importable when run from any cwd
+_SRC_DIR = str(Path(__file__).resolve().parents[1])
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 from utils.status import read_status, write_status
 
 # -----------------------
@@ -960,6 +968,33 @@ def get_recent_evaluations(window_days: int = WEEK_WINDOW_DAYS) -> pd.DataFrame:
     return recent
 
 
+def _maybe_add_pipeline_status(report):
+    status = read_status()
+    if not status:
+        return
+    report.append("## ✅ Pipeline Status (Latest)\n")
+    order = [
+        "annual_setup",
+        "weekly_update",
+        "daily_snapshot",
+        "model_train",
+        "weekly_report",
+    ]
+    keys = [k for k in order if k in status] + [k for k in status.keys() if k not in order]
+    for k in keys:
+        entry = status.get(k, {})
+        st = entry.get("status", "unknown")
+        detail = entry.get("detail", "")
+        updated = entry.get("updated_at", "")
+        line = f"- **{k}**: **{st}**"
+        if updated:
+            line += f" (_{updated}_)"
+        if detail:
+            line += f" — {detail}"
+        report.append(line)
+    report.append("")
+
+
 def build_report() -> str:
     t0_total = _now()
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -1029,34 +1064,6 @@ def build_report() -> str:
                 report.append("Top features by mean importance:\n")
                 for _, r in topN.iterrows():
                     report.append(f"- {r['feature']}: {r['mean_importance']:.6f} (±{r['std_importance']:.6f})")
-    report.append("")
-
-
-def _maybe_add_pipeline_status(report):
-    status = read_status()
-    if not status:
-        return
-    report.append("## ✅ Pipeline Status (Latest)\n")
-    order = [
-        "annual_setup",
-        "weekly_update",
-        "daily_snapshot",
-        "model_train",
-        "weekly_report",
-    ]
-    keys = [k for k in order if k in status] + [k for k in status.keys() if k not in order]
-    for k in keys:
-        entry = status.get(k, {})
-        st = entry.get("status", "unknown")
-        detail = entry.get("detail", "")
-        updated = entry.get("updated_at", "")
-        line = f"- **{k}**: **{st}**"
-        if updated:
-            line += f" (_{updated}_)"
-        if detail:
-            line += f" — {detail}"
-        report.append(line)
-    report.append("")
                 report.append(f"_Saved full table → `{_md_rel(report_dir_for_date, perm_csv_path)}`_\n")
                 top_for_plots = [f for f in perm_df.head(TOP_FEATURES_FOR_PLOTS)["feature"].tolist() if f in (X_perm.columns if X_perm is not None else [])]
             else:
@@ -1098,6 +1105,7 @@ def _maybe_add_pipeline_status(report):
         except Exception as e:
             # Diagnostics are optional; skip without adding noise to the report.
             pass
+    report.append("")
 
     # 2) Accuracy (past week) + TIMING
     _log_step("loading recent evaluation rows", t0_total)

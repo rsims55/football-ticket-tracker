@@ -62,7 +62,7 @@ def main() -> None:
     if "date_collected" in df.columns:
         last_collected = pd.to_datetime(df["date_collected"], errors="coerce").max()
         if pd.notna(last_collected):
-            freshness_ok = last_collected >= (datetime.now(TZ).date() - timedelta(days=7))
+            freshness_ok = last_collected.date() >= (datetime.now(TZ).date() - timedelta(days=7))
 
     # Date/time format checks (spot-check parsing)
     date_ok = True
