@@ -63,8 +63,6 @@ packaging/windows/task/*.sch
 
 # --- Data handling ---
 # Track everything in data/ by default
-# Ignore only the permanent subfolder (machine-specific stuff)
-data/permanent/
 
 data/models/data/models/ticket_price_model.pkl
 # ---- Model artifacts (do not version) ----
