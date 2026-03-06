@@ -19,17 +19,12 @@ cp configs/.env.example .env
 ```
 Fill in required secrets in `.env` (see below).
 
-3) **Setup environment**
-- **Linux**
-```
-bin/setup_linux.sh
-```
-- **Windows**
-```
-bin/setup_windows.cmd
-```
+3) **Run everything** (`.venv` is created automatically on first run)
 
-4) **Run everything (scheduler + GUI ready)**
+4) **Run everything**
+
+> The run scripts auto-create and populate `.venv` on first run — no separate setup step needed.
+
 - **Linux**
 ```
 bin/run_all_linux.sh
@@ -37,6 +32,16 @@ bin/run_all_linux.sh
 - **Windows**
 ```
 bin/run_all_windows.cmd
+```
+
+**Test run** (3 random teams only — fast smoke test):
+- **Linux**
+```
+bin/run_test_linux.sh
+```
+- **Windows**
+```
+bin/run_test_windows.cmd
 ```
 
 5) **Launch GUI only**
@@ -272,11 +277,15 @@ Trains a **CatBoost regressor** (`src/modeling/train_catboost_min.py`) to predic
 
 **Target:** `gap_pct` — the % drop from the current lowest price to the future minimum (log-transformed for stability).
 
+**Training data:** All available `price_snapshots_YYYY*.csv` files across `data/daily/` and `data/daily/archives/` are combined automatically. Each file is tagged with `season_year` derived from the filename, so the model can learn year-over-year pricing patterns.
+
+**Model output:** `models/catboost_price_min.cbm` (single file, retrained on all years each run).
+
 **Key features:**
 
 | Feature | Type | Notes |
 |---------|------|-------|
-| `homeTeam` | categorical | Strongest signal (~26% importance) |
+| `homeTeam` | categorical | Strongest signal |
 | `week` | numeric | Season week |
 | `capacity` | numeric | Stadium capacity |
 | `kickoff_hour` | numeric | Affects demand patterns |
@@ -285,7 +294,8 @@ Trains a **CatBoost regressor** (`src/modeling/train_catboost_min.py`) to predic
 | `homeTeamRank` / `awayTeamRank` | numeric | Missing indicator included |
 | `awayTeam` | categorical | Critical for marquee matchups |
 | `home/away_last_point_diff` | numeric | Recent team form |
+| `season_year` | numeric | Captures year-over-year price trends |
 
-Pinned features (`homeTeam`, `homeTeamRank`, `awayTeam`, `homeConference`, `hours_until_game`) are never dropped by the importance pruner regardless of score.
+Pinned features (`homeTeam`, `homeTeamRank`, `awayTeam`, `homeConference`, `hours_until_game`, `season_year`) are never dropped by the importance pruner regardless of score.
 
 The **GUI derives predicted timing** from the price trajectory curve — a separate time-to-min model is not needed.

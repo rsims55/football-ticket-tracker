@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker\" log --oneline --all -- data/full_2026_schedule.csv)",
+      "Bash(git -C \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker\" show fa8911c:data/full_2026_schedule.csv)",
+      "Bash(\"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker/.venv/bin/pip\" show apscheduler beautifulsoup4 catboost cloudscraper joblib matplotlib numpy pandas platformdirs PyQt5 python-dotenv requests scikit-learn shap urllib3)",
+      "Bash(\"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker/.venv/bin/python\" -c \"import pkg_resources; pkgs=[''APScheduler'',''beautifulsoup4'',''catboost'',''cloudscraper'',''joblib'',''matplotlib'',''numpy'',''pandas'',''platformdirs'',''PyQt5'',''python-dotenv'',''requests'',''scikit-learn'',''shap'',''urllib3'']; [print\\(f''{p}=={pkg_resources.get_distribution\\(p\\).version}''\\) for p in pkgs]\")",
+      "Bash(\"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker/.venv/bin/python\" -m pip list)",
+      "Bash(git -C \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker\" rm data/full_2026_schedule.csv)",
+      "Bash(git -C \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker\" status)",
+      "Bash(git -C \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker\" add requirements.txt tree.txt)",
+      "Bash(git -C:*)",
+      "Read(//home/randisims/Insync/rsims@clemson.edu/**)",
+      "Read(//home/randisims/Enter/envs/py3-TF2.0/bin/**)",
+      "Bash(.venv/bin/pip list)",
+      "Bash(.venv/bin/pip install --upgrade pip)",
+      "Bash(.venv/bin/pip install -r requirements.txt)",
+      "Bash(.venv/bin/python -c \"import pandas, numpy, requests, bs4, cloudscraper, apscheduler, sklearn, catboost, joblib, shap, PyQt5, matplotlib, dotenv, platformdirs; print\\(''All imports OK''\\)\")",
+      "Bash(.venv/bin/python -m py_compile src/reports/generate_weekly_report.py)",
+      "Bash(for f in src/builders/annual_setup.py src/builders/weekly_update.py src/builders/daily_snapshot.py src/modeling/train_catboost_min.py src/reports/generate_weekly_report.py scripts/health_check.py)",
+      "Bash(do .venv/bin/python -m py_compile \"$f\")",
+      "Bash(echo \"OK  $f\")",
+      "Bash(echo \"ERR $f\")",
+      "Bash(done)",
+      "Bash(.venv/bin/pip install lxml -q)",
+      "Bash(.venv/bin/python -m py_compile src/modeling/train_catboost_min.py)",
+      "Bash(.venv/bin/python -m py_compile src/gui/predict_trajectory.py)",
+      "Bash(.venv/bin/python -c \":*)",
+      "Bash(chmod +x \"/home/randisims/Insync/rsims@clemson.edu/OneDrive Biz/Desktop/Randi Folders/Personal/Football Ticket Tracker/cfb-ticket-tracker/bin/run_test_linux.sh\")"
+    ]
+  }
+}

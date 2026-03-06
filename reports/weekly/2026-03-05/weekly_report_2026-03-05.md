@@ -3,10 +3,11 @@
 
 ## ✅ Pipeline Status (Latest)
 
-- **weekly_update**: **success** (_2026-03-05 13:01:29_) — Weekly update complete for 2026
-- **daily_snapshot**: **success** (_2026-03-05 13:01:45_) — Snapshot appended (36 new rows). Total now: 210
-- **model_train**: **success** (_2026-03-05 13:03:27_) — CatBoost training complete for 2026
-- **weekly_report**: **success** (_2026-03-05 12:59:46_) — Weekly report generated: reports/weekly/2026-03-05/weekly_report_2026-03-05.md
+- **weekly_update**: **success** (_2026-03-05 13:25:24_) — Weekly update complete for 2026
+- **daily_snapshot**: **failed** (_2026-03-05 13:26:10_) — No snapshot CSV produced.
+- **model_train**: **success** (_2026-03-05 13:27:23_) — CatBoost training complete for 2026
+- **weekly_report**: **success** (_2026-03-05 13:12:06_) — Weekly report generated: reports/weekly/2026-03-05/weekly_report_2026-03-05.md
+- **health_check**: **warning** (_2026-03-05 13:12:08_) — Potential issues detected
 
 ## 🗓️ Season State & Data Freshness
 

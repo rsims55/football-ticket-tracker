@@ -91,8 +91,8 @@ COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 ALWAYS_RUN_DAILY = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
 
 # Politeness and caching for TickPickPricer
-TP_POLITE_LOW = int(os.getenv("TP_POLITE_LOW", "1"))
-TP_POLITE_HIGH = int(os.getenv("TP_POLITE_HIGH", "2"))
+TP_POLITE_LOW = int(os.getenv("TP_POLITE_LOW", "10"))
+TP_POLITE_HIGH = int(os.getenv("TP_POLITE_HIGH", "18"))
 TP_RETRIES = int(os.getenv("TP_RETRIES", "3"))
 TP_TIMEOUT = int(os.getenv("TP_TIMEOUT", "25"))
 TP_USE_CACHE = os.getenv("TP_USE_CACHE", "0") == "1"

@@ -36,17 +36,79 @@ TICKETS_AVAIL_RE = re.compile(
 )
 
 DEFAULT_HEADERS_BASE = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.7",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
     "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
-UA_POOL = [
-    # A small, realistic pool (rotate per request)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; rv:124.0) Gecko/20100101 Firefox/124.0",
+
+# Each entry: (user-agent, extra headers specific to that browser engine)
+_UA_PROFILES = [
+    (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        {
+            "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        },
+    ),
+    (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        {
+            "sec-ch-ua": '"Google Chrome";v="130", "Chromium";v="130", "Not_A Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"macOS"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        },
+    ),
+    (
+        "Mozilla/5.0 (Windows NT 10.0; rv:133.0) Gecko/20100101 Firefox/133.0",
+        {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "TE": "trailers",
+        },
+    ),
+    (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+        {
+            "sec-ch-ua": '"Google Chrome";v="129", "Chromium";v="129", "Not_A Brand";v="8"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Linux"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        },
+    ),
+    (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+        {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Upgrade-Insecure-Requests": "1",
+        },
+    ),
 ]
+
+UA_POOL = [ua for ua, _ in _UA_PROFILES]  # kept for compatibility
+_UA_PROFILE_MAP = {ua: headers for ua, headers in _UA_PROFILES}
 
 def _safe_float(x):
     try:
@@ -367,11 +429,15 @@ class TickPickPricer:
         return True
 
     def _headers_for_request(self) -> Dict[str, str]:
-        # rotate UA and add small header jitter
+        # Pick a UA and merge its browser-specific headers so the full fingerprint is consistent
+        ua, profile_extras = random.choice(_UA_PROFILES)
         headers = dict(DEFAULT_HEADERS_BASE)
-        headers["User-Agent"] = random.choice(UA_POOL)
-        if random.random() < 0.2:
-            headers["Accept-Language"] = random.choice(["en-US,en;q=0.9", "en-US,en;q=0.7", "en-GB,en;q=0.8"])
+        headers.update(profile_extras)
+        headers["User-Agent"] = ua
+        if random.random() < 0.3:
+            headers["Accept-Language"] = random.choice([
+                "en-US,en;q=0.9", "en-US,en;q=0.8", "en-US,en;q=0.7", "en-GB,en;q=0.9,en;q=0.8",
+            ])
         return headers
 
     # -------------------- HTTP helpers --------------------

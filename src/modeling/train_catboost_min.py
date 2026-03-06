@@ -555,6 +555,16 @@ def train():
     df = df[~_is_postseason_row(df)].copy()
 
     df = _build_training_dataset(df)
+
+    # Only use completed events — games where kickoff is in the past and the true
+    # minimum price is known across the full snapshot series. Upcoming games have
+    # incomplete targets (suffix min from a partial series) that would mislead the model.
+    if "event_complete" in df.columns:
+        n_events_before = df["event_id"].nunique()
+        df = df[df["event_complete"].fillna(False)].copy()
+        n_events_after = df["event_id"].nunique()
+        print(f"  ✅ Completed events only: {n_events_after:,} events ({n_events_before - n_events_after:,} future events excluded from train/test)")
+
     counts = df["event_id"].value_counts()
     df = df[df["event_id"].map(counts) > 1].copy()
     df, missing_cols = _add_missing_indicators(df, NUMERIC_FEATURES)
