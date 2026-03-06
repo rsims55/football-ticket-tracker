@@ -283,11 +283,14 @@ class TickPickPricer:
         # session
         if cloudscraper:
             self.session = cloudscraper.create_scraper()
+            self._use_cloudscraper = True
         else:
             self.session = requests.Session()
+            self._use_cloudscraper = False
 
-        # UA baseline (we’ll rotate per request)
-        self.session.headers.update(DEFAULT_HEADERS_BASE)
+        # UA baseline — only apply to plain requests; cloudscraper manages its own fingerprint
+        if not self._use_cloudscraper:
+            self.session.headers.update(DEFAULT_HEADERS_BASE)
 
         # proxy rotation
         proxy_list = _read_proxies_from_source(proxies)
@@ -393,7 +396,8 @@ class TickPickPricer:
         now = time.time()
         if not entry or now - entry["ts"] > 24 * 3600:
             try:
-                r = self.session.get(f"{base}/robots.txt", timeout=min(10, self.timeout), proxies=self._rotator.active, headers=self._headers_for_request())
+                req_headers = None if self._use_cloudscraper else self._headers_for_request()
+                r = self.session.get(f"{base}/robots.txt", timeout=min(10, self.timeout), proxies=self._rotator.active, headers=req_headers)
                 text = r.text if r.status_code == 200 else ""
             except Exception:
                 text = ""
@@ -491,11 +495,12 @@ class TickPickPricer:
                 if delay:
                     time.sleep(delay + random.uniform(0, self.backoff_jitter_s))
 
+                req_headers = None if self._use_cloudscraper else self._headers_for_request()
                 resp = self.session.get(
                     url,
                     timeout=self.timeout,
                     proxies=self._rotator.active,
-                    headers=self._headers_for_request(),
+                    headers=req_headers,
                 )
 
                 # Honor Retry-After (for 429/503 typically)
