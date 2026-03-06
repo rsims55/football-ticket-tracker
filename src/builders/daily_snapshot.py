@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import re
+import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, Set
@@ -258,7 +259,9 @@ def _load_teams_list() -> List[Dict[str, str]]:
         if out:
             if TEAMS_LIMIT > 0:
                 if TEST_MODE:
-                    _out(f"🧪 TEST MODE: limiting to {TEAMS_LIMIT} teams")
+                    selected = random.sample(out, min(TEAMS_LIMIT, len(out)))
+                    _out(f"🧪 TEST MODE: using {len(selected)} random teams")
+                    return selected
                 _out(f"📄 Loaded {len(out)} teams from file; using first {TEAMS_LIMIT}.")
                 return out[:TEAMS_LIMIT]
             _out(f"📄 Loaded {len(out)} teams from file; using ALL.")

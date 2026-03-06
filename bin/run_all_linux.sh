@@ -15,6 +15,8 @@ if ! python -c "import pandas" &>/dev/null; then
   pip install -r requirements.txt -q
 fi
 
+export DAILY_TEST_MODE=0
+
 python src/builders/annual_setup.py
 python src/builders/weekly_update.py
 python src/builders/daily_snapshot.py

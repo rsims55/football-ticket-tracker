@@ -18,6 +18,7 @@ if errorlevel 1 (
   pip install -r requirements.txt -q
 )
 
+set DAILY_TEST_MODE=1
 set TEAMS_LIMIT=3
 
 python src\builders\annual_setup.py

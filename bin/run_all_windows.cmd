@@ -16,6 +16,8 @@ if errorlevel 1 (
   pip install -r requirements.txt -q
 )
 
+set DAILY_TEST_MODE=0
+
 python src\builders\annual_setup.py
 python src\builders\weekly_update.py
 python src\builders\daily_snapshot.py

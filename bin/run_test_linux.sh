@@ -17,6 +17,7 @@ if ! python -c "import pandas" &>/dev/null; then
   pip install -r requirements.txt -q
 fi
 
+export DAILY_TEST_MODE=1
 export TEAMS_LIMIT=3
 
 python src/builders/annual_setup.py
