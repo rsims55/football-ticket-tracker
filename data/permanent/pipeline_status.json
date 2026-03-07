@@ -34,12 +34,10 @@
     "updated_at": "2026-03-06 21:29:55"
   },
   "weekly_report": {
-    "detail": "Weekly report generated: reports/weekly/2026-03-06/weekly_report_2026-03-06.md",
-    "extra": {
-      "path": "reports/weekly/2026-03-06/weekly_report_2026-03-06.md"
-    },
-    "status": "success",
-    "updated_at": "2026-03-06 21:29:55"
+    "detail": "'charmap' codec can't encode character '\\u2705' in position 0: character maps to <undefined>",
+    "extra": {},
+    "status": "failed",
+    "updated_at": "2026-03-07 15:16:29"
   },
   "weekly_update": {
     "detail": "Weekly update complete for 2026",
