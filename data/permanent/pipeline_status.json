@@ -1,9 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Unhandled exception: 'charmap' codec can't encode character '\\U0001f9ea' in position 0: character maps to <undefined>",
-    "extra": {},
-    "status": "failed",
-    "updated_at": "2026-03-07 16:50:54"
+    "detail": "Snapshot appended (28 new rows). Total now: 1049",
+    "extra": {
+      "events_total": 28,
+      "rows_new": 28,
+      "rows_total": 1049,
+      "scraped_fail": 0,
+      "scraped_ok": 3,
+      "started_at": "2026-03-07 16:51:25"
+    },
+    "status": "success",
+    "updated_at": "2026-03-07 16:52:25"
   },
   "health_check": {
     "detail": "price_snapshots.csv not found",
