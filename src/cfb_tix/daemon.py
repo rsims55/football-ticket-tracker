@@ -123,15 +123,18 @@ def _release_lock():
 # ---------- helpers ----------
 
 def notify(title: str, msg: str) -> None:
-    """Best-effort user notification."""
-    try:
-        if sys.platform == "win32":
-            MB_TOPMOST = 0x00040000
-            ctypes.windll.user32.MessageBoxW(0, msg, title, 0x00000040 | MB_TOPMOST)
-        elif sys.platform.startswith("linux"):
-            subprocess.run(["notify-send", title, msg], check=False)
-    except Exception:
-        pass
+    """Best-effort user notification (non-blocking)."""
+    import threading
+    def _notify() -> None:
+        try:
+            if sys.platform == "win32":
+                MB_TOPMOST = 0x00040000
+                ctypes.windll.user32.MessageBoxW(0, msg, title, 0x00000040 | MB_TOPMOST)
+            elif sys.platform.startswith("linux"):
+                subprocess.run(["notify-send", title, msg], check=False)
+        except Exception:
+            pass
+    threading.Thread(target=_notify, daemon=True).start()
 
 def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     """Run a process and return (exitcode, combined_output)."""

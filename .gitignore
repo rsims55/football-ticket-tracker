@@ -12,7 +12,8 @@ __pycache__/
 # local virtualenvs (any name)
 venv/
 .env/
-.venv*/
+.venv/        # Linux/macOS venv
+.venv*/       # covers .venv_win (Windows) and any other variants
 env*/
 ENV*/
 
@@ -73,3 +74,7 @@ data/models/data/models/ticket_price_model.pkl
 *.onnx
 *.h5
 *.pt
+
+# --- Insync/OneDrive temp files ---
+*.insyncdl
+.~b!*
