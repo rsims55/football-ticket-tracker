@@ -38,7 +38,7 @@ from utils.status import read_status, write_status
 # -----------------------
 # Paths / Config
 # -----------------------
-MODEL_PATH = os.getenv("MODEL_PATH", "models/ticket_price_model.pkl")
+MODEL_PATH = os.getenv("MODEL_PATH", "models/catboost_price_min.cbm")
 
 # You moved these under data/predicted/
 EVAL_LOG_PATH = os.getenv("EVAL_LOG_PATH", "data/predicted/evaluation_metrics.csv")
@@ -74,7 +74,7 @@ PRED_PATH = os.getenv("PRED_PATH", "data/predicted/predicted_prices_optimal.csv"
 
 # Latest CatBoost training artifacts (optional)
 CATBOOST_REPORT = os.getenv("CATBOOST_REPORT_PATH", f"reports/catboost_report_{SEASON_YEAR}.csv")
-CATBOOST_FEATURES = os.getenv("CATBOOST_FEATURES_PATH", f"reports/catboost_features_{SEASON_YEAR}.csv")
+CATBOOST_FEATURES = os.getenv("CATBOOST_FEATURES_PATH", "reports/catboost_features.csv")
 
 # Optional email recipient
 REPORT_RECIPIENT = os.getenv("WEEKLY_REPORT_EMAIL", "")
@@ -128,6 +128,11 @@ def _ensure_sklearn_unpickle_compat():
 def _robust_load_model(path: str):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Model file not found: {path}")
+    if path.endswith(".cbm"):
+        from catboost import CatBoostRegressor
+        m = CatBoostRegressor()
+        m.load_model(path)
+        return m
     _ensure_sklearn_unpickle_compat()
     return joblib.load(path)
 
@@ -694,7 +699,29 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
             md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak[:20]))
         return "\n".join(md), weak
 
-    importances = np.asarray(importances)
+    try:
+        importances = np.asarray(importances, dtype=float).flatten()
+        if importances.ndim == 0 or len(importances) == 0 or np.all(np.isnan(importances)):
+            importances = None
+    except (ValueError, TypeError):
+        importances = None
+
+    if importances is None:
+        feats = _read_float_csv(CATBOOST_FEATURES)
+        if feats is None or feats.empty or "feature" not in feats.columns or "importance" not in feats.columns:
+            return "❌ Model does not expose feature_importances_.", []
+        feats = feats.copy()
+        feats["importance"] = pd.to_numeric(feats["importance"], errors="coerce").fillna(0.0)
+        feats = feats.sort_values("importance", ascending=False)
+        total = feats["importance"].sum() or 1.0
+        lines = [f"- {r['feature']}: {r['importance']:.4f} (~{r['importance'] / total * 100.0:.1f}%)"
+                 for _, r in feats.head(top_k).iterrows()]
+        weak = feats[feats["importance"] <= 0.0001]["feature"].tolist()
+        md = []
+        md.extend(lines if lines else ["(none)"])
+        if weak:
+            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak[:20]))
+        return "\n".join(md), weak
 
     feature_names_expanded = _expanded_feature_names(preprocessor, estimator, importances_len=len(importances))
     if feature_names_expanded is None:
