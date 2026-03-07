@@ -9,11 +9,11 @@ __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
 
-# local virtualenvs (any name)
+# local virtualenvs (any name): .venv (Linux/macOS), .venv_win (Windows)
 venv/
 .env/
-.venv/        # Linux/macOS venv
-.venv*/       # covers .venv_win (Windows) and any other variants
+.venv/
+.venv*/
 env*/
 ENV*/
 
