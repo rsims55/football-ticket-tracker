@@ -3,7 +3,7 @@
     "detail": "Unhandled exception: 'charmap' codec can't encode character '\\U0001f9ea' in position 0: character maps to <undefined>",
     "extra": {},
     "status": "failed",
-    "updated_at": "2026-03-07 16:48:19"
+    "updated_at": "2026-03-07 16:50:54"
   },
   "health_check": {
     "detail": "price_snapshots.csv not found",
@@ -37,7 +37,7 @@
     "detail": "'charmap' codec can't encode character '\\u2705' in position 0: character maps to <undefined>",
     "extra": {},
     "status": "failed",
-    "updated_at": "2026-03-07 15:16:29"
+    "updated_at": "2026-03-07 16:50:59"
   },
   "weekly_update": {
     "detail": "Weekly update complete for 2026",
