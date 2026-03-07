@@ -22,7 +22,7 @@ try:
     def md_to_html(text: str) -> str:
         return md.markdown(
             text,
-            extensions=["extra", "sane_lists", "toc", "nl2br", "smarty"],
+            extensions=["extra", "sane_lists", "nl2br"],
             output_format="html5",
         )
 except Exception:
@@ -42,6 +42,23 @@ except Exception:
             else:
                 html_lines.append(f"<p>{ln}</p>")
         return "\n".join(html_lines)
+
+
+def _inline_styles(html: str) -> str:
+    """Add inline styles to common tags so they survive email client CSS stripping."""
+    replacements = [
+        (r"<h1([^>]*)>", r'<h1\1 style="font-size:22px;font-weight:700;color:#1a1a2e;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #e8e8e8;">'),
+        (r"<h2([^>]*)>", r'<h2\1 style="font-size:17px;font-weight:700;color:#1a1a2e;margin:20px 0 6px;padding-bottom:4px;border-bottom:1px solid #e8e8e8;">'),
+        (r"<h3([^>]*)>", r'<h3\1 style="font-size:14px;font-weight:700;color:#333;margin:16px 0 4px;">'),
+        (r"<ul([^>]*)>", r'<ul\1 style="margin:6px 0 12px;padding-left:20px;">'),
+        (r"<li([^>]*)>", r'<li\1 style="margin:3px 0;color:#333;font-size:14px;line-height:1.5;">'),
+        (r"<p([^>]*)>", r'<p\1 style="margin:6px 0;color:#333;font-size:14px;line-height:1.5;">'),
+        (r"<strong([^>]*)>", r'<strong\1 style="font-weight:700;color:#1a1a2e;">'),
+        (r"<code([^>]*)>", r'<code\1 style="font-family:monospace;background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:12px;">'),
+    ]
+    for pattern, replacement in replacements:
+        html = re.sub(pattern, replacement, html, flags=re.IGNORECASE)
+    return html
 
 # Required env vars
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
@@ -80,28 +97,49 @@ def _find_report_path() -> str | None:
     return matches[0]
 
 def _wrap_html(body_html: str, title: str) -> str:
-    # Inline CSS + legacy attrs help Outlook/Gmail render borders
+    date_str = datetime.now().strftime("%B %d, %Y")
     return f"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
-<style>
-  body {{ font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.4; }}
-  h1,h2,h3 {{ margin: 0.6em 0 0.3em; }}
-  code, pre {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-  pre {{ background: #f8f8f8; padding: 10px; overflow-x: auto; }}
-  .small {{ color: #666; font-size: 12px; margin-top: 16px; }}
-  /* Fallback if attributes are stripped */
-  table, th, td {{ border: 1px solid #cccccc; border-collapse: collapse; }}
-  th, td {{ padding: 6px 8px; }}
-  th {{ background: #f5f5f5; }}
-  img {{ max-width: 100%; height: auto; }}
-</style>
 </head>
-<body>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
+<!-- Gmail supports <style> in body -->
+<style>
+  table {{border-collapse:collapse;}}
+  img {{max-width:100%;height:auto;display:block;}}
+  pre {{background:#f4f4f4;padding:10px;border-radius:4px;overflow-x:auto;font-size:12px;}}
+  code {{font-family:monospace;background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:12px;}}
+</style>
+<table width="100%" cellpadding="0" cellspacing="0" bgcolor="#f0f2f5">
+  <tr><td align="center" style="padding:24px 16px;">
+    <table width="600" cellpadding="0" cellspacing="0" bgcolor="#ffffff"
+           style="border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <!-- Header -->
+      <tr>
+        <td bgcolor="#1a1a2e" style="background:#1a1a2e;padding:28px 32px;border-radius:8px 8px 0 0;">
+          <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;color:#7c8cff;text-transform:uppercase;">CFB Ticket Tracker</p>
+          <h1 style="margin:6px 0 4px;font-size:22px;font-weight:700;color:#ffffff;">Weekly Model Report</h1>
+          <p style="margin:0;font-size:13px;color:#9999bb;">{date_str}</p>
+        </td>
+      </tr>
+      <!-- Body -->
+      <tr>
+        <td style="padding:28px 32px;">
 {body_html}
-<p class="small">Sent automatically by the Weekly Ticket Model pipeline.</p>
+        </td>
+      </tr>
+      <!-- Footer -->
+      <tr>
+        <td bgcolor="#f8f8f8" style="background:#f8f8f8;padding:14px 32px;border-top:1px solid #e8e8e8;border-radius:0 0 8px 8px;">
+          <p style="margin:0;font-size:11px;color:#999999;">Sent automatically by the CFB Ticket Model pipeline.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>"""
 
@@ -177,11 +215,10 @@ def send_report(filepath: str):
 
     # Convert Markdown to HTML
     html_core = md_to_html(md_text)
-
-    # Force robust table rendering
+    html_core = _inline_styles(html_core)
     html_core = _force_table_borders(html_core)
 
-    # Wrap with head/body and CSS
+    # Wrap with email-safe layout
     html_body = _wrap_html(html_core, subject)
 
     # Embed images (cid) relative to report dir
@@ -234,6 +271,7 @@ def send_report(filepath: str):
 def send_markdown_report(md_text: str, subject: str) -> None:
     # Convert Markdown to HTML
     html_core = md_to_html(md_text)
+    html_core = _inline_styles(html_core)
     html_core = _force_table_borders(html_core)
     html_body = _wrap_html(html_core, subject)
 
