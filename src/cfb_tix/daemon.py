@@ -234,6 +234,8 @@ def _child_env_for_repo(paths: Paths) -> dict:
     # Force repo-lock defaults unless caller explicitly overrides
     env.setdefault("REPO_DATA_LOCK", "1")
     env.setdefault("REPO_ALLOW_NON_REPO_OUT", "0")
+    # Full run by default — override with DAILY_TEST_MODE=1 for 3-team test runs
+    env.setdefault("DAILY_TEST_MODE", "0")
     # Force UTF-8 output on Windows (prevents crashes from emoji in print statements)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
