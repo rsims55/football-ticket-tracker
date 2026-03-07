@@ -1,7 +1,7 @@
 team,rival
 Adams State,Fort Lewis
 Adams State,Western Colorado
-Air Force Falcons,Colorado State
+Air Force Falcons,Colorado State Rams
 Air Force Falcons,Hawaii
 Akron Zips,Kent State Golden Flashes
 Akron Zips,Youngstown State Penguins
@@ -19,12 +19,12 @@ Alabama Crimson Tide,Tennessee Volunteers
 Alabama StateFCS,Tuskegee
 Albany,Stony Brook Seawolves
 Albany State,Fort Valley State
-Alcorn State,Jackson State
+Alcorn State Braves,Jackson State
 Amherst,Williams
 Anderson,Manchester
 Anna Maria,Castleton
-Appalachian State,Georgia Southern Eagles
-Appalachian State,Marshall Thundering Herd
+Appalachian State Mountaineers,Georgia Southern Eagles
+Appalachian State Mountaineers,Marshall Thundering Herd
 Arizona State Sun Devils,Arizona Wildcats
 Arizona Wildcats,New Mexico Lobos
 Arkansas Razorbacks,LSU Tigers
@@ -76,7 +76,7 @@ Buffalo Bulls,UMass Minutemen
 Butler,Valparaiso
 Cal Poly Mustangs,UC Davis Aggies
 California Golden Bears,Indiana Hoosiers
-California Golden Bears,Stanford Cardinals
+California Golden Bears,Stanford Cardinal
 California Golden Bears,UCLA Bruins
 California Golden Bears,USC Trojans
 California Lutheran,Redlands
@@ -113,12 +113,12 @@ Coastal Carolina Chanticleers,Liberty Flames
 Coe,Cornell
 Colgate Raiders,Cornell
 Colgate Raiders,Syracuse Orange
-Colorado Buffaloes,Colorado State
+Colorado Buffaloes,Colorado State Rams
 Colorado Buffaloes,Kansas State Wildcats
 Colorado Buffaloes,Nebraska Cornhuskers
 Colorado Buffaloes,Utah Utes
 Colorado Mesa,Colorado Mines
-Colorado State,Wyoming Cowboys
+Colorado State Rams,Wyoming Cowboys
 Columbia,Cornell
 Columbia,Fordham Rams
 Concordia,St. Olaf
@@ -335,7 +335,7 @@ Northwestern Wildcats,Notre Dame Fighting Irish
 Norwich,Vermont State University – Castleton
 Notre Dame Fighting Irish,Pittsburgh Panthers
 Notre Dame Fighting Irish,Purdue Boilermakers
-Notre Dame Fighting Irish,Stanford Cardinals
+Notre Dame Fighting Irish,Stanford Cardinal
 Notre Dame Fighting Irish,USC Trojans
 Occidental,Pomona–Pitzer
 Occidental,Whittier
@@ -345,7 +345,7 @@ Oklahoma Sooners,Texas Longhorns
 Oklahoma State Cowboys,Tulsa Golden Hurricane
 Oregon Ducks,Oregon State Beavers
 Oregon Ducks,Saint Mary's
-Oregon Ducks,Stanford Cardinals
+Oregon Ducks,Stanford Cardinal
 Oregon Ducks,USC Trojans
 Oregon Ducks,Washington Huskies
 Pacific,San Jose State Spartans
@@ -367,7 +367,7 @@ Rice Owls,Texas Longhorns
 Richmond Spiders,VMI Keydets
 Richmond Spiders,William & Mary Tribe
 Saint John's,St. Thomas FCS
-San Jose State Spartans,Stanford Cardinals
+San Jose State Spartans,Stanford Cardinal
 Sewanee,Vanderbilt Commodores
 South Alabama Jaguars,Troy Trojans
 South Dakota Coyotes,South Dakota State
@@ -377,7 +377,7 @@ Southern Miss Golden Eagles,Tulane Green Wave
 Southern Utah,Weber State Wildcats
 Southwest Minnesota State,Winona State
 Springfield College,Western New England University
-Stanford Cardinals,USC Trojans
+Stanford Cardinal,USC Trojans
 Syracuse Orange,UConn Huskies
 Syracuse Orange,West Virginia Mountaineers
 TCU Horned Frogs,Texas A&M Aggies
