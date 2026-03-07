@@ -1,16 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (36 new rows). Total now: 1084",
+    "detail": "Snapshot appended (2851 new rows). Total now: 1768",
     "extra": {
-      "events_total": 36,
-      "rows_new": 36,
-      "rows_total": 1084,
-      "scraped_fail": 0,
-      "scraped_ok": 3,
-      "started_at": "2026-03-07 16:52:49"
+      "events_total": 2904,
+      "rows_new": 2851,
+      "rows_total": 1768,
+      "scraped_fail": 1,
+      "scraped_ok": 268,
+      "started_at": "2026-03-07 17:02:55"
     },
     "status": "success",
-    "updated_at": "2026-03-07 16:53:44"
+    "updated_at": "2026-03-07 18:16:08"
   },
   "health_check": {
     "detail": "price_snapshots.csv not found",
