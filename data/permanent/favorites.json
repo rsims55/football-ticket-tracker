@@ -1,3 +1,22 @@
 {
-  "favorites": []
+  "favorites": [
+    {
+      "event_id": "7647963",
+      "homeTeam": "UCF Knights",
+      "awayTeam": "Bethune-Cookman Wildcats",
+      "startDateEastern": "2026-09-03 04:00:00"
+    },
+    {
+      "event_id": "7622666",
+      "homeTeam": "Florida Gators",
+      "awayTeam": "Florida Atlantic Owls",
+      "startDateEastern": "2026-09-05 04:00:00"
+    },
+    {
+      "event_id": "7647985",
+      "homeTeam": "Florida State Seminoles",
+      "awayTeam": "New Mexico State Aggies",
+      "startDateEastern": "2026-08-29 04:00:00"
+    }
+  ]
 }

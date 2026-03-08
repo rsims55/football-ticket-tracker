@@ -313,6 +313,23 @@ Currently each daily snapshot captures only the minimum price at collection time
 **Sell-through rate**
 `listing_count` is already scraped — tracking how it declines over time per game would add a supply-side signal. A game selling through inventory fast will see prices rise; one with stagnant listings will panic-sell closer to kickoff.
 
+**Parquet format migration**
+Switching from CSV to Parquet would shrink snapshot files by 5–10x through columnar compression. `price_snapshots.csv` at ~54MB becomes ~6–8MB as Parquet — buying 3–4 extra years of GitHub runway before hitting file size limits.
+
+### Infrastructure
+
+**Streamlit web dashboard**
+Replace the PyQt5 desktop GUI with a Streamlit web app hosted on Streamlit Cloud (free). The scraper and daemon continue running on the Windows machine; Streamlit reads data directly from the GitHub repo. Accessible from any browser, anywhere, at no cost. The core chart and prediction logic (pandas + matplotlib) ports directly.
+
+**Data storage scaling**
+As snapshot files grow past GitHub's 100MB per-file limit (~10 months at current collection rate), migrate to one of:
+- **Year-split CSVs only** — stop committing the combined `price_snapshots.csv`; each year file stays ~10–15MB
+- **Parquet format** — 5–10x size reduction, extends GitHub runway by years
+- **Supabase free tier** — 500MB Postgres, queryable directly from Streamlit; right long-term answer if web hosting is pursued
+
+**Linux VPS (optional)**
+A $5/month VPS (DigitalOcean, Vultr, Linode) running the Linux daemon would make the scraper independent of the Windows machine. Linux scripts are already written. Combine with Streamlit Cloud for a fully cloud-native, always-on setup.
+
 ---
 
 ## 🔧 Troubleshooting
