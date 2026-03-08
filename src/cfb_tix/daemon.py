@@ -510,31 +510,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     logging.info("Scheduling jobs…")
     sched.start()
 
-    # Kickoff: run key jobs once after startup (staggered to avoid overlap)
+    # Kickoff: run full pipeline sequentially on first start.
+    # Each step waits for the previous to complete before starting.
+    import threading
+    def _kickoff_sequence(p: Paths) -> None:
+        logging.info("[kickoff] Starting first-run sequence: annual → weekly → snapshot → train → report → email")
+        job_annual_setup(p)
+        job_weekly_update(p)
+        job_daily_snapshot(p)
+        job_train_model(p)
+        job_weekly_report(p)
+        job_send_report(p)
+        logging.info("[kickoff] First-run sequence complete.")
+
     from apscheduler.triggers.date import DateTrigger
     base = datetime.datetime.now(TZ) + datetime.timedelta(seconds=5)
-    sched.add_job(lambda: job_weekly_update(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=135)),
-                  id="kickoff_weekly_update", replace_existing=True)
-    sched.add_job(lambda: job_daily_snapshot(paths),
+    sched.add_job(lambda: _kickoff_sequence(paths),
                   DateTrigger(run_date=base),
-                  id="kickoff_daily_snapshot", replace_existing=True)
-    sched.add_job(lambda: job_train_model(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=45)),
-                  id="kickoff_train_model", replace_existing=True)
-    sched.add_job(lambda: job_predict_price(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=90)),
-                  id="kickoff_predict_price", replace_existing=True)
-    sched.add_job(lambda: job_evaluate_predictions(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=130)),
-                  id="kickoff_evaluate_predictions", replace_existing=True)
-    sched.add_job(lambda: job_weekly_report(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=160)),
-                  id="kickoff_generate_report", replace_existing=True)
-    sched.add_job(lambda: job_send_report(paths),
-                  DateTrigger(run_date=base + datetime.timedelta(seconds=190)),
-                  id="kickoff_send_report", replace_existing=True)
-    logging.info("Kickoff jobs scheduled to run immediately after startup.")
+                  id="kickoff_sequence", replace_existing=True)
+    logging.info("Kickoff sequence scheduled (annual → weekly → snapshot → train → report → email).")
 
     logging.info("Scheduler started")
     log_next_runs(sched)
