@@ -176,6 +176,12 @@ python src/reports/send_email.py
 # Health check
 python scripts/health_check.py
 
+# Fetch completed game results (for win/loss records)
+YEAR=2025 python "src/fetchers/results_fetcher 1.py"
+
+# Backfill win/loss records into historical snapshots
+python scripts/backfill_win_loss.py
+
 # Launch GUI
 python src/gui/ticket_predictor_gui.py
 ```
@@ -229,6 +235,10 @@ Trains a **CatBoost regressor** to predict the future minimum ticket price from 
 | `kickoff_hour` | numeric | Hour of kickoff in local time |
 | `away_last_point_diff_at_snapshot` | numeric | Away team point differential at snapshot time |
 | `home_last_point_diff_at_snapshot` | numeric | Home team point differential at snapshot time |
+| `home_wins_at_snapshot` | numeric | Home team cumulative wins (all games) entering this week |
+| `home_losses_at_snapshot` | numeric | Home team cumulative losses entering this week |
+| `away_wins_at_snapshot` | numeric | Away team cumulative wins (all games) entering this week |
+| `away_losses_at_snapshot` | numeric | Away team cumulative losses entering this week |
 | `homeConference` | categorical | pinned |
 | `awayConference` | categorical | Away team's conference |
 | `homeTeamRank` | numeric | AP poll rank for home team; missing indicator included — pinned |

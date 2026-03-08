@@ -28,6 +28,7 @@ from src.fetchers.schedule_fetcher import _load_win_loss_records  # noqa: E402
 WEEKLY_DIR = ROOT / "data" / "weekly"
 DAILY_DIR = ROOT / "data" / "daily"
 ARCHIVE_DIR = DAILY_DIR / "backups"
+ALIASES_PATH = ROOT / "data" / "permanent" / "team_aliases.json"
 
 WIN_LOSS_COLS = [
     "home_wins_at_snapshot",
@@ -43,6 +44,19 @@ def _normalize(name: str | None) -> str:
     return name.strip().lower()
 
 
+def _build_tickpick_to_cfbd() -> dict[str, str]:
+    """Build reverse map: tickpick_name_lower -> cfbd_name_lower.
+
+    team_aliases.json maps cfbd_name -> tickpick_name.
+    """
+    import json
+    if not ALIASES_PATH.exists():
+        return {}
+    with open(ALIASES_PATH, encoding="utf-8") as f:
+        aliases = json.load(f)
+    return {_normalize(v): _normalize(k) for k, v in aliases.items()}
+
+
 def build_combined_map(years: list[int]) -> dict[tuple[str, int], tuple[float, float]]:
     """Merge win/loss maps from multiple seasons into one."""
     combined: dict[tuple[str, int], tuple[float, float]] = {}
@@ -56,19 +70,31 @@ def build_combined_map(years: list[int]) -> dict[tuple[str, int], tuple[float, f
     return combined
 
 
-def lookup_wins(team: str | None, week: int | None, rec_map: dict) -> float | None:
+def lookup_wins(
+    team: str | None,
+    week: int | None,
+    rec_map: dict,
+    tp_to_cfbd: dict[str, str],
+) -> float | None:
     if not team or pd.isna(week):
         return None
-    key = (_normalize(team), int(week))
-    rec = rec_map.get(key)
+    norm = _normalize(team)
+    cfbd = tp_to_cfbd.get(norm, norm)
+    rec = rec_map.get((cfbd, int(week)))
     return rec[0] if rec is not None else None
 
 
-def lookup_losses(team: str | None, week: int | None, rec_map: dict) -> float | None:
+def lookup_losses(
+    team: str | None,
+    week: int | None,
+    rec_map: dict,
+    tp_to_cfbd: dict[str, str],
+) -> float | None:
     if not team or pd.isna(week):
         return None
-    key = (_normalize(team), int(week))
-    rec = rec_map.get(key)
+    norm = _normalize(team)
+    cfbd = tp_to_cfbd.get(norm, norm)
+    rec = rec_map.get((cfbd, int(week)))
     return rec[1] if rec is not None else None
 
 
@@ -109,17 +135,19 @@ def backfill_csv(
     away_teams = df.get("awayTeam", pd.Series(dtype=str))
     weeks = df["_week_int"]
 
+    tp_to_cfbd = _build_tickpick_to_cfbd()
+
     df["home_wins_at_snapshot"] = [
-        lookup_wins(t, w, rec_map) for t, w in zip(home_teams, weeks)
+        lookup_wins(t, w, rec_map, tp_to_cfbd) for t, w in zip(home_teams, weeks)
     ]
     df["home_losses_at_snapshot"] = [
-        lookup_losses(t, w, rec_map) for t, w in zip(home_teams, weeks)
+        lookup_losses(t, w, rec_map, tp_to_cfbd) for t, w in zip(home_teams, weeks)
     ]
     df["away_wins_at_snapshot"] = [
-        lookup_wins(t, w, rec_map) for t, w in zip(away_teams, weeks)
+        lookup_wins(t, w, rec_map, tp_to_cfbd) for t, w in zip(away_teams, weeks)
     ]
     df["away_losses_at_snapshot"] = [
-        lookup_losses(t, w, rec_map) for t, w in zip(away_teams, weeks)
+        lookup_losses(t, w, rec_map, tp_to_cfbd) for t, w in zip(away_teams, weeks)
     ]
 
     df.drop(columns=["_week_int"], inplace=True, errors="ignore")
