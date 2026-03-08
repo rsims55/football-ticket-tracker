@@ -670,22 +670,16 @@ class TicketApp(QMainWindow):
         self.details_label.setText(base + f"<div style='margin-top:8px;color:#b00020;'>⚠️ {warn}</div>")
 
     def render_details(self, row):
-        # Minimum from model trajectory (lowest predicted price)
-        traj_min_txt = "—"
+        # Predicted floor = minimum of model trajectory
         predicted_min_price = np.nan
-        predicted_min_time = pd.NaT
-        if self.traj_times and self.traj_prices:
-            idx = int(np.nanargmin(pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")))
-            ts_min = pd.to_datetime(self.traj_times[idx]); p_min = float(self.traj_prices[idx])
-            traj_min_txt = f"${p_min:,.2f} on {ts_min.strftime('%a, %b %d, %Y')}"
-            predicted_min_price = p_min
-            predicted_min_time = ts_min
+        if self.traj_prices:
+            predicted_min_price = float(np.nanmin(
+                pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")
+            ))
         kickoff = pd.to_datetime(row.get("startDateEastern"), errors="coerce")
         if pd.notna(kickoff) and kickoff < pd.Timestamp.now():
-            traj_min_txt = "Post-Kickoff"
-            predicted_min_time = pd.NaT
             predicted_min_price = np.nan
-        self.details_label.setText(self._details_html(row, traj_min_txt, predicted_min_price, predicted_min_time))
+        self.details_label.setText(self._details_html(row, "—", predicted_min_price, pd.NaT))
 
     def _details_html(self, row, forecast_min_text: str, predicted_min_price=np.nan, predicted_min_time=pd.NaT) -> str:
         game_dt = self._to_eastern(row["startDateEastern"])
@@ -725,18 +719,12 @@ class TicketApp(QMainWindow):
                 {warn_html}
 
                 <div style="font-size: 16px; font-weight: 700; color: #6a1b9a; margin: 4px 0 8px 0;">
-                    Current Forecasted Minimum: {forecast_min_text}
-                </div> <br>
-
-                <div style="margin-top:4px;">
-                    <b>Recommended Buy Window:</b> {rec_window}<br>
-                    <b>Confidence:</b> {confidence}
+                    Predicted Floor: {self._fmt_money(predicted_price)}
                 </div>
 
-                <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
-                    <b>Observed (ever):</b><br>
-                    &nbsp;&nbsp;Price:&nbsp;{self._fmt_money(observed_price)}<br>
-                    &nbsp;&nbsp;When:&nbsp;{self._fmt_dt(obs_ts)}<br>
+                <div style="margin-top:4px;">
+                    <b>Lowest Observed Price:</b> {self._fmt_money(observed_price)}<br>
+                    &nbsp;&nbsp;When:&nbsp;{self._fmt_dt(obs_ts)}
                 </div>
 
                 <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
@@ -821,51 +809,48 @@ class TicketApp(QMainWindow):
             ax = self.chart_canvas.figure.add_subplot(111)
             self.ax = ax
 
-        # Validate historical data
-        if not self.traj_times or not self.traj_prices or len(self.traj_times) != len(self.traj_prices):
+        # Build daily-average historical prices from snapshots for this event
+        event_id = getattr(self, "current_event_id", None)
+        snaps = getattr(self, "snapshots", None)
+        hist_tt, hist_yy = pd.Series(dtype="datetime64[ns]"), pd.Series(dtype=float)
+        if snaps is not None and event_id is not None and "event_id" in snaps.columns:
+            ev = snaps[snaps["event_id"].astype(str) == str(event_id)].copy()
+            if not ev.empty and "date_collected" in ev.columns:
+                ev["_dt"] = pd.to_datetime(ev["date_collected"], errors="coerce").dt.normalize()
+                ev["lowest_price"] = pd.to_numeric(ev["lowest_price"], errors="coerce")
+                daily = ev.dropna(subset=["_dt", "lowest_price"]).groupby("_dt")["lowest_price"].mean()
+                hist_tt = pd.to_datetime(daily.index)
+                hist_yy = daily.values
+
+        if len(hist_tt) == 0:
             ax.set_title("No price history available yet")
             ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
             self.chart_canvas.draw_idle(); return
 
-        tt = pd.to_datetime(pd.Series(self.traj_times))
-        yy = pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")
-        ok = tt.notna() & yy.notna()
-        tt, yy = tt[ok], yy[ok]
-        if tt.empty:
-            ax.set_title("No price history available yet")
-            ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
-            self.chart_canvas.draw_idle(); return
+        # Plot daily-average observed prices
+        ax.plot(hist_tt, hist_yy, linewidth=2.0, color="#1565c0", label="Avg observed price (daily)")
+        ax.scatter(hist_tt, hist_yy, s=36, color="#1565c0", alpha=0.9, zorder=5)
 
-        # Plot model trajectory
-        ax.plot(tt, yy, linewidth=2.0, color="#1565c0", label="Predicted minimum remaining")
-        ax.scatter(tt, yy, s=12, color="#1565c0", alpha=0.7, zorder=5)
-
-        # Mark the trajectory minimum (best buy point)
-        if yy.notna().any():
-            min_idx = int(yy.idxmin())
-            ax.scatter([tt.iloc[min_idx]], [yy.iloc[min_idx]], s=80, color="#2e7d32",
-                       zorder=7, label=f"Best buy: ${yy.iloc[min_idx]:,.0f}")
-
-        # Lowest observed price as a horizontal reference line
+        # Observed minimum reference line
         obs_min = getattr(self, "traj_obs_min", np.nan)
         if obs_min is not None and not pd.isna(obs_min) and np.isfinite(float(obs_min)):
             ax.axhline(float(obs_min), linestyle=":", color="#e65100", linewidth=1.5,
                        label=f"Lowest observed: ${float(obs_min):,.0f}", alpha=0.9)
 
-        # X-axis: three-phase smart locator
-        x_min = tt.min().normalize()
-        x_max = tt.max().normalize() + pd.Timedelta(days=1)
+        # Predicted floor reference line (min of model trajectory)
+        if self.traj_prices:
+            floor = float(np.nanmin(pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")))
+            if np.isfinite(floor):
+                ax.axhline(floor, linestyle="--", color="#c62828", linewidth=1.5,
+                           label=f"Predicted floor: ${floor:,.0f}", alpha=0.85)
+
+        # X-axis: weekly labels
+        x_min = hist_tt.min().normalize()
+        x_max = hist_tt.max().normalize() + pd.Timedelta(days=1)
         ax.set_xlim(x_min, x_max)
-        span_days = (x_max - x_min).days
-        if span_days > 60:
-            ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=1))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-        elif span_days > 7:
-            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-        else:
-            ax.xaxis.set_major_locator(mdates.HourLocator(byhour=[0, 6, 12, 18]))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d\n%I%p"))
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=1))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+        ax.xaxis.set_minor_locator(mdates.DayLocator(interval=1))
         ax.tick_params(axis="x", which="major", labelsize=9, pad=4, bottom=True, labelbottom=True)
 
         # Gridlines
