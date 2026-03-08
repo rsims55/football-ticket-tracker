@@ -740,7 +740,7 @@ class TicketApp(QMainWindow):
 
                 <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ddd;">
                     <b>Game Week:</b> {week_str}<br>
-                    <b>Game Date:</b> {game_dt.strftime('%A, %B %d, %Y')}<br>
+                    <b>Game Date:</b> {game_dt.strftime('%A, %B %d, %Y') if pd.notna(game_dt) else '—'}<br>
                     <b>Kickoff Time:</b> {kickoff}<br>
                     <b>Venue:</b> {stadium}<br>
                 </div>
