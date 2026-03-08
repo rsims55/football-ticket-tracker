@@ -1,3 +1,4 @@
+
 # src/gui/ticket_predictor_gui.py — Month/Day x-axis; 4x daily bins; month labels; past-games show lowest price text
 from __future__ import annotations
 
@@ -47,8 +48,9 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
         return p
     return PROJ_DIR / default_rel
 
-SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily") / f"price_snapshots_{SEASON_YEAR}.csv")
-SNAPSHOT_FALLBACK = _resolve_file("SNAPSHOT_PATH_FALLBACK", Path("data/daily/price_snapshots.csv"))
+# Combined all-years snapshot is the primary source; year-specific file is the fallback
+SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily/price_snapshots.csv"))
+SNAPSHOT_FALLBACK = _resolve_file("SNAPSHOT_PATH_FALLBACK", Path("data/daily") / f"price_snapshots_{SEASON_YEAR}.csv")
 PRED_PATH     = _resolve_file("OUTPUT_PATH",  Path("data/predicted/predicted_prices_optimal.csv"))
 MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_with_context.csv"))
 
@@ -80,9 +82,15 @@ def _fmt_mtime(p: Path) -> str:
 def _season_state() -> str:
     now = datetime.now(ZoneInfo("America/New_York")) if ZoneInfo else datetime.now()
     year = now.year
-    start = datetime(year, 8, 1)
-    end = datetime(year + 1, 2, 1)
-    return "In-season" if start <= now < end else "Offseason"
+    tz = getattr(now, "tzinfo", None)
+    in_season_start = datetime(year, 8, 1, tzinfo=tz)
+    in_season_end   = datetime(year + 1, 2, 1, tzinfo=tz)
+    pre_season_start = datetime(year, 3, 1, tzinfo=tz)
+    if in_season_start <= now < in_season_end:
+        return "In-season"
+    if pre_season_start <= now < in_season_start:
+        return "Pre-season"
+    return "Offseason"
 
 
 def get_status_text() -> str:
@@ -152,7 +160,7 @@ class TicketApp(QMainWindow):
         if series is None:
             return pd.Series(pd.NaT)
         s = series.copy()
-        has_tz = s.astype(str).str.contains(r"(Z|[+-]\d{2}:?\d{2})").any()
+        has_tz = s.astype(str).str.contains(r"(?:Z|[+-]\d{2}:?\d{2})").any()
         if has_tz:
             dt = pd.to_datetime(s, errors="coerce", utc=True)
         else:
@@ -165,7 +173,7 @@ class TicketApp(QMainWindow):
 
     def _is_postseason_row(self, df: pd.DataFrame) -> pd.Series:
         if "is_postseason" in df.columns:
-            return df["is_postseason"].fillna(False).astype(bool)
+            return df["is_postseason"].fillna(False).infer_objects(copy=False).astype(bool)
         if "title" in df.columns:
             return df["title"].fillna("").astype(str).str.contains(
                 r"\b(bowl|playoff|first round|quarterfinal|semifinal|final|championship|cfp)\b",
@@ -220,11 +228,13 @@ class TicketApp(QMainWindow):
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"away_team_guess": "awayTeam"})
         snaps = snaps[~self._is_postseason_row(snaps)].copy()
-        # Filter to current season window (Aug 1 -> Feb 1 next year)
-        if "startDateEastern" in snaps.columns:
-            start = pd.Timestamp(f"{SEASON_YEAR}-08-01")
+        # Filter to current season year using date_local (reliably populated for all rows)
+        # Window: Mar 1 -> Feb 1 next year to cover pre-season scouting through bowl season
+        if "date_local" in snaps.columns:
+            game_date = pd.to_datetime(snaps["date_local"], errors="coerce")
+            start = pd.Timestamp(f"{SEASON_YEAR}-03-01")
             end = pd.Timestamp(f"{SEASON_YEAR+1}-02-01")
-            snaps = snaps[(snaps["startDateEastern"] >= start) & (snaps["startDateEastern"] < end)]
+            snaps = snaps[(game_date >= start) & (game_date < end)]
         return snaps
 
     def load_and_merge_data(self) -> pd.DataFrame:

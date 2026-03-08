@@ -45,6 +45,9 @@ else:
     DAILY_DIR = _env_daily or os.path.join(PROJ_DIR, "data", "daily")
     SNAPSHOT_PATH = _env_snap or os.path.join(DAILY_DIR, f"price_snapshots_{YEAR}.csv")
 
+ARCHIVES_DIR = os.path.join(PROJ_DIR, "data", "daily", "archives")
+COMBINED_SNAPSHOT_PATH = os.path.join(DAILY_DIR, "price_snapshots.csv")
+
 if REPO_DATA_LOCK and (_env_daily or _env_snap):
     _out("⚠️  REPO_DATA_LOCK=1 -> ignoring DAILY_DIR/SNAPSHOT_PATH env and writing to repo paths only.")
 
@@ -111,6 +114,7 @@ DELETE_TP_EXPORTS = os.getenv("DELETE_TP_EXPORTS", "1") == "1"
 WEEKLY_SCHEDULE_PATH = os.path.join(PROJ_DIR, "data", "weekly", f"full_{YEAR}_schedule.csv")
 RIVALRIES_PATH = os.path.join(PROJ_DIR, "data", "annual", f"rivalries_{YEAR}.csv")
 ALIASES_PATH = os.path.join(PROJ_DIR, "data", "permanent", "team_aliases.json")
+TEAM_CONFERENCES_PATH = os.path.join(PROJ_DIR, "data", "permanent", "team_conferences.json")
 
 # ---------------------------
 # Import TickPickPricer
@@ -1198,6 +1202,121 @@ def backfill_schedule_fields_from_schedule(
     return snap
 
 
+def _build_team_conf_lookup(schedule_csv_path: str) -> Dict[str, str]:
+    """Build {canonical_team_name: conference} from schedule + permanent overrides.
+
+    Schedule-derived values are keyed by both the raw name and alias-canonical name.
+    Permanent overrides (team_conferences.json) take final precedence.
+    """
+    lookup: Dict[str, str] = {}
+
+    # 1. Schedule-derived conferences
+    if os.path.exists(schedule_csv_path):
+        try:
+            sched = pd.read_csv(schedule_csv_path)
+            aliases = _load_team_aliases()
+            for team_col, conf_col in [("homeTeam", "homeConference"), ("awayTeam", "awayConference")]:
+                if team_col not in sched.columns or conf_col not in sched.columns:
+                    continue
+                for team, grp in sched.groupby(team_col):
+                    if not isinstance(team, str) or not team.strip():
+                        continue
+                    mode = grp[conf_col].dropna().mode()
+                    if mode.empty:
+                        continue
+                    conf = mode.iloc[0]
+                    lookup[team] = conf
+                    # Also key by alias-canonical name so snapshot names resolve correctly
+                    canon = _canonicalize_if_aliased(team, aliases)
+                    if canon != team:
+                        lookup[canon] = conf
+        except Exception:
+            pass
+
+    # 2. Permanent overrides — cover FCS teams and name variants not in schedule
+    if os.path.exists(TEAM_CONFERENCES_PATH):
+        try:
+            with open(TEAM_CONFERENCES_PATH, "r", encoding="utf-8") as f:
+                overrides = json.load(f)
+            for team, conf in overrides.items():
+                if isinstance(team, str) and isinstance(conf, str) and not team.startswith("_"):
+                    lookup[team] = conf
+        except Exception:
+            pass
+
+    return lookup
+
+
+def canonicalize_snapshot_team_names(snap: pd.DataFrame) -> pd.DataFrame:
+    """Normalize homeTeam and awayTeam in snapshot using aliases + strip Football suffix."""
+    if snap.empty:
+        return snap
+    aliases = _load_team_aliases()
+    snap = snap.copy()
+    for col in ("homeTeam", "awayTeam"):
+        if col not in snap.columns:
+            continue
+        snap[col] = snap[col].apply(
+            lambda x: _strip_team_suffix(_canonicalize_if_aliased(x, aliases)) if isinstance(x, str) else x
+        )
+    return snap
+
+
+def drop_tbd_rows(snap: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows where the opponent or date is unknown. Other TBD fields (time, etc.) are acceptable."""
+    if snap.empty:
+        return snap
+    _TBD_EXACT = {"tbd", "tba", ""}
+
+    def _is_tbd(s) -> bool:
+        if not isinstance(s, str):
+            return True
+        norm = s.strip().lower()
+        return norm in _TBD_EXACT or "tbd" in norm or "tba" in norm
+
+    def _url_date_is_tbd(s) -> bool:
+        # TickPick slugifies unknown dates as "(date-tbd)" in the URL
+        return isinstance(s, str) and bool(re.search(r'[-(]tbd[-)_]?', s.lower()))
+
+    mask = (
+        snap.get("homeTeam", pd.Series(dtype=str)).apply(_is_tbd)
+        | snap.get("awayTeam", pd.Series(dtype=str)).apply(_is_tbd)
+        | snap.get("offer_url", pd.Series(dtype=str)).apply(_url_date_is_tbd)
+    )
+    dropped = int(mask.sum())
+    if dropped:
+        _out(f"[tbd_filter] Dropped {dropped} rows with unknown opponent or date")
+    return snap[~mask].reset_index(drop=True)
+
+
+def validate_and_fix_conferences(snap: pd.DataFrame, schedule_csv_path: str) -> pd.DataFrame:
+    """Correct conference mismatches using the schedule as ground truth, then recalculate conferenceGame."""
+    lookup = _build_team_conf_lookup(schedule_csv_path)
+    if not lookup or snap.empty:
+        return snap
+
+    snap = snap.copy()
+    fixed = 0
+    for team, correct_conf in lookup.items():
+        mask_h = (snap.get("homeTeam", pd.Series(dtype=str)) == team) & (snap.get("homeConference", pd.Series(dtype=str)) != correct_conf)
+        if "homeConference" in snap.columns and mask_h.any():
+            snap.loc[mask_h, "homeConference"] = correct_conf
+            fixed += int(mask_h.sum())
+        mask_a = (snap.get("awayTeam", pd.Series(dtype=str)) == team) & (snap.get("awayConference", pd.Series(dtype=str)) != correct_conf)
+        if "awayConference" in snap.columns and mask_a.any():
+            snap.loc[mask_a, "awayConference"] = correct_conf
+            fixed += int(mask_a.sum())
+
+    if fixed:
+        has_both = snap["homeConference"].notna() & snap["awayConference"].notna()
+        snap.loc[has_both, "conferenceGame"] = (
+            snap.loc[has_both, "homeConference"] == snap.loc[has_both, "awayConference"]
+        )
+        _out(f"[conf_validate] Corrected {fixed} conference mismatches")
+
+    return snap
+
+
 def refresh_point_diffs_from_schedule(
     snap: pd.DataFrame,
     schedule_csv_path: str,
@@ -2077,6 +2196,15 @@ def log_price_snapshot():
     # Ensure point diffs reflect most recent prior game (week 1 stays blank)
     snap_all = refresh_point_diffs_from_schedule(snap_all, WEEKLY_SCHEDULE_PATH, overwrite=True)
 
+    # Canonicalize team names via aliases before writing
+    snap_all = canonicalize_snapshot_team_names(snap_all)
+
+    # Drop TBD/unknown-opponent rows before writing
+    snap_all = drop_tbd_rows(snap_all)
+
+    # Validate and correct any conference mismatches before writing
+    snap_all = validate_and_fix_conferences(snap_all, WEEKLY_SCHEDULE_PATH)
+
     # Filter out games whose kickoff has already passed (keep unknown times)
     now_et = datetime.now(ZoneInfo("America/New_York"))
     if "startDateEastern" in snap_all.columns:
@@ -2113,6 +2241,11 @@ def log_price_snapshot():
             keep="last",
         )
         combined = normalize_local_datetime(combined, overwrite=True)
+        combined = canonicalize_snapshot_team_names(combined)
+        combined = drop_tbd_rows(combined)
+        combined = backfill_kickoff_times_from_schedule(combined, WEEKLY_SCHEDULE_PATH)
+        combined = normalize_local_datetime(combined, overwrite=True)
+        combined = validate_and_fix_conferences(combined, WEEKLY_SCHEDULE_PATH)
         _write_csv_atomic(combined, SNAPSHOT_PATH)
         msg = f"Snapshot appended ({len(snap_all)} new rows). Total now: {len(combined)}"
         _out(f"✅ {msg}")
@@ -2125,6 +2258,28 @@ def log_price_snapshot():
         _out(f"✅ {msg}")
         _out(f"[daily_snapshot] write complete → {SNAPSHOT_PATH}")
         _df = snap_all
+
+    # Rebuild combined all-years snapshot from archives + current year
+    try:
+        archive_frames = []
+        if os.path.isdir(ARCHIVES_DIR):
+            for fname in sorted(os.listdir(ARCHIVES_DIR)):
+                if fname.startswith("price_snapshots_") and fname.endswith(".csv"):
+                    fpath = os.path.join(ARCHIVES_DIR, fname)
+                    try:
+                        adf = pd.read_csv(fpath, low_memory=False)
+                        # Unify legacy column names
+                        if "postseason" in adf.columns and "is_postseason" not in adf.columns:
+                            adf = adf.rename(columns={"postseason": "is_postseason"})
+                        archive_frames.append(adf)
+                    except Exception:
+                        pass
+        all_frames = archive_frames + [_df]
+        combined_all = pd.concat(all_frames, ignore_index=True)
+        _write_csv_atomic(combined_all, COMBINED_SNAPSHOT_PATH)
+        _out(f"[daily_snapshot] combined snapshot written → {COMBINED_SNAPSHOT_PATH} ({len(combined_all)} rows)")
+    except Exception as e:
+        _out(f"[daily_snapshot] ⚠️ failed to write combined snapshot: {e}")
 
     status_extra.update(
         {
