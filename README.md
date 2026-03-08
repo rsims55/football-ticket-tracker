@@ -177,7 +177,7 @@ python src/reports/send_email.py
 python scripts/health_check.py
 
 # Fetch completed game results (for win/loss records)
-YEAR=2025 python "src/fetchers/results_fetcher 1.py"
+YEAR=2025 python src/fetchers/results_fetcher.py
 
 # Backfill win/loss records into historical snapshots
 python scripts/backfill_win_loss.py
