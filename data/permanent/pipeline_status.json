@@ -13,10 +13,17 @@
     "updated_at": "2026-03-07 19:13:17"
   },
   "health_check": {
-    "detail": "price_snapshots.csv not found",
-    "extra": {},
-    "status": "failed",
-    "updated_at": "2026-03-06 21:29:56"
+    "detail": "Health check passed",
+    "extra": {
+      "date_format_ok": true,
+      "freshness_ok": true,
+      "last_collected": "2026-03-07 00:00:00",
+      "missing_cols": [],
+      "rows": 109615,
+      "time_format_ok": true
+    },
+    "status": "success",
+    "updated_at": "2026-03-07 19:21:04"
   },
   "model_train": {
     "detail": "CatBoost training complete for 2026",
@@ -46,7 +53,7 @@
       "path": "reports\\weekly\\2026-03-07\\weekly_report_2026-03-07.md"
     },
     "status": "success",
-    "updated_at": "2026-03-07 18:58:48"
+    "updated_at": "2026-03-07 19:21:07"
   },
   "weekly_update": {
     "detail": "Weekly update complete for 2026",
