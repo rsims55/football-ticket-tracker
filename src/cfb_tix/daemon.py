@@ -354,6 +354,8 @@ def job_daily_snapshot(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/builders/daily_snapshot.py", paths.app_root, env=env)
+        # Send favorites report after each snapshot (silently skips if no favorites)
+        run_py_script("src/reports/favorites_report.py", paths.app_root, env=env)
     finally:
         if _sync_mode() == "perjob":
             do_sync(paths, "daily_snapshot")

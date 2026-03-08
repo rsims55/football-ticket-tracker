@@ -113,6 +113,7 @@ class TicketApp(QMainWindow):
         self.current_row = None
         self.current_event_id = None
         self.ax = None
+        self.fav_button = None  # created in init_ui
 
         # trajectory state
         self.traj_times = []
@@ -430,9 +431,21 @@ class TicketApp(QMainWindow):
             "QPushButton:hover { background-color: #1669c1; }"
         )
 
+        self.fav_button = QPushButton("☆ Favorite")
+        self.fav_button.setFixedHeight(50)
+        self.fav_button.setMinimumWidth(110)
+        self.fav_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.fav_button.setStyleSheet(
+            "QPushButton { background-color: #f5f5f5; color: #333; font-size: 14px; font-weight: 700; "
+            "border: 1px solid #ccc; border-radius: 8px; padding: 8px 14px; }"
+            "QPushButton:hover { background-color: #ffe082; border-color: #f9a825; }"
+        )
+        self.fav_button.clicked.connect(self.toggle_favorite)
+
         controls_row.addWidget(self.home_combo, 1)
         controls_row.addWidget(self.away_combo, 1)
         controls_row.addWidget(self.predict_button, 1)
+        controls_row.addWidget(self.fav_button, 0)
         top_layout.addLayout(controls_row)
 
         # Details (scrollable; at least as tall as chart)
@@ -615,6 +628,69 @@ class TicketApp(QMainWindow):
                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
         return "TBD"
 
+    # Favorites helpers
+
+    def _favorites_path(self) -> Path:
+        return PROJ_DIR / "data" / "permanent" / "favorites.json"
+
+    def _load_favorites(self) -> list:
+        import json
+        p = self._favorites_path()
+        if not p.exists():
+            return []
+        try:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f).get("favorites", [])
+        except Exception:
+            return []
+
+    def _save_favorites(self, favs: list) -> None:
+        import json
+        p = self._favorites_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"favorites": favs}, f, indent=2, default=str)
+
+    def _is_favorited(self, event_id) -> bool:
+        return any(str(f.get("event_id")) == str(event_id) for f in self._load_favorites())
+
+    def _update_fav_button(self) -> None:
+        if self.fav_button is None:
+            return
+        event_id = getattr(self, "current_event_id", None)
+        if event_id and self._is_favorited(event_id):
+            self.fav_button.setText("★ Favorited")
+            self.fav_button.setStyleSheet(
+                "QPushButton { background-color: #ffe082; color: #333; font-size: 14px; font-weight: 700; "
+                "border: 1px solid #f9a825; border-radius: 8px; padding: 8px 14px; }"
+                "QPushButton:hover { background-color: #ffd740; }"
+            )
+        else:
+            self.fav_button.setText("☆ Favorite")
+            self.fav_button.setStyleSheet(
+                "QPushButton { background-color: #f5f5f5; color: #333; font-size: 14px; font-weight: 700; "
+                "border: 1px solid #ccc; border-radius: 8px; padding: 8px 14px; }"
+                "QPushButton:hover { background-color: #ffe082; border-color: #f9a825; }"
+            )
+
+    def toggle_favorite(self) -> None:
+        row = getattr(self, "current_row", None)
+        event_id = getattr(self, "current_event_id", None)
+        if not event_id or not row:
+            return
+        favs = self._load_favorites()
+        if self._is_favorited(event_id):
+            favs = [f for f in favs if str(f.get("event_id")) != str(event_id)]
+        else:
+            favs.append({
+                "event_id": str(event_id),
+                "homeTeam": row.get("homeTeam", ""),
+                "awayTeam": row.get("awayTeam", ""),
+                "startDateEastern": str(row.get("startDateEastern", "")),
+            })
+        self._save_favorites(favs)
+        self._update_fav_button()
+
     def _fmt_money(self, x) -> str:
         try:
             return f"${float(x):,.2f}"
@@ -648,6 +724,7 @@ class TicketApp(QMainWindow):
 
             self.current_row = row; self.current_event_id = row.get("event_id")
             self.update_countdown_live()
+            self._update_fav_button()
 
             kickoff = pd.to_datetime(row.get("startDateEastern"))
             if pd.notna(kickoff) and kickoff < now:
