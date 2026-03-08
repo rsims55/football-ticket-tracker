@@ -271,14 +271,15 @@ class TicketApp(QMainWindow):
             if pred is not None and "event_id" not in pred.columns:
                 raise KeyError("Predictions must contain 'event_id'.")
 
-            # Merge snapshots (keeps your current behavior)
+            # Snapshots are the primary dataset; predictions are optional enrichment.
+            # Left-join predictions onto snapshots so all snapshot games appear,
+            # with predicted price shown where available.
             snaps = getattr(self, "snapshots", None)
-            if pred is not None and snaps is not None and "event_id" in snaps.columns:
-                merged = pred.merge(snaps, on="event_id", how="left", suffixes=("", "_snap"))
-                if "startDateEastern" not in merged and "startDateEastern_snap" in merged:
-                    merged["startDateEastern"] = merged["startDateEastern_snap"]
-            elif snaps is not None:
-                merged = snaps.copy()
+            if snaps is not None and "event_id" in snaps.columns:
+                if pred is not None and "event_id" in pred.columns:
+                    merged = snaps.merge(pred, on="event_id", how="left", suffixes=("", "_pred"))
+                else:
+                    merged = snaps.copy()
             else:
                 merged = pred if pred is not None else pd.DataFrame()
 
