@@ -881,7 +881,7 @@ class TicketApp(QMainWindow):
         ax.set_title(f"{home} vs {away} — Price Forecast", fontsize=12, fontweight="bold")
 
         # Keep series for hover
-        self._tt_series = hist_tt.reset_index(drop=True)
+        self._tt_series = pd.Series(hist_tt).reset_index(drop=True)
         self._yy_series = pd.Series(hist_yy).reset_index(drop=True)
         self.playhead_line = None
         self.playhead_marker = None
