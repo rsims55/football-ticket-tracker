@@ -750,18 +750,57 @@ class TicketApp(QMainWindow):
     def build_trajectory(self, row: dict):
         from gui.predict_trajectory import predict_for_times
         warn = ""
-        kickoff = pd.to_datetime(row.get("startDateEastern")); now = pd.Timestamp.now()
-        if pd.isna(kickoff): return [], [], "Missing kickoff datetime for this event."
-        start = max(now, now.floor('T')); end = kickoff
-        if end <= start: start = end - pd.Timedelta(hours=6)
-        # 6-hour grid is fine; times remain natural (no snapping to bins)
-        times = pd.date_range(start=start, end=end, freq="6H")
-        if len(times) < 2: times = pd.DatetimeIndex([start, end])
+        kickoff = pd.to_datetime(row.get("startDateEastern"))
+        now = pd.Timestamp.now()
+        if pd.isna(kickoff):
+            return [], [], "Missing kickoff datetime for this event."
+        start = max(now, now.floor("T"))
+        end = kickoff
+        if end <= start:
+            start = end - pd.Timedelta(hours=6)
+
+        # Three-phase time grid:
+        #   Phase 1 — now → Aug 1: weekly points
+        #   Phase 2 — Aug 1 → kickoff-7d: daily points
+        #   Phase 3 — kickoff-7d → kickoff: 4 time-of-day points per day (00/06/12/18)
+        season_start = pd.Timestamp(f"{kickoff.year}-08-01")
+        pre_final = kickoff - pd.Timedelta(days=7)
+
+        phase1_end = min(season_start, end)
+        phase2_end = min(pre_final, end)
+
+        times_list = []
+
+        # Phase 1: weekly
+        if start < phase1_end:
+            weekly = pd.date_range(start=start, end=phase1_end, freq="W-MON")
+            times_list.extend(weekly)
+
+        # Phase 2: daily
+        phase2_start = max(start, season_start)
+        if phase2_start < phase2_end:
+            daily = pd.date_range(start=phase2_start.normalize(), end=phase2_end.normalize(), freq="D")
+            times_list.extend(daily)
+
+        # Phase 3: 4 buckets per day (00:00, 06:00, 12:00, 18:00)
+        phase3_start = max(start, pre_final)
+        if phase3_start < end:
+            bucket_range = pd.date_range(start=phase3_start.normalize(), end=end, freq="6H")
+            bucket_range = bucket_range[bucket_range.hour.isin([0, 6, 12, 18])]
+            times_list.extend(bucket_range)
+
+        # Deduplicate and sort, always include start and end
+        times_list = sorted(set([start, end] + list(times_list)))
+        times = pd.DatetimeIndex(times_list)
+        if len(times) < 2:
+            times = pd.DatetimeIndex([start, end])
+
         try:
             prices = predict_for_times(row, list(times))
             return list(times), list(prices), warn
         except Exception as e:
-            warn = f"Prediction failed: {e}"; return [], [], warn
+            warn = f"Prediction failed: {e}"
+            return [], [], warn
 
     # ---------------- Chart + hover interactions ----------------
     def render_chart(self, event_id, reuse_axes: bool = True):
@@ -794,14 +833,25 @@ class TicketApp(QMainWindow):
         ax.plot(tt, yy, linewidth=2.0, label="Predicted price trajectory")
         ax.scatter(tt, yy, s=18, alpha=0.9)
 
-        # X-axis: force one tick per day with day number
+        # X-axis: smart locator/formatter based on span
         x_min = tt.min().normalize()
         x_max = (tt.max().normalize() + pd.Timedelta(days=1))
         ax.set_xlim(x_min, x_max)
+        span_days = (x_max - x_min).days
 
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-        ax.tick_params(axis="x", which="major", labelsize=11, pad=20, bottom=True, labelbottom=True)
+        if span_days > 60:
+            # Phase 1 territory: weekly ticks
+            ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=1))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+        elif span_days > 7:
+            # Phase 2 territory: daily ticks
+            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+        else:
+            # Phase 3 territory: 6-hour ticks with time-of-day labels
+            ax.xaxis.set_major_locator(mdates.HourLocator(byhour=[0, 6, 12, 18]))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d\n%I%p"))
+        ax.tick_params(axis="x", which="major", labelsize=9, pad=4, bottom=True, labelbottom=True)
 
         # Gridlines
         ax.grid(True, which="major", axis="both", alpha=0.28)
