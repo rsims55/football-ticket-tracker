@@ -800,7 +800,7 @@ class TicketApp(QMainWindow):
         ax.set_xlim(x_min, x_max)
 
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
         ax.tick_params(axis="x", which="major", labelsize=11, pad=20, bottom=True, labelbottom=True)
 
         # Gridlines
