@@ -101,6 +101,10 @@ def _build_feature_frame(
 
     times = [pd.Timestamp(t) for t in times]
     hours_until = np.array([(kickoff - t).total_seconds() / 3600.0 for t in times], dtype=float)
+    # Clamp to training distribution max (~2500h) to prevent unreliable extrapolation.
+    # The model was trained only up to ~2600 hours out; beyond that the monotonic
+    # constraint causes gap_pct to inflate artificially.
+    hours_until = np.clip(hours_until, 0, 2500.0)
 
     base = {
         "capacity": _to_float(row.get("capacity")),

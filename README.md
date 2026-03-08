@@ -284,6 +284,37 @@ Re-run setup if dependencies changed:
 
 ---
 
+## 🚀 Future Implementations
+
+### Modeling
+
+**Game tier classification**
+Classify each game into tiers (Premium / High / Mid / Budget) based on teams, venue, rivalry status, and rankings. Tier drives both the expected price level and the shape of the price decline curve.
+
+**Price path percentile corridors**
+For each game tier, compute historical 25th/50th/75th percentile price paths from the 2025 data. New games get assigned to a tier and the chart shows a shaded band of typical outcomes ("games like this traded in $X–$Y at this distance from kickoff") rather than a single prediction line.
+
+**Optimal buy timing predictor**
+Train directly on `time_to_min_hours` (already in training data) — the number of hours before kickoff when the price actually hit its lowest. Output: "Games like this typically hit their floor 2–3 weeks before kickoff." Gives a calendar-based buy recommendation rather than a price trajectory.
+
+**Spot price model**
+Train a second CatBoost model with `lowest_price` as the target (absolute price, not gap_pct). This model answers "what WILL the price BE at time T?" rather than "how much will it drop FROM NOW?" — which is the correct formulation for drawing a price trajectory chart. Training data already exists: every row in `price_snapshots.csv` is a price observation at a known `hours_until_game`.
+
+**Two-phase architecture (long term)**
+- Far out (>2500h / pre-season): spot price model shows expected price level based on game tier
+- In-season (<2500h): existing CatBoost gap_pct model for buy/wait signal
+- Transition: smooth blend around the season start boundary
+
+### Data
+
+**Price trajectory history per game**
+Currently each daily snapshot captures only the minimum price at collection time. Storing the full price-over-time history per event_id would enable richer trajectory modeling and validate model predictions against what actually happened.
+
+**Sell-through rate**
+`listing_count` is already scraped — tracking how it declines over time per game would add a supply-side signal. A game selling through inventory fast will see prices rise; one with stagnant listings will panic-sell closer to kickoff.
+
+---
+
 ## 🔧 Troubleshooting
 
 **Daemon won't start (lock file stuck)**
