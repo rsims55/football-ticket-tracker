@@ -91,6 +91,93 @@ def _load_last_point_diffs(year: int) -> dict[str, float]:
     return dict(zip(latest["team"], latest["pointDiff"]))
 
 
+def _load_win_loss_records(year: int) -> dict[tuple[str, int], tuple[float, float]]:
+    """
+    Build {(team_normalized, week) -> (wins, losses)} from
+    data/weekly/completed_games_<YEAR>.csv.
+
+    For a team at week W, the record reflects all games completed in weeks
+    1 through W-1 (i.e., the record BEFORE this week's game is played).
+    Ties count as 0.5 wins and 0.5 losses.
+
+    Returns an empty dict if the file is missing, empty, or lacks required
+    columns; callers should handle this gracefully.
+    """
+    path = os.path.join(WEEKLY_DIR, f"completed_games_{year}.csv")
+    if not os.path.exists(path):
+        LOG.info(
+            "No completed games file found at %s. Skipping win_loss merge.", path
+        )
+        return {}
+
+    df = pd.read_csv(path)
+
+    required = {"homeTeam", "awayTeam", "homePoints", "awayPoints", "week"}
+    missing = required - set(df.columns)
+    if missing:
+        LOG.warning(
+            "completed_games CSV missing columns %s; skipping win_loss merge.",
+            sorted(missing),
+        )
+        return {}
+
+    df = df.dropna(subset=["homeTeam", "awayTeam", "homePoints", "awayPoints", "week"]).copy()
+    df["week"] = pd.to_numeric(df["week"], errors="coerce")
+    df = df.dropna(subset=["week"])
+    df["week"] = df["week"].astype(int)
+    df["homePoints"] = pd.to_numeric(df["homePoints"], errors="coerce")
+    df["awayPoints"] = pd.to_numeric(df["awayPoints"], errors="coerce")
+    df = df.dropna(subset=["homePoints", "awayPoints"])
+
+    if df.empty:
+        return {}
+
+    # Expand to long form: one row per team per game.
+    home_rows = df[["homeTeam", "awayTeam", "homePoints", "awayPoints", "week"]].copy()
+    home_rows = home_rows.rename(columns={"homeTeam": "team", "awayTeam": "opponent"})
+    home_rows["team_pts"] = home_rows["homePoints"]
+    home_rows["opp_pts"] = home_rows["awayPoints"]
+
+    away_rows = df[["homeTeam", "awayTeam", "homePoints", "awayPoints", "week"]].copy()
+    away_rows = away_rows.rename(columns={"awayTeam": "team", "homeTeam": "opponent"})
+    away_rows["team_pts"] = away_rows["awayPoints"]
+    away_rows["opp_pts"] = away_rows["homePoints"]
+
+    long_df = pd.concat([home_rows, away_rows], ignore_index=True)
+    long_df["team"] = long_df["team"].str.strip().str.lower()
+
+    # Assign win/loss/tie contribution per game.
+    long_df["win"] = (long_df["team_pts"] > long_df["opp_pts"]).astype(float)
+    long_df["loss"] = (long_df["team_pts"] < long_df["opp_pts"]).astype(float)
+    tie_mask = long_df["team_pts"] == long_df["opp_pts"]
+    long_df.loc[tie_mask, "win"] = 0.5
+    long_df.loc[tie_mask, "loss"] = 0.5
+
+    # Collect all (team, week) pairs that appear in the schedule so we can
+    # compute pre-week cumulative records.
+    all_weeks = sorted(long_df["week"].unique())
+    all_teams = long_df["team"].unique()
+
+    result: dict[tuple[str, int], tuple[float, float]] = {}
+
+    for team in all_teams:
+        team_df = long_df[long_df["team"] == team].sort_values("week")
+        cum_wins = 0.0
+        cum_losses = 0.0
+        # Track the cumulative record *before* each week.
+        prev_week = 0
+        # Pre-sort by week and iterate week boundaries.
+        for week in all_weeks:
+            # Record for this team at this week = cumulative through week-1.
+            result[(team, week)] = (cum_wins, cum_losses)
+            # Now add games from this week.
+            week_games = team_df[team_df["week"] == week]
+            cum_wins += week_games["win"].sum()
+            cum_losses += week_games["loss"].sum()
+
+    return result
+
+
 class ScheduleFetcher:
     def __init__(self, year=None):
         self.year = year or datetime.now().year
@@ -354,6 +441,44 @@ class ScheduleFetcher:
             # Keep columns consistent even if missing (filled with NaN)
             df["home_last_point_diff"] = np.nan
             df["away_last_point_diff"] = np.nan
+
+        # --- merge cumulative win/loss records per team per week ---
+        win_loss_map = _load_win_loss_records(year_used)
+        if win_loss_map and "week" in df.columns:
+            df["week_int"] = pd.to_numeric(df["week"], errors="coerce").astype("Int64")
+
+            def _lookup_wins(team, week):
+                if pd.isna(team) or pd.isna(week):
+                    return np.nan
+                key = (str(team).strip().lower(), int(week))
+                rec = win_loss_map.get(key)
+                return rec[0] if rec is not None else np.nan
+
+            def _lookup_losses(team, week):
+                if pd.isna(team) or pd.isna(week):
+                    return np.nan
+                key = (str(team).strip().lower(), int(week))
+                rec = win_loss_map.get(key)
+                return rec[1] if rec is not None else np.nan
+
+            df["home_wins"] = [
+                _lookup_wins(t, w) for t, w in zip(df["homeTeam"], df["week_int"])
+            ]
+            df["home_losses"] = [
+                _lookup_losses(t, w) for t, w in zip(df["homeTeam"], df["week_int"])
+            ]
+            df["away_wins"] = [
+                _lookup_wins(t, w) for t, w in zip(df["awayTeam"], df["week_int"])
+            ]
+            df["away_losses"] = [
+                _lookup_losses(t, w) for t, w in zip(df["awayTeam"], df["week_int"])
+            ]
+            df.drop(columns=["week_int"], errors="ignore", inplace=True)
+        else:
+            df["home_wins"] = np.nan
+            df["home_losses"] = np.nan
+            df["away_wins"] = np.nan
+            df["away_losses"] = np.nan
 
         self.schedule = df
         return df

@@ -1599,14 +1599,20 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         "homeTeam","awayTeam","stadium","capacity","neutralSite","conferenceGame",
         "isRivalry","isRankedMatchup","homeTeamRank","awayTeamRank",
         "homeConference","awayConference","week",
-        # NEW: carry point diffs from weekly
+        # carry point diffs from weekly
         "home_last_point_diff","away_last_point_diff",
+        # carry cumulative win/loss records from weekly
+        "home_wins","home_losses","away_wins","away_losses",
     ]
 
     # Map schedule→snapshot destination names for specific fields
     schedule_to_snapshot_map = {
         "home_last_point_diff": "home_last_point_diff_at_snapshot",
         "away_last_point_diff": "away_last_point_diff_at_snapshot",
+        "home_wins": "home_wins_at_snapshot",
+        "home_losses": "home_losses_at_snapshot",
+        "away_wins": "away_wins_at_snapshot",
+        "away_losses": "away_losses_at_snapshot",
     }
 
     if sched is None or sched.empty:
@@ -1619,8 +1625,15 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         snap = _mark_rivalries(snap, rivalry_pairs)
         if "capacity" in snap.columns:
             snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
-        # coerce the two new fields if present
-        for _c in ("home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot"):
+        # coerce numeric snapshot fields if present
+        for _c in (
+            "home_last_point_diff_at_snapshot",
+            "away_last_point_diff_at_snapshot",
+            "home_wins_at_snapshot",
+            "home_losses_at_snapshot",
+            "away_wins_at_snapshot",
+            "away_losses_at_snapshot",
+        ):
             if _c in snap.columns:
                 snap[_c] = pd.to_numeric(snap[_c], errors="coerce")
         return _finalize_columns_order(snap.drop(columns=[c for c in ("home_team_guess","away_team_guess") if c in snap.columns]))
@@ -1644,9 +1657,14 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
         "awayConference": "homeConference",
         "homeTeamRank": "awayTeamRank",
         "awayTeamRank": "homeTeamRank",
-        # Note: last point diffs swap with home/away orientation:
+        # last point diffs swap with home/away orientation:
         "home_last_point_diff": "away_last_point_diff",
         "away_last_point_diff": "home_last_point_diff",
+        # win/loss records swap with home/away orientation:
+        "home_wins": "away_wins",
+        "away_wins": "home_wins",
+        "home_losses": "away_losses",
+        "away_losses": "home_losses",
     })
     m2 = snap_pre.merge(sched_flip, how="left", on="date_key", suffixes=("", "_sched"))
     m2 = m2[(m2["home_key"] == m2["home_key_sched"]) & (m2["away_key"] == m2["away_key_sched"])].copy()
@@ -1729,8 +1747,15 @@ def _enrich_with_schedule_and_stadiums(snap: pd.DataFrame) -> pd.DataFrame:
     if "capacity" in snap.columns:
         snap["capacity"] = pd.to_numeric(snap["capacity"], errors="coerce")
 
-    # coerce the two new fields
-    for _c in ("home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot"):
+    # coerce numeric snapshot fields
+    for _c in (
+        "home_last_point_diff_at_snapshot",
+        "away_last_point_diff_at_snapshot",
+        "home_wins_at_snapshot",
+        "home_losses_at_snapshot",
+        "away_wins_at_snapshot",
+        "away_losses_at_snapshot",
+    ):
         if _c in snap.columns:
             snap[_c] = pd.to_numeric(snap[_c], errors="coerce")
 
@@ -1752,8 +1777,11 @@ def _finalize_columns_order(snap: pd.DataFrame) -> pd.DataFrame:
         "days_until_game","stadium","capacity",
         "neutralSite","conferenceGame","isRivalry","isRankedMatchup",
         "homeTeamRank","awayTeamRank",
-        # NEW: snapshot-time last point diffs next to ranks
+        # snapshot-time last point diffs next to ranks
         "home_last_point_diff_at_snapshot","away_last_point_diff_at_snapshot",
+        # snapshot-time cumulative win/loss records
+        "home_wins_at_snapshot","home_losses_at_snapshot",
+        "away_wins_at_snapshot","away_losses_at_snapshot",
         "date_collected","time_collected",
     ]
     final_cols = [c for c in col_order_front if c in snap.columns] + \

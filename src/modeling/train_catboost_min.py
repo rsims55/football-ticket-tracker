@@ -106,6 +106,10 @@ NUMERIC_FEATURES = [
     "kickoff_hour",
     "home_last_point_diff_at_snapshot",
     "away_last_point_diff_at_snapshot",
+    "home_wins_at_snapshot",
+    "home_losses_at_snapshot",
+    "away_wins_at_snapshot",
+    "away_losses_at_snapshot",
 ]
 
 if USE_NEUTRAL_SITE:
