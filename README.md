@@ -221,25 +221,25 @@ Trains a **CatBoost regressor** to predict the future minimum ticket price from 
 
 | Feature | Type | Notes |
 |---|---|---|
-| `homeTeam` | categorical | Strongest signal (~24%) — pinned |
-| `hours_until_game` | numeric | Time to kickoff; monotonic constraint applied (~12%) — pinned |
-| `awayTeam` | categorical | Critical for marquee matchups (~11%) — pinned |
-| `capacity` | numeric | Stadium size (~11%) |
-| `week` | numeric | Season week number (~9%) |
-| `kickoff_hour` | numeric | Hour of kickoff in local time (~9%) |
-| `away_last_point_diff_at_snapshot` | numeric | Away team recent form — point differential at snapshot time (~9%) |
-| `home_last_point_diff_at_snapshot` | numeric | Home team recent form — point differential at snapshot time (~8%) |
-| `homeConference` | categorical | Conference-level pricing effects (~6%) — pinned |
+| `homeTeam` | categorical | pinned |
+| `hours_until_game` | numeric | Time to kickoff; monotonic constraint applied — pinned |
+| `awayTeam` | categorical | pinned |
+| `capacity` | numeric | Stadium size |
+| `week` | numeric | Season week number |
+| `kickoff_hour` | numeric | Hour of kickoff in local time |
+| `away_last_point_diff_at_snapshot` | numeric | Away team point differential at snapshot time |
+| `home_last_point_diff_at_snapshot` | numeric | Home team point differential at snapshot time |
+| `homeConference` | categorical | pinned |
 | `awayConference` | categorical | Away team's conference |
 | `homeTeamRank` | numeric | AP poll rank for home team; missing indicator included — pinned |
-| `awayTeamRank` | numeric | AP poll rank for away team (optional, off by default) |
+| `awayTeamRank` | numeric | AP poll rank for away team _(optional, off by default)_ |
 | `season_year` | numeric | Year-over-year price trends — pinned |
 | `neutralSite` | numeric (bool) | Game played at neutral venue |
 | `isRivalry` | numeric (bool) | Rivalry game flag |
 | `isRankedMatchup` | numeric (bool) | Both teams ranked |
-| `conferenceGame` | numeric (bool) | In-conference game (optional, off by default) |
+| `conferenceGame` | numeric (bool) | In-conference game _(optional, off by default)_ |
 | `kickoff_dayofweek` | numeric | Day of week (0=Mon … 6=Sun) |
-| `stadium` | categorical | Specific stadium name (optional, off by default) |
+| `stadium` | categorical | Specific stadium name _(optional, off by default)_ |
 
 Pinned features are never dropped by the importance pruner regardless of score.
 
