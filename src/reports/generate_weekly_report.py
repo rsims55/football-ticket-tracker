@@ -205,6 +205,23 @@ def _maybe_add_catboost_summary(report, today_str):
         report.append(f"- Timing MAE (hours): **{rep_row['time_mae_hours']:.2f} h**")
         report.append(f"- Timing within 24h: **{rep_row['time_within_24h']:.4f}**")
 
+    # Timing accuracy from evaluation log (all-time)
+    eval_df = _read_float_csv(EVAL_LOG_PATH)
+    if eval_df is not None and not eval_df.empty and "timing_abs_error_hours" in eval_df.columns:
+        t = pd.to_numeric(eval_df["timing_abs_error_hours"], errors="coerce").dropna()
+        if len(t) > 0:
+            t_mae = t.mean()
+            t_med = t.median()
+            within_6 = int((t <= 6).sum())
+            within_24 = int((t <= 24).sum())
+            report.append(f"- Timing MAE: **{t_mae:.1f} h**  •  Median |Δ|: **{t_med:.1f} h**")
+            report.append(f"- Within 6h: **{within_6}/{len(t)}**  •  Within 24h: **{within_24}/{len(t)}**")
+            if "timing_signed_error_hours" in eval_df.columns:
+                bias = pd.to_numeric(eval_df["timing_signed_error_hours"], errors="coerce").dropna().mean()
+                if not np.isnan(bias):
+                    direction = "later" if bias > 0 else "earlier"
+                    report.append(f"- Bias: predictions avg **{abs(bias):.1f} h {direction}** than actual low")
+
     # Feature importance list lives in the "Best Predictors" section below.
 
 

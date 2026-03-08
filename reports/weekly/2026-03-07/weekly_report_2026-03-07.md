@@ -9,12 +9,15 @@
 - Price MAE: **$10.24**
 - Price RMSE: **$17.57**
 - Price within 5%: **0.0969**
+- Timing MAE: **255.9 h**  •  Median |Δ|: **121.5 h**
+- Within 6h: **145/798**  •  Within 24h: **235/798**
+- Bias: predictions avg **58.3 h later** than actual low
 ## ✅ Pipeline Status (Latest)
 
 - **weekly_update**: **success** (_2026-03-06 20:15:10_) — Weekly update complete for 2026
 - **daily_snapshot**: **success** (_2026-03-07 19:13:17_) — Snapshot appended (2844 new rows). Total now: 2453
 - **model_train**: **success** (_2026-03-06 21:29:55_) — CatBoost training complete for 2026
-- **weekly_report**: **success** (_2026-03-07 18:58:48_) — Weekly report generated: reports\weekly\2026-03-07\weekly_report_2026-03-07.md
+- **weekly_report**: **success** (_2026-03-07 19:21:07_) — Weekly report generated: reports\weekly\2026-03-07\weekly_report_2026-03-07.md
 - **health_check**: **success** (_2026-03-07 19:21:04_) — Health check passed
 
 ## 🗓️ Season State & Data Freshness
