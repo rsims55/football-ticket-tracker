@@ -472,18 +472,84 @@ def job_send_report(paths: Paths) -> None:
             logging.info("[sendreport] per-job sync skipped")
 
 
+# Randomized snapshot scheduling
+
+import random as _random
+
+
+def _pick_snapshot_times(tz) -> list:
+    """Pick 4 random snapshot start times for today, one per 6-hour bucket.
+
+    Each run is constrained to start at least 2.5 hours after the previous
+    run's start (90min scrape + 60min buffer), but the window covers the full
+    bucket whenever the prior run finishes early enough.
+    """
+    today = datetime.datetime.now(tz).date()
+    bucket_hours = [0, 6, 12, 18]
+    scrape_plus_gap = 2.5  # hours
+    times = []
+    prev_start = None
+    for h in bucket_hours:
+        bucket_start = datetime.datetime.combine(today, datetime.time(h, 0), tzinfo=tz)
+        bucket_end   = bucket_start + datetime.timedelta(hours=6) - datetime.timedelta(seconds=1)
+        if prev_start is not None:
+            min_dt = max(bucket_start, prev_start + datetime.timedelta(hours=scrape_plus_gap))
+        else:
+            min_dt = bucket_start
+        if min_dt >= bucket_end:
+            chosen = min_dt
+        else:
+            span_s = (bucket_end - min_dt).total_seconds()
+            chosen = min_dt + datetime.timedelta(seconds=_random.uniform(0, span_s))
+        times.append(chosen)
+        prev_start = chosen
+    return times
+
+
+def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None:
+    """Pick random snapshot times for today and schedule them as DateTrigger jobs."""
+    from apscheduler.triggers.date import DateTrigger
+
+    # Remove any existing daily snapshot jobs from a previous scheduling
+    for i in range(4):
+        try:
+            sched.remove_job(f"job_daily_snapshot_{i}")
+        except Exception:
+            pass
+
+    times = _pick_snapshot_times(tz)
+    fmt = ", ".join(t.strftime("%H:%M") for t in times)
+    logging.info("[snapshot_scheduler] Today's 4 runs scheduled: %s", fmt)
+
+    for i, run_time in enumerate(times):
+        # Only schedule if the time is still in the future
+        now = datetime.datetime.now(tz)
+        if run_time <= now:
+            logging.info(
+                "[snapshot_scheduler] Skipping past time for run %d: %s", i, run_time.strftime("%H:%M")
+            )
+            continue
+        sched.add_job(
+            lambda p=paths: job_daily_snapshot(p),
+            DateTrigger(run_date=run_time),
+            id=f"job_daily_snapshot_{i}",
+            name=f"job_daily_snapshot_{i}",
+            replace_existing=True,
+        )
+
+
 # Main
 
 def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
     mode = _sync_mode()
     logging.info("Scheduling with sync mode: %s", mode)
 
-    # 00:00, 06:00, 12:00, 18:00
+    # Daily snapshots: randomized within each 6-hour bucket, re-picked each day at 00:01
     sched.add_job(
-        lambda: job_daily_snapshot(paths),
-        CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
-        id="job_daily_snapshot",
-        name="job_daily_snapshot",
+        lambda: _schedule_snapshot_day(sched, paths, TZ),
+        CronTrigger(hour=0, minute=1, timezone=TZ),
+        id="job_reschedule_snapshots",
+        name="job_reschedule_snapshots",
         replace_existing=True,
     )
 
@@ -617,6 +683,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     schedule_all(sched, paths)
     logging.info("Scheduling jobs…")
     sched.start()
+
+    # Pick random snapshot times for today immediately on startup
+    _schedule_snapshot_day(sched, paths, TZ)
 
     # Kickoff: run full pipeline sequentially on first start.
     # Each step waits for the previous to complete before starting.
