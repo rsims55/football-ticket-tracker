@@ -159,6 +159,12 @@ def main():
     except Exception as e:
         log.error("Rivalry scraping failed: %s", e)
 
+    try:
+        from fetchers.venues_fetcher import save_venues
+        save_venues(year)
+    except Exception as e:
+        log.error("Venue fetching failed: %s", e)
+
     log.info("Annual setup complete.")
 
 if __name__ == "__main__":
