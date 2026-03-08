@@ -477,18 +477,21 @@ def job_send_report(paths: Paths) -> None:
 import random as _random
 
 
-def _pick_snapshot_times(tz) -> list:
+def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None) -> list:
     """Pick 4 random snapshot start times for today, one per 6-hour bucket.
 
     Each run is constrained to start at least 2.5 hours after the previous
     run's start (90min scrape + 60min buffer), but the window covers the full
     bucket whenever the prior run finishes early enough.
+
+    prior_day_run3: the start time of the previous day's last run (Run 3),
+    used to prevent the new day's Run 0 from overlapping if Run 3 ran late.
     """
     today = datetime.datetime.now(tz).date()
     bucket_hours = [0, 6, 12, 18]
     scrape_plus_gap = 2.5  # hours
     times = []
-    prev_start = None
+    prev_start = prior_day_run3
     for h in bucket_hours:
         bucket_start = datetime.datetime.combine(today, datetime.time(h, 0), tzinfo=tz)
         bucket_end   = bucket_start + datetime.timedelta(hours=6) - datetime.timedelta(seconds=1)
@@ -510,6 +513,16 @@ def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None
     """Pick random snapshot times for today and schedule them as DateTrigger jobs."""
     from apscheduler.triggers.date import DateTrigger
 
+    # Capture the previous day's Run 3 start time before removing jobs,
+    # so the new day's Run 0 respects the gap if Run 3 ran late.
+    prior_day_run3 = None
+    try:
+        job3 = sched.get_job("job_daily_snapshot_3")
+        if job3 and job3.next_run_time:
+            prior_day_run3 = job3.next_run_time
+    except Exception:
+        pass
+
     # Remove any existing daily snapshot jobs from a previous scheduling
     for i in range(4):
         try:
@@ -517,7 +530,7 @@ def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None
         except Exception:
             pass
 
-    times = _pick_snapshot_times(tz)
+    times = _pick_snapshot_times(tz, prior_day_run3=prior_day_run3)
     fmt = ", ".join(t.strftime("%H:%M") for t in times)
     logging.info("[snapshot_scheduler] Today's 4 runs scheduled: %s", fmt)
 
