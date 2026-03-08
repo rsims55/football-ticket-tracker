@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
+import glob
 import os
 import re
-import glob
 import smtplib
 from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
-from email import encoders
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 try:
     from dotenv import load_dotenv
@@ -60,14 +60,17 @@ def _inline_styles(html: str) -> str:
         html = re.sub(pattern, replacement, html, flags=re.IGNORECASE)
     return html
 
+
 # Required env vars
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
 TO_EMAIL = os.getenv("TO_EMAIL")
 APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
+
 def _fail(msg: str) -> None:
     print(f"❌ {msg}")
     raise SystemExit(1)
+
 
 def _validate_env():
     missing = [name for name, val in {
@@ -84,6 +87,7 @@ def _validate_env():
         )
         _fail(f"Missing env vars: {', '.join(missing)}\n\n{hint}")
 
+
 def _find_report_path() -> str | None:
     today = datetime.now().strftime("%Y-%m-%d")
     preferred = os.path.join("reports", "weekly", today, f"weekly_report_{today}.md")
@@ -95,6 +99,7 @@ def _find_report_path() -> str | None:
         return None
     matches.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return matches[0]
+
 
 def _wrap_html(body_html: str, title: str) -> str:
     date_str = datetime.now().strftime("%B %d, %Y")
@@ -143,6 +148,7 @@ def _wrap_html(body_html: str, title: str) -> str:
 </body>
 </html>"""
 
+
 def _force_table_borders(html: str) -> str:
     # Add legacy attributes (Outlook loves these) if missing
     html = re.sub(
@@ -161,6 +167,7 @@ def _force_table_borders(html: str) -> str:
     html = re.sub(r"<(th)([^>]*)>", _pad_cell, html, flags=re.IGNORECASE)
     html = re.sub(r"<(td)([^>]*)>", _pad_cell, html, flags=re.IGNORECASE)
     return html
+
 
 def _embed_images(html: str, report_dir: str):
     """
@@ -197,14 +204,19 @@ def _embed_images(html: str, report_dir: str):
                 data = f.read()
             mime = MIMEImage(data)
             mime.add_header("Content-ID", f"<{cid}>")
-            mime.add_header("Content-Disposition", "inline", filename=os.path.basename(img_path))
+            mime.add_header(
+                "Content-Disposition", "inline", filename=os.path.basename(img_path)
+            )
             cid_parts.append(mime)
 
         return f'<img src="cid:{cid}" alt="{os.path.basename(img_path)}">'
 
     # Replace src in <img ...>
-    new_html = re.sub(r'<img[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>', repl, html, flags=re.IGNORECASE)
+    new_html = re.sub(
+        r'<img[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>', repl, html, flags=re.IGNORECASE
+    )
     return new_html, cid_parts
+
 
 def send_report(filepath: str):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -249,7 +261,9 @@ def send_report(filepath: str):
     attachment = MIMEBase("text", "markdown")
     attachment.set_payload(md_text.encode("utf-8"))
     encoders.encode_base64(attachment)
-    attachment.add_header("Content-Disposition", "attachment", filename=os.path.basename(filepath))
+    attachment.add_header(
+        "Content-Disposition", "attachment", filename=os.path.basename(filepath)
+    )
     outer.attach(attachment)
 
     # Send
@@ -297,6 +311,7 @@ def send_markdown_report(md_text: str, subject: str) -> None:
         _fail(f"SMTP error {e.smtp_code}: {e.smtp_error!r}")
     except Exception as e:
         _fail(f"Unexpected error sending email: {e}")
+
 
 if __name__ == "__main__":
     _validate_env()

@@ -1,13 +1,12 @@
-# src/cfb_tix/daemon.py
 from __future__ import annotations
 
 import argparse
 import ctypes
+import datetime
 import logging
 import os
 import subprocess
 import sys
-import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -17,7 +16,8 @@ from apscheduler.triggers.cron import CronTrigger
 from platformdirs import user_log_dir
 from zoneinfo import ZoneInfo
 
-# ---------- Optional Sync Disable -------
+
+# Optional Sync Disable
 def _sync_disabled() -> bool:
     """
     Sync is DISABLED by default.
@@ -36,14 +36,17 @@ def _sync_disabled() -> bool:
         pass
     return True
 
-# >>> NEW: sync mode switch (default 'perjob', alternative 'twice_daily')
+
+# Sync mode switch (default 'perjob', alternative 'twice_daily')
 def _sync_mode() -> str:
     return os.getenv("CFB_TIX_SYNC_MODE", "perjob").strip().lower()
 
-# ---------- Paths & logging ----------
+
+# Paths and logging
 
 APP_NAME = "cfb-tix"
 TZ = ZoneInfo("America/New_York")
+
 
 @dataclass
 class Paths:
@@ -52,6 +55,7 @@ class Paths:
     logs_dir: Path
     log_file: Path
     py_exe: Path
+
 
 def detect_paths() -> Paths:
     """Resolve paths whether running from source or from installed copy."""
@@ -79,6 +83,7 @@ def detect_paths() -> Paths:
         py_exe=Path(sys.executable),
     )
 
+
 def setup_logging(log_file: Path) -> None:
     root = logging.getLogger()
     root.setLevel(logging.INFO)
@@ -88,8 +93,10 @@ def setup_logging(log_file: Path) -> None:
         fh.setFormatter(fmt)
         root.addHandler(fh)
 
-# ---------- single-instance lock ----------
+
+# Single-instance lock
 _LOCKFILE_PATH: Path | None = None
+
 
 def _acquire_lock(paths: Paths) -> bool:
     """Prevent multiple daemon instances: create an exclusive lock file."""
@@ -104,11 +111,14 @@ def _acquire_lock(paths: Paths) -> bool:
         logging.info("Acquired daemon lock: %s", lock_path)
         return True
     except FileExistsError:
-        logging.info("Another daemon instance appears to be running (lock present). Exiting.")
+        logging.info(
+            "Another daemon instance appears to be running (lock present). Exiting."
+        )
         return False
     except Exception as e:
         logging.warning("Could not create lock file (%s); continuing without lock.", e)
         return True  # fallback: don't block startup if filesystem oddity
+
 
 def _release_lock():
     """Remove the lock file on shutdown."""
@@ -120,7 +130,8 @@ def _release_lock():
     except Exception:
         pass
 
-# ---------- helpers ----------
+
+# Helpers
 
 def notify(title: str, msg: str) -> None:
     """Best-effort user notification (non-blocking)."""
@@ -136,6 +147,7 @@ def notify(title: str, msg: str) -> None:
             pass
     threading.Thread(target=_notify, daemon=True).start()
 
+
 def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     """Run a process and return (exitcode, combined_output)."""
     proc = subprocess.Popen(
@@ -149,22 +161,31 @@ def _popen(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     out, _ = proc.communicate()
     return proc.returncode, out
 
-# ---------- Safe push-only git helpers ----------
+
+# Safe push-only git helpers
 
 def _run_git(args: list[str], cwd: Path, check: bool = True) -> tuple[int, str, str]:
     proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
     if check and proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}")
+        raise RuntimeError(
+            f"git {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}"
+        )
     return proc.returncode, proc.stdout, proc.stderr
+
 
 def _detect_upstream(repo: Path) -> str | None:
     try:
-        _, out, _ = _run_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=repo)
+        _, out, _ = _run_git(
+            ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=repo
+        )
         return out.strip()
     except Exception:
         return None
 
-def _commit_if_dirty(repo_root: Path, label: str, scope: list[str] | None = None) -> bool:
+
+def _commit_if_dirty(
+    repo_root: Path, label: str, scope: list[str] | None = None
+) -> bool:
     """
     Stage and commit changes within 'scope' only (default: data/** and models/**).
     Returns True if a commit was created.
@@ -188,6 +209,7 @@ def _commit_if_dirty(repo_root: Path, label: str, scope: list[str] | None = None
     _run_git(["commit", "-m", msg], cwd=repo_root, check=False)
     return True
 
+
 def _git_sync_push_only(repo: Path, label: str) -> None:
     """
     Push-only sync:
@@ -197,23 +219,40 @@ def _git_sync_push_only(repo: Path, label: str) -> None:
     """
     upstream = _detect_upstream(repo)
     if not upstream:
-        logging.warning("[%s] No upstream tracking branch set; skipping push. (Run 'git push -u origin <branch>')", label)
+        logging.warning(
+            "[%s] No upstream tracking branch set; skipping push."
+            " (Run 'git push -u origin <branch>')",
+            label,
+        )
         return
 
     _run_git(["fetch", "--quiet"], cwd=repo, check=False)
 
     # Compare ahead/behind
     try:
-        _, out, _ = _run_git(["rev-list", "--left-right", "--count", f"{upstream}...HEAD"], cwd=repo, check=False)
+        _, out, _ = _run_git(
+            ["rev-list", "--left-right", "--count", f"{upstream}...HEAD"],
+            cwd=repo,
+            check=False,
+        )
         behind, ahead = [int(x) for x in out.strip().split()]
     except Exception:
         behind, ahead = 0, 0
 
     if behind > 0 and ahead == 0:
-        logging.warning("[%s] Remote is ahead by %d commit(s). Push skipped (never pulling).", label, behind)
+        logging.warning(
+            "[%s] Remote is ahead by %d commit(s). Push skipped (never pulling).",
+            label,
+            behind,
+        )
         return
     if behind > 0 and ahead > 0:
-        logging.warning("[%s] Branch diverged (ahead=%d, behind=%d). Push skipped (never pulling).", label, ahead, behind)
+        logging.warning(
+            "[%s] Branch diverged (ahead=%d, behind=%d). Push skipped (never pulling).",
+            label,
+            ahead,
+            behind,
+        )
         return
     if ahead == 0:
         logging.info("[%s] Nothing to push.", label)
@@ -226,7 +265,8 @@ def _git_sync_push_only(repo: Path, label: str) -> None:
         logging.exception("[%s] Push failed: %s", label, e)
         notify("CFB-Tix sync failed", "git push failed — see daemon log.")
 
-# ---------- child env ----------
+
+# Child env
 
 def _child_env_for_repo(paths: Paths) -> dict:
     """Environment for child scripts: repo-locked and with src on PYTHONPATH."""
@@ -246,6 +286,7 @@ def _child_env_for_repo(paths: Paths) -> dict:
         env["PYTHONPATH"] = (src_dir + (os.pathsep + existing if existing else ""))
     return env
 
+
 def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int:
     """Run a Python script via the current interpreter."""
     script = cwd / script_rel
@@ -262,7 +303,8 @@ def run_py_script(script_rel: str, cwd: Path, env: Optional[dict] = None) -> int
         notify("CFB-Tix job failed", f"{script_rel}\n{e}")
         return 1
 
-# ---------- Sync orchestration (push-only; optional release sync guarded) ----------
+
+# Sync orchestration (push-only; optional release sync guarded)
 
 def do_sync(paths: Paths, label: str) -> None:
     """
@@ -272,7 +314,10 @@ def do_sync(paths: Paths, label: str) -> None:
     Optional GitHub Release asset sync can be enabled with CFB_TIX_USE_RELEASE_SYNC=1.
     """
     if _sync_disabled():
-        logging.info("[%s] sync skipped (sync disabled by default; set CFB_TIX_ENABLE_SYNC=1 to allow)", label)
+        logging.info(
+            "[%s] sync skipped (sync disabled by default; set CFB_TIX_ENABLE_SYNC=1 to allow)",
+            label,
+        )
         return
 
     repo = paths.repo_root
@@ -293,14 +338,17 @@ def do_sync(paths: Paths, label: str) -> None:
             except Exception:
                 from cfb_tix.windows.data_sync import pull_then_push  # type: ignore
             updated, pushed = pull_then_push(verbose=False)
-            logging.info("[%s] release sync -> updated=%s, pushed=%s", label, updated, pushed)
+            logging.info(
+                "[%s] release sync -> updated=%s, pushed=%s", label, updated, pushed
+            )
         except Exception as e:
             logging.info("[%s] release sync unavailable or failed: %s", label, e)
 
     # Push-only; never pull
     _git_sync_push_only(repo, label)
 
-# ---------- jobs ----------
+
+# Jobs
 
 def job_daily_snapshot(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
@@ -312,6 +360,7 @@ def job_daily_snapshot(paths: Paths) -> None:
         else:
             logging.info("[daily_snapshot] per-job sync skipped (twice_daily mode)")
 
+
 def job_train_model(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
@@ -321,6 +370,7 @@ def job_train_model(paths: Paths) -> None:
             do_sync(paths, "train_model")
         else:
             logging.info("[train_model] per-job sync skipped (twice_daily mode)")
+
 
 def job_predict_price(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
@@ -332,6 +382,7 @@ def job_predict_price(paths: Paths) -> None:
         else:
             logging.info("[predict_price] per-job sync skipped (twice_daily mode)")
 
+
 def job_weekly_update(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
@@ -342,12 +393,15 @@ def job_weekly_update(paths: Paths) -> None:
             run_py_script("src/builders/weekly_update.py", paths.app_root, env=env)
         else:
             # Last resort (older report generator)
-            run_py_script("src/reports/generate_weekly_report.py", paths.app_root, env=env)
+            run_py_script(
+                "src/reports/generate_weekly_report.py", paths.app_root, env=env
+            )
     finally:
         if _sync_mode() == "perjob":
             do_sync(paths, "weekly_update")
         else:
             logging.info("[weekly_update] per-job sync skipped (twice_daily mode)")
+
 
 def job_annual_setup(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
@@ -359,24 +413,28 @@ def job_annual_setup(paths: Paths) -> None:
         else:
             logging.info("[annual_setup] per-job sync skipped (twice_daily mode)")
 
+
 def job_daily_pull_push(paths: Paths) -> None:
     try:
         do_sync(paths, "daily_pull_push")
     except Exception as e:
         logging.warning("Daily pull/push failed: %s", e)
 
-# >>> NEW: evening push job
+
+# Evening push job
 def job_evening_pull_push(paths: Paths) -> None:
     try:
         do_sync(paths, "evening_pull_push")
     except Exception as e:
         logging.warning("Evening pull/push failed: %s", e)
 
+
 def job_hourly_sync(paths: Paths) -> None:
     try:
         do_sync(paths, "hourly_sync")
     except Exception as e:
         logging.warning("Hourly sync failed: %s", e)
+
 
 # Optional: run evaluation after predictions (enable schedule if desired)
 def job_evaluate_predictions(paths: Paths) -> None:
@@ -389,6 +447,7 @@ def job_evaluate_predictions(paths: Paths) -> None:
         else:
             logging.info("[evaluate_predictions] per-job sync skipped")
 
+
 def job_weekly_report(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
@@ -398,6 +457,7 @@ def job_weekly_report(paths: Paths) -> None:
             do_sync(paths, "generate weekly report")
         else:
             logging.info("[generate weekly report] per-job sync skipped")
+
 
 def job_send_report(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
@@ -410,69 +470,115 @@ def job_send_report(paths: Paths) -> None:
             logging.info("[sendreport] per-job sync skipped")
 
 
-# ---------- main ----------
+# Main
 
 def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
     mode = _sync_mode()
     logging.info("Scheduling with sync mode: %s", mode)
 
     # 00:00, 06:00, 12:00, 18:00
-    sched.add_job(lambda: job_daily_snapshot(paths),
-                  CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
-                  id="job_daily_snapshot", name="job_daily_snapshot", replace_existing=True)
+    sched.add_job(
+        lambda: job_daily_snapshot(paths),
+        CronTrigger(hour="0,6,12,18", minute="0", timezone=TZ),
+        id="job_daily_snapshot",
+        name="job_daily_snapshot",
+        replace_existing=True,
+    )
 
     # 06:45 and 18:45 — train & predict are separate jobs
-    sched.add_job(lambda: job_train_model(paths),
-                  CronTrigger(hour="6,18", minute="45", timezone=TZ),
-                  id="job_train_model", name="job_train_model", replace_existing=True)
+    sched.add_job(
+        lambda: job_train_model(paths),
+        CronTrigger(hour="6,18", minute="45", timezone=TZ),
+        id="job_train_model",
+        name="job_train_model",
+        replace_existing=True,
+    )
 
-    sched.add_job(lambda: job_predict_price(paths),
-                  CronTrigger(hour="6,18", minute="45", timezone=TZ),
-                  id="job_predict_price", name="job_predict_price", replace_existing=True)
+    sched.add_job(
+        lambda: job_predict_price(paths),
+        CronTrigger(hour="6,18", minute="45", timezone=TZ),
+        id="job_predict_price",
+        name="job_predict_price",
+        replace_existing=True,
+    )
 
     # Weekly: Sunday at 08:00
-    sched.add_job(lambda: job_evaluate_predictions(paths),
-                  CronTrigger(hour="8", minute="00", timezone=TZ),
-                  id="job_evaluate_predictions", name="job_evaluate_predictions", replace_existing=True)
-    
-    sched.add_job(lambda: job_weekly_report(paths),
-                  CronTrigger(hour="8", minute="15", timezone=TZ),
-                  id="job_weekly_report", name="job_weekly_report", replace_existing=True)
-    
-    sched.add_job(lambda: job_send_report(paths),
-                  CronTrigger(hour="8", minute="20", timezone=TZ),
-                  id="job_send_report", name="job_send_report", replace_existing=True)
+    sched.add_job(
+        lambda: job_evaluate_predictions(paths),
+        CronTrigger(hour="8", minute="00", timezone=TZ),
+        id="job_evaluate_predictions",
+        name="job_evaluate_predictions",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        lambda: job_weekly_report(paths),
+        CronTrigger(hour="8", minute="15", timezone=TZ),
+        id="job_weekly_report",
+        name="job_weekly_report",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        lambda: job_send_report(paths),
+        CronTrigger(hour="8", minute="20", timezone=TZ),
+        id="job_send_report",
+        name="job_send_report",
+        replace_existing=True,
+    )
 
     # Weekly: Wednesday 05:30
-    sched.add_job(lambda: job_weekly_update(paths),
-                  CronTrigger(day_of_week="wed", hour=5, minute=30, timezone=TZ),
-                  id="job_weekly_update", name="job_weekly_update", replace_existing=True)
+    sched.add_job(
+        lambda: job_weekly_update(paths),
+        CronTrigger(day_of_week="wed", hour=5, minute=30, timezone=TZ),
+        id="job_weekly_update",
+        name="job_weekly_update",
+        replace_existing=True,
+    )
 
     # Annual: May 1 at 05:00
-    sched.add_job(lambda: job_annual_setup(paths),
-                  CronTrigger(month=5, day=1, hour=5, minute=0, timezone=TZ),
-                  id="job_annual_setup", name="job_annual_setup", replace_existing=True)
+    sched.add_job(
+        lambda: job_annual_setup(paths),
+        CronTrigger(month=5, day=1, hour=5, minute=0, timezone=TZ),
+        id="job_annual_setup",
+        name="job_annual_setup",
+        replace_existing=True,
+    )
 
-    # >>> Push scheduling depends on mode:
+    # Push scheduling depends on mode
     if mode == "twice_daily":
         # Morning GH push at 07:10
-        sched.add_job(lambda: job_daily_pull_push(paths),
-                      CronTrigger(hour=7, minute=10, timezone=TZ),
-                      id="job_daily_pull_push", name="job_daily_pull_push", replace_existing=True)
+        sched.add_job(
+            lambda: job_daily_pull_push(paths),
+            CronTrigger(hour=7, minute=10, timezone=TZ),
+            id="job_daily_pull_push",
+            name="job_daily_pull_push",
+            replace_existing=True,
+        )
         # Evening GH push at 19:10
-        sched.add_job(lambda: job_evening_pull_push(paths),
-                      CronTrigger(hour=19, minute=10, timezone=TZ),
-                      id="job_evening_pull_push", name="job_evening_pull_push", replace_existing=True)
+        sched.add_job(
+            lambda: job_evening_pull_push(paths),
+            CronTrigger(hour=19, minute=10, timezone=TZ),
+            id="job_evening_pull_push",
+            name="job_evening_pull_push",
+            replace_existing=True,
+        )
     else:
         # Per-job push mode: keep an hourly safety push (quarter past)
-        sched.add_job(lambda: job_hourly_sync(paths),
-                      CronTrigger(minute=15, timezone=TZ),
-                      id="job_hourly_sync", name="job_hourly_sync", replace_existing=True)
+        sched.add_job(
+            lambda: job_hourly_sync(paths),
+            CronTrigger(minute=15, timezone=TZ),
+            id="job_hourly_sync",
+            name="job_hourly_sync",
+            replace_existing=True,
+        )
+
 
 def log_next_runs(sched: BackgroundScheduler) -> None:
     for j in sched.get_jobs():
         next_run = j.next_run_time.astimezone(TZ) if j.next_run_time else "n/a"
         logging.info("JOB %-22s next: %s", j.id.replace("job_", ""), next_run)
+
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = argparse.ArgumentParser(prog="cfb-tix")
@@ -489,7 +595,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not _acquire_lock(paths):
         return 0
 
-    # >>> Initial push behavior depends on mode
+    # Initial push behavior depends on mode
     mode = _sync_mode()
     logging.info("Sync mode: %s", mode)
     if mode == "perjob":
@@ -514,7 +620,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Each step waits for the previous to complete before starting.
     import threading
     def _kickoff_sequence(p: Paths) -> None:
-        logging.info("[kickoff] Starting first-run sequence: annual → weekly → snapshot → train → report → email")
+        logging.info(
+            "[kickoff] Starting first-run sequence:"
+            " annual -> weekly -> snapshot -> train -> report -> email"
+        )
         job_annual_setup(p)
         job_weekly_update(p)
         job_daily_snapshot(p)
@@ -525,10 +634,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     from apscheduler.triggers.date import DateTrigger
     base = datetime.datetime.now(TZ) + datetime.timedelta(seconds=5)
-    sched.add_job(lambda: _kickoff_sequence(paths),
-                  DateTrigger(run_date=base),
-                  id="kickoff_sequence", replace_existing=True)
-    logging.info("Kickoff sequence scheduled (annual → weekly → snapshot → train → report → email).")
+    sched.add_job(
+        lambda: _kickoff_sequence(paths),
+        DateTrigger(run_date=base),
+        id="kickoff_sequence",
+        replace_existing=True,
+    )
+    logging.info(
+        "Kickoff sequence scheduled"
+        " (annual -> weekly -> snapshot -> train -> report -> email)."
+    )
 
     logging.info("Scheduler started")
     log_next_runs(sched)
@@ -539,7 +654,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         if gui_script.exists():
             try:
                 env = _child_env_for_repo(paths)
-                subprocess.Popen([sys.executable, str(gui_script)], cwd=str(paths.app_root), env=env)
+                subprocess.Popen(
+                    [sys.executable, str(gui_script)],
+                    cwd=str(paths.app_root),
+                    env=env,
+                )
             except Exception as e:
                 logging.warning("GUI failed to launch: %s", e)
 
@@ -557,6 +676,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         _release_lock()
 
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
