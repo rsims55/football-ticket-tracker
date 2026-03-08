@@ -618,7 +618,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Kickoff: run full pipeline sequentially on first start.
     # Each step waits for the previous to complete before starting.
-    import threading
     def _kickoff_sequence(p: Paths) -> None:
         logging.info(
             "[kickoff] Starting first-run sequence:"
