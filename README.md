@@ -1,301 +1,280 @@
 # 🎟️ College Football Ticket Price Tracker
 
-A cross‑platform toolkit to **collect**, **model**, and **visualize** college football ticket prices with a clean, automated pipeline.  
-Primary goals: daily price snapshots, robust modeling, and a GUI predictor.
+A cross-platform toolkit to **collect**, **model**, and **visualize** college football ticket prices with a fully automated pipeline.
 
 ---
 
-## ✅ Quickstart (Windows + Linux)
+## 🚀 Quickstart
 
-1) **Clone repo**
-```
+### Windows
+
+```powershell
+# 1. Clone the repo
 git clone https://github.com/rsims55/football-ticket-tracker.git
 cd football-ticket-tracker
+
+# 2. Create .env and fill in secrets (see below)
+copy .env.example .env
+
+# 3. Set up Python virtual environment
+.\bin\setup_windows.ps1
+
+# 4. Install the daemon as a startup item (runs automatically at every login)
+wscript.exe "C:\path\to\repo\bin\cfb_daemon.vbs"
+
+# Or run the daemon manually in the foreground:
+.\bin\run_daemon_windows.ps1
 ```
 
-2) **Create `.env`**
-```
-cp configs/.env.example .env
-```
-Fill in required secrets in `.env` (see below).
+### Linux
 
-3) **Run everything** (`.venv` is created automatically on first run)
+```bash
+# 1. Clone the repo
+git clone https://github.com/rsims55/football-ticket-tracker.git
+cd football-ticket-tracker
 
-4) **Run everything**
+# 2. Create .env and fill in secrets (see below)
+cp .env.example .env
 
-> The run scripts auto-create and populate `.venv` on first run — no separate setup step needed.
-
-- **Linux**
-```
-bin/run_all_linux.sh
-```
-- **Windows**
-```
-bin/run_all_windows.cmd
+# 3. Set up venv and run the daemon
+bin/setup_linux.sh
+bin/run_daemon_linux.sh
 ```
 
-**Test run** (3 random teams only — fast smoke test):
-- **Linux**
-```
-bin/run_test_linux.sh
-```
-- **Windows**
-```
-bin/run_test_windows.cmd
-```
-
-5) **Launch GUI only**
-- **Linux**: `bin/run_gui_linux.sh`
-- **Windows**: `bin/run_gui_windows.cmd`
+> **Note:** Windows uses `.venv_win\`, Linux uses `.venv/`. Neither is committed to git.
 
 ---
 
-## 🔐 Required `.env` secrets
+## 🔐 Required `.env` Secrets
 
-Edit `.env` at repo root:
-
-```
-CFD_API_KEY=
-TICKPICK_EMAIL=
-TICKPICK_PASSWORD=
+```env
+CFBD_API_KEY=
 GMAIL_ADDRESS=
 GMAIL_APP_PASSWORD=
 TO_EMAIL=
 ```
 
 Optional:
-```
-# SEASON_YEAR=2026
+```env
+SEASON_YEAR=2026
 ALLOW_OFFSEASON_SCRAPE=0
 ```
 
 ---
 
-## 🧠 Pipeline Schedule (EDT)
+## 🤖 Daemon
 
-All time rules use **America/New_York (EDT/EST)**.
+The daemon is the heart of the pipeline. It runs all jobs on a schedule and auto-starts on login.
 
-### 1) Annual Setup  
-**Runs Mar 1 @ 4:30 AM**  
-Also runs later in March+ if annual files are missing.
+### Auto-start (Windows)
 
-### 2) Weekly Update  
-**Mondays @ 5:30 AM**  
-Uses **current year** if March+; else prior year.  
-Overwrites same‑year weekly outputs.
+A VBScript is placed in your Windows Startup folder:
+```
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\cfb_daemon.vbs
+```
+This launches the daemon hidden in the background every time you log in. No terminal needs to be open.
 
-### 3) Daily Scraper  
-**4 random runs/day**, ≥4 hours apart  
-Only runs if **March+** in current year.  
-Skips any game **after kickoff**.
+### Auto-start (Linux)
 
-### 4) Model Training  
-**Mondays @ 7:00 AM**
+Use the provided systemd user service:
+```bash
+mkdir -p ~/.config/systemd/user
+cp configs/systemd/cfb-ticket-tracker.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now cfb-ticket-tracker.service
+```
 
-### 5) Weekly Report + Email  
-Runs after model training; emailed to `TO_EMAIL`.
+### Manual start
+
+```powershell
+# Windows
+.\bin\run_daemon_windows.ps1
+
+# Linux
+bin/run_daemon_linux.sh
+```
+
+### Check if running
+
+```powershell
+# Windows — lock file exists while daemon is alive
+Test-Path "$env:LOCALAPPDATA\cfb-tix\Logs\daemon.lock"
+
+# Tail the log
+Get-Content "$env:LOCALAPPDATA\cfb-tix\Logs\cfb_tix.log" -Tail 20 -Wait
+```
 
 ---
 
-## ⚠️ Postseason Rules (Current)
+## 🗓️ Pipeline Schedule (America/New_York)
 
-- **Postseason games are excluded from:**
-  - Model training
-  - GUI display
-- **Postseason can still be scraped** but is ignored downstream.
-- We’ll revisit postseason logic after next season.
+### First-run kickoff (runs once on daemon startup, in order)
+
+Each step completes before the next begins:
+
+1. **Annual Setup** — builds venues, rivalries, stadiums CSVs for the season
+2. **Weekly Update** — refreshes full schedule and rankings
+3. **Daily Snapshot** — full scrape of all teams from TickPick
+4. **Model Training** — retrains CatBoost on all available data
+5. **Weekly Report + Email** — generates report and sends to `TO_EMAIL`
+
+### Recurring schedule
+
+| Time (ET) | Job |
+|---|---|
+| 12:00 AM, 6:00 AM, 12:00 PM, 6:00 PM | Daily snapshot (full scrape) |
+| 6:45 AM, 6:45 PM | Train model + predict prices |
+| 8:00 AM daily | Evaluate predictions |
+| 8:15 AM daily | Generate weekly report |
+| 8:20 AM daily | Send report email |
+| Wednesday 5:30 AM | Weekly update |
+| May 1, 5:00 AM | Annual setup |
+| :15 past every hour | Hourly git sync (push only) |
 
 ---
 
-## ✅ Status Reporting
+## 📧 Weekly Report Email
 
-Each pipeline step writes to:
-```
-data/permanent/pipeline_status.json
+Sent automatically at **8:20 AM ET daily**. Includes:
+
+- **CatBoost Training Summary** — rows, Price MAE/RMSE, timing accuracy
+- **Pipeline Status** — success/fail for each step with timestamps
+- **Best Predictors** — feature importances from the model
+- **Season State & Data Freshness**
+- **Model Accuracy (Past 7 Days)** — when in-season games are available
+
+---
+
+## 🛠️ Manual Commands
+
+```bash
+# Set PYTHONPATH first (from repo root)
+export PYTHONPATH=src  # Linux
+$env:PYTHONPATH="src"  # Windows PowerShell
+
+# Daily snapshot
+python src/builders/daily_snapshot.py
+
+# Test run (3 random teams)
+DAILY_TEST_MODE=1 TEAMS_LIMIT=3 python src/builders/daily_snapshot.py
+
+# Weekly update
+python src/builders/weekly_update.py
+
+# Annual setup
+python src/builders/annual_setup.py
+
+# Train model
+python src/modeling/train_catboost_min.py
+
+# Generate report
+python src/reports/generate_weekly_report.py
+
+# Send report email
+python src/reports/send_email.py
+
+# Health check
+python scripts/health_check.py
+
+# Launch GUI
+python src/gui/ticket_predictor_gui.py
 ```
 
-The **weekly report email** includes the latest success/skip/fail status for:
-- annual_setup  
-- weekly_update  
-- daily_snapshot  
-- model_train  
-- weekly_report
-- health_check
+---
+
+## 📂 Project Structure
+
+```
+bin/                    launcher scripts (setup, daemon, run) for Windows + Linux
+data/
+  annual/               venues, stadiums, rivalries (rebuilt each season)
+  daily/                price_snapshots_YYYY.csv, archives, backups
+  modeling/             combined training rows
+  permanent/            pipeline_status.json, team aliases/conferences
+  weekly/               full schedule
+models/                 catboost_price_min.cbm (trained model)
+reports/
+  catboost_*.csv        training metrics and feature importances
+  weekly/               weekly report markdown files
+scripts/                health_check.py and maintenance utilities
+src/
+  builders/             annual_setup.py, weekly_update.py, daily_snapshot.py
+  cfb_tix/              daemon, launcher, Windows startup integration
+  fetchers/             schedule, rankings, venues fetchers
+  gui/                  ticket_predictor_gui.py
+  modeling/             train_catboost_min.py
+  reports/              generate_weekly_report.py, send_email.py
+  utils/                logging, status, http helpers
+```
+
+---
+
+## 🧠 Model
+
+Trains a **CatBoost regressor** to predict the future minimum ticket price from a live snapshot.
+
+**Target:** `gap_pct` — the % drop from the current lowest price to the future minimum.
+
+**Model file:** `models/catboost_price_min.cbm` (retrained on all years each run).
+
+**Key features:**
+
+| Feature | Notes |
+|---|---|
+| `homeTeam` | Strongest signal (~24%) |
+| `hours_until_game` | Monotonic constraint applied (~12%) |
+| `awayTeam` | Critical for marquee matchups (~11%) |
+| `capacity` | Stadium size (~11%) |
+| `week` | Season week (~9%) |
+| `kickoff_hour` | Affects demand patterns (~9%) |
+| `home/away_last_point_diff` | Recent team form (~17% combined) |
+| `homeConference` | Conference pricing effects (~6%) |
+| `homeTeamRank` | AP ranking signal |
+| `season_year` | Year-over-year price trends |
 
 ---
 
 ## 🩺 Health Check
 
-Weekly health check validates required columns and basic freshness:
-```
+Validates required columns, data freshness, and date format integrity:
+```bash
 python scripts/health_check.py
 ```
 Results are written to `data/permanent/pipeline_status.json` and included in the weekly report.
 
 ---
 
-## 🗄️ Backups
+## ⚠️ Postseason Rules
 
-`price_snapshots.csv` is backed up automatically before each write:
-```
-data/daily/backups/price_snapshots.csv.YYYYMMDD_HHMMSS.bak
-```
-The last **7** backups are kept.
+- Postseason games are **excluded** from model training and GUI display.
+- They can still be scraped but are filtered downstream.
 
 ---
 
-## 🛠️ System Daemons (optional)
+## 🔄 Updating
 
-### Linux (systemd user)
-```
-mkdir -p ~/.config/systemd/user
-cp configs/systemd/cfb-ticket-tracker.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now cfb-ticket-tracker.service
-```
-
-### Windows (Task Scheduler)
-1) Edit `configs/windows/cfb-ticket-tracker.xml`  
-   Replace `C:\path\to\repo` with your repo location.
-2) Import the task in Task Scheduler.
-
-### Keep Awake
-- **Linux**: systemd-inhibit is built into the service (prevents sleep while running).
-- **Windows**: daemon runner uses `SetThreadExecutionState` to prevent sleep.
-
----
-
-## ✅ Daemon Activation (VERY CLEAR)
-
-When the system daemon starts, it **immediately runs all pipeline steps once**:
-- annual setup
-- weekly update
-- daily snapshot (will skip in offseason)
-- model training
-- weekly report
-- email send
-
-It then continues running the scheduler loop.
-
-### Linux activation (one‑time)
-```
-mkdir -p ~/.config/systemd/user
-cp configs/systemd/cfb-ticket-tracker.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now cfb-ticket-tracker.service
-```
-
-### Windows activation (one‑time)
-1) Edit `configs/windows/cfb-ticket-tracker.xml`  
-   Replace `C:\path\to\repo` with your repo path.
-2) Import into Task Scheduler.
-
-### Manual activation (if needed)
-- Linux: `bin/run_daemon_linux.sh`
-- Windows: `bin/run_daemon_windows.cmd`
-
----
-
-## 🔄 Update / Upgrade
-
-```
+```bash
 git pull
 ```
-Then re-run setup if dependencies changed:
+
+Re-run setup if dependencies changed:
+- Windows: `.\bin\setup_windows.ps1`
 - Linux: `bin/setup_linux.sh`
-- Windows: `bin/setup_windows.cmd`
 
 ---
 
-## 📂 Project Structure (clean)
+## 🔧 Troubleshooting
 
+**Daemon won't start (lock file stuck)**
+```powershell
+Remove-Item "$env:LOCALAPPDATA\cfb-tix\Logs\daemon.lock" -Force
 ```
-assets/                 icons, UI assets
-bin/                    cross‑platform launcher scripts
-configs/                .env.example + system daemon templates
-data/                   all data outputs + permanent state
-reports/                weekly reports + model outputs
-scripts/                one‑off maintenance utilities
-src/                    main codebase (builders, models, GUI)
-```
-
----
-
-## ✅ Core Commands (manual)
-
-**Daily snapshot**
-```
-python src/builders/daily_snapshot.py
-```
-
-**Weekly update**
-```
-python src/builders/weekly_update.py
-```
-
-**Train price model**
-```
-python src/modeling/train_catboost_min.py
-```
-
-**Generate weekly report**
-```
-python src/reports/generate_weekly_report.py
-```
-
-**Run GUI**
-```
-python src/gui/ticket_predictor_gui.py
-```
-
----
-
-## 🧩 Notes
-
-- Daily scraping **won’t run in offseason** (March+ rule).
-- If no events exist, the daily script prints a clear “skipped” message.
-- All scripts emit **clean success/failure logs**.
-
----
-
-## ✅ Troubleshooting
-
-**GUI crashes on datetime compare**  
-Make sure `startDateEastern` is present; GUI now coerces mixed timezones safely.
 
 **No report email**
 Check `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, and `TO_EMAIL` in `.env`.
 
-**No daily scraping**
-Likely offseason rule or not a collection window; check console output.
+**Snapshot not updating**
+Ensure `DAILY_TEST_MODE` is not set to `1` in your environment. The daemon sets it to `0` automatically.
 
----
-
-## 🤖 Model
-
-Trains a **CatBoost regressor** (`src/modeling/train_catboost_min.py`) to predict the **future minimum ticket price** from a live snapshot.
-
-**Target:** `gap_pct` — the % drop from the current lowest price to the future minimum (log-transformed for stability).
-
-**Training data:** All available `price_snapshots_YYYY*.csv` files across `data/daily/` and `data/daily/archives/` are combined automatically. Each file is tagged with `season_year` derived from the filename, so the model can learn year-over-year pricing patterns.
-
-**Model output:** `models/catboost_price_min.cbm` (single file, retrained on all years each run).
-
-**Key features:**
-
-| Feature | Type | Notes |
-|---------|------|-------|
-| `homeTeam` | categorical | Strongest signal |
-| `week` | numeric | Season week |
-| `capacity` | numeric | Stadium capacity |
-| `kickoff_hour` | numeric | Affects demand patterns |
-| `hours_until_game` | numeric | Monotonic constraint applied |
-| `homeConference` | categorical | |
-| `homeTeamRank` / `awayTeamRank` | numeric | Missing indicator included |
-| `awayTeam` | categorical | Critical for marquee matchups |
-| `home/away_last_point_diff` | numeric | Recent team form |
-| `season_year` | numeric | Captures year-over-year price trends |
-
-Pinned features (`homeTeam`, `homeTeamRank`, `awayTeam`, `homeConference`, `hours_until_game`, `season_year`) are never dropped by the importance pruner regardless of score.
-
-The **GUI derives predicted timing** from the price trajectory curve — a separate time-to-min model is not needed.
+**Unicode errors on Windows**
+The daemon sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` for all child scripts automatically.
