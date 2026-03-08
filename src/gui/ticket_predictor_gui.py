@@ -117,6 +117,7 @@ class TicketApp(QMainWindow):
         # trajectory state
         self.traj_times = []
         self.traj_prices = []
+        self.traj_predicted_floor = np.nan
         self.playhead_line = None
         self.playhead_marker = None
         self.hover_annot = None
@@ -655,7 +656,7 @@ class TicketApp(QMainWindow):
                 return
 
             # Build trajectory via model (natural timestamps; no snapping)
-            self.traj_times, self.traj_prices, warn = self.build_trajectory(row)
+            self.traj_times, self.traj_prices, self.traj_predicted_floor, warn = self.build_trajectory(row)
             if warn: self._set_details_with_warning(row, warn)
             else:    self.render_details(row)
 
@@ -669,16 +670,14 @@ class TicketApp(QMainWindow):
         self.details_label.setText(base + f"<div style='margin-top:8px;color:#b00020;'>⚠️ {warn}</div>")
 
     def render_details(self, row):
-        # compute min from trajectory
+        # Predicted floor from model (single value)
         traj_min_txt = "—"
         predicted_min_price = np.nan
         predicted_min_time = pd.NaT
-        if self.traj_times and self.traj_prices:
-            idx = int(np.nanargmin(pd.to_numeric(pd.Series(self.traj_prices), errors="coerce")))
-            ts_min = pd.to_datetime(self.traj_times[idx]); p_min = float(self.traj_prices[idx])
-            traj_min_txt = f"${p_min:,.2f} on {ts_min.strftime('%a, %b %d, %Y %I:%M %p')}"
-            predicted_min_price = p_min
-            predicted_min_time = ts_min
+        floor = getattr(self, "traj_predicted_floor", np.nan)
+        if np.isfinite(float(floor)) if floor is not None and not pd.isna(floor) else False:
+            predicted_min_price = float(floor)
+            traj_min_txt = f"${predicted_min_price:,.2f} (model estimate)"
         kickoff = pd.to_datetime(row.get("startDateEastern"), errors="coerce")
         if pd.notna(kickoff) and kickoff < pd.Timestamp.now():
             traj_min_txt = "Post-Kickoff"
@@ -748,59 +747,44 @@ class TicketApp(QMainWindow):
         """
 
     def build_trajectory(self, row: dict):
+        """Return (historical_times, historical_prices, predicted_floor, warn).
+
+        historical_times/prices: actual observed lowest_price from snapshots
+        predicted_floor: single model prediction of the expected minimum price
+        """
         from gui.predict_trajectory import predict_for_times
         warn = ""
+        event_id = row.get("event_id")
         kickoff = pd.to_datetime(row.get("startDateEastern"))
-        now = pd.Timestamp.now()
         if pd.isna(kickoff):
-            return [], [], "Missing kickoff datetime for this event."
-        start = max(now, now.floor("T"))
-        end = kickoff
-        if end <= start:
-            start = end - pd.Timedelta(hours=6)
+            return [], [], np.nan, "Missing kickoff datetime for this event."
 
-        # Three-phase time grid:
-        #   Phase 1 — now → Aug 1: weekly points
-        #   Phase 2 — Aug 1 → kickoff-7d: daily points
-        #   Phase 3 — kickoff-7d → kickoff: 4 time-of-day points per day (00/06/12/18)
-        season_start = pd.Timestamp(f"{kickoff.year}-08-01")
-        pre_final = kickoff - pd.Timedelta(days=7)
+        # Historical prices from actual snapshots for this event
+        hist_times, hist_prices = [], []
+        snaps = getattr(self, "snapshots", None)
+        if snaps is not None and event_id is not None and "event_id" in snaps.columns:
+            ev = snaps[snaps["event_id"].astype(str) == str(event_id)].copy()
+            if not ev.empty and "date_collected" in ev.columns:
+                ev["_dt"] = pd.to_datetime(ev["date_collected"], errors="coerce")
+                ev["lowest_price"] = pd.to_numeric(ev["lowest_price"], errors="coerce")
+                ev = ev.dropna(subset=["_dt", "lowest_price"]).sort_values("_dt")
+                # Keep one (minimum) price per date to reduce noise
+                ev_daily = ev.groupby(ev["_dt"].dt.normalize())["lowest_price"].min().reset_index()
+                ev_daily.columns = ["_dt", "lowest_price"]
+                hist_times = list(ev_daily["_dt"])
+                hist_prices = list(ev_daily["lowest_price"])
 
-        phase1_end = min(season_start, end)
-        phase2_end = min(pre_final, end)
-
-        times_list = []
-
-        # Phase 1: weekly
-        if start < phase1_end:
-            weekly = pd.date_range(start=start, end=phase1_end, freq="W-MON")
-            times_list.extend(weekly)
-
-        # Phase 2: daily
-        phase2_start = max(start, season_start)
-        if phase2_start < phase2_end:
-            daily = pd.date_range(start=phase2_start.normalize(), end=phase2_end.normalize(), freq="D")
-            times_list.extend(daily)
-
-        # Phase 3: 4 buckets per day (00:00, 06:00, 12:00, 18:00)
-        phase3_start = max(start, pre_final)
-        if phase3_start < end:
-            bucket_range = pd.date_range(start=phase3_start.normalize(), end=end, freq="6H")
-            bucket_range = bucket_range[bucket_range.hour.isin([0, 6, 12, 18])]
-            times_list.extend(bucket_range)
-
-        # Deduplicate and sort, always include start and end
-        times_list = sorted(set([start, end] + list(times_list)))
-        times = pd.DatetimeIndex(times_list)
-        if len(times) < 2:
-            times = pd.DatetimeIndex([start, end])
-
+        # Single model prediction: predicted floor at current snapshot time
+        predicted_floor = np.nan
         try:
-            prices = predict_for_times(row, list(times))
-            return list(times), list(prices), warn
+            now_ts = pd.Timestamp.now()
+            pred_prices = predict_for_times(row, [now_ts])
+            if pred_prices:
+                predicted_floor = float(pred_prices[0])
         except Exception as e:
-            warn = f"Prediction failed: {e}"
-            return [], [], warn
+            warn = f"Model prediction failed: {e}"
+
+        return hist_times, hist_prices, predicted_floor, warn
 
     # ---------------- Chart + hover interactions ----------------
     def render_chart(self, event_id, reuse_axes: bool = True):
@@ -814,9 +798,9 @@ class TicketApp(QMainWindow):
             ax = self.chart_canvas.figure.add_subplot(111)
             self.ax = ax
 
-        # Validate trajectory
+        # Validate historical data
         if not self.traj_times or not self.traj_prices or len(self.traj_times) != len(self.traj_prices):
-            ax.set_title("No forecast trajectory available")
+            ax.set_title("No price history available yet")
             ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
             self.chart_canvas.draw_idle(); return
 
@@ -825,32 +809,26 @@ class TicketApp(QMainWindow):
         ok = tt.notna() & yy.notna()
         tt, yy = tt[ok], yy[ok]
         if tt.empty:
-            ax.set_title("No forecast trajectory available")
+            ax.set_title("No price history available yet")
             ax.set_xlabel("Date"); ax.set_ylabel("Price ($)")
             self.chart_canvas.draw_idle(); return
 
-        # Plot
-        ax.plot(tt, yy, linewidth=2.0, label="Predicted price trajectory")
-        ax.scatter(tt, yy, s=18, alpha=0.9)
+        # Plot actual observed prices
+        ax.plot(tt, yy, linewidth=2.0, color="#1565c0", label="Observed lowest price")
+        ax.scatter(tt, yy, s=36, color="#1565c0", alpha=0.9, zorder=5)
 
-        # X-axis: smart locator/formatter based on span
+        # Overlay model's predicted floor as a dashed horizontal line
+        floor = getattr(self, "traj_predicted_floor", np.nan)
+        if floor is not None and not pd.isna(floor) and np.isfinite(float(floor)):
+            ax.axhline(float(floor), linestyle="--", color="#c62828", linewidth=1.5,
+                       label=f"Predicted floor: ${float(floor):,.0f}", alpha=0.85)
+
+        # X-axis: daily ticks for historical data
         x_min = tt.min().normalize()
-        x_max = (tt.max().normalize() + pd.Timedelta(days=1))
+        x_max = tt.max().normalize() + pd.Timedelta(days=1)
         ax.set_xlim(x_min, x_max)
-        span_days = (x_max - x_min).days
-
-        if span_days > 60:
-            # Phase 1 territory: weekly ticks
-            ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0, interval=1))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-        elif span_days > 7:
-            # Phase 2 territory: daily ticks
-            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-        else:
-            # Phase 3 territory: 6-hour ticks with time-of-day labels
-            ax.xaxis.set_major_locator(mdates.HourLocator(byhour=[0, 6, 12, 18]))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d\n%I%p"))
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
         ax.tick_params(axis="x", which="major", labelsize=9, pad=4, bottom=True, labelbottom=True)
 
         # Gridlines
@@ -875,24 +853,18 @@ class TicketApp(QMainWindow):
                 zorder=5
             )
 
-        # Title/playhead
-        x0, y0 = tt.iloc[0], float(yy.iloc[0])
-        self.playhead_line = ax.axvline(x0, linestyle="--", alpha=0.6)
-        self.playhead_marker = ax.plot([x0], [y0], marker="o", markersize=6)[0]
-
-        # Hover annotation
-        if self.hover_annot is None:
-            self.hover_annot = ax.annotate(
-                "", xy=(0,0), xytext=(12,12), textcoords="offset points",
-                bbox=dict(boxstyle="round", fc="white", ec="#888"),
-                arrowprops=dict(arrowstyle="->", color="#666")
-            )
-        self.hover_annot.set_visible(False)
+        # Title
+        row_ref = getattr(self, "current_row", {})
+        home = row_ref.get("homeTeam", "?"); away = row_ref.get("awayTeam", "?")
+        ax.set_title(f"{home} vs {away} — Ticket Price History", fontsize=12, fontweight="bold")
 
         # Keep series for hover
         self._tt_series = tt.reset_index(drop=True)
         self._yy_series = yy.reset_index(drop=True)
-        self._update_title_and_marker(0)
+        self.playhead_line = None
+        self.playhead_marker = None
+        if self.hover_annot is not None:
+            self.hover_annot.set_visible(False)
 
         # **Critical fix:** disable constrained layout and add padding
         self.chart_canvas.figure.set_constrained_layout(False)
