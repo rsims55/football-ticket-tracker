@@ -366,7 +366,7 @@ def job_daily_snapshot(paths: Paths) -> None:
 def job_train_model(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
-        run_py_script("src/modeling/train_price_model.py", paths.app_root, env=env)
+        run_py_script("src/modeling/train_catboost_min.py", paths.app_root, env=env)
     finally:
         if _sync_mode() == "perjob":
             do_sync(paths, "train_model")
