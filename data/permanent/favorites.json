@@ -17,6 +17,78 @@
       "homeTeam": "Florida State Seminoles",
       "awayTeam": "New Mexico State Aggies",
       "startDateEastern": "2026-08-29 04:00:00"
+    },
+    {
+      "event_id": "7622637",
+      "homeTeam": "Georgia Bulldogs",
+      "awayTeam": "Western Kentucky Hilltoppers",
+      "startDateEastern": "2026-09-12 04:00:00"
+    },
+    {
+      "event_id": "7704563",
+      "homeTeam": "Pittsburgh Panthers",
+      "awayTeam": "Syracuse Orange",
+      "startDateEastern": "2026-09-17 04:00:00"
+    },
+    {
+      "event_id": "7646292",
+      "homeTeam": "Indiana Hoosiers",
+      "awayTeam": "Western Kentucky Hilltoppers",
+      "startDateEastern": "2026-09-19 04:00:00"
+    },
+    {
+      "event_id": "7693144",
+      "homeTeam": "Cincinnati Bearcats",
+      "awayTeam": "Kansas State Wildcats",
+      "startDateEastern": "2026-09-26 04:00:00"
+    },
+    {
+      "event_id": "7704618",
+      "homeTeam": "North Carolina State Wolfpack",
+      "awayTeam": "Wake Forest Demon Deacons",
+      "startDateEastern": "2026-10-10 04:00:00"
+    },
+    {
+      "event_id": "7622660",
+      "homeTeam": "Texas A&M Aggies",
+      "awayTeam": "The Citadel Bulldogs",
+      "startDateEastern": "2026-10-17 04:00:00"
+    },
+    {
+      "event_id": "7692933",
+      "homeTeam": "Texas Tech Red Raiders",
+      "awayTeam": "Arizona State Sun Devils",
+      "startDateEastern": "2026-10-17 04:00:00"
+    },
+    {
+      "event_id": "7707581",
+      "homeTeam": "Maryland Terrapins",
+      "awayTeam": "Rutgers Scarlet Knights",
+      "startDateEastern": "2026-10-17 04:00:00"
+    },
+    {
+      "event_id": "7792008",
+      "homeTeam": "New Mexico Lobos",
+      "awayTeam": "North Dakota State Bison",
+      "startDateEastern": "NaT"
+    },
+    {
+      "event_id": "7704554",
+      "homeTeam": "Syracuse Orange",
+      "awayTeam": "Clemson Tigers",
+      "startDateEastern": "2026-11-06 05:00:00"
+    },
+    {
+      "event_id": "7620889",
+      "homeTeam": "Mississippi Rebels",
+      "awayTeam": "Mississippi State Bulldogs",
+      "startDateEastern": "2026-11-27 05:00:00"
+    },
+    {
+      "event_id": "7620847",
+      "homeTeam": "Alabama Crimson Tide",
+      "awayTeam": "Auburn Tigers",
+      "startDateEastern": "2026-11-28 05:00:00"
     }
   ]
 }
