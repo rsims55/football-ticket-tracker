@@ -193,6 +193,8 @@ def _maybe_add_catboost_summary(report, today_str):
     total = feats["importance"].sum() or 1.0
 
     report.append("## 🧠 Latest CatBoost Training Summary\n")
+    report.append(f"- Model last trained: **{_fmt_mtime(MODEL_PATH)}**")
+    report.append(f"- Features in model: **{len(feats)}**")
     report.append(f"- Rows evaluated: **{int(rep_row.get('rows_total_used', 0))}**")
     if "gap_pct_mae" in rep_row:
         report.append(f"- gap_pct MAE: **{rep_row['gap_pct_mae']:.4f}**")
@@ -1062,7 +1064,10 @@ def build_report() -> str:
     report.append("## 🗓️ Season State & Data Freshness\n")
     report.append(f"- Season state: **{_season_state()}**")
     report.append(f"- Snapshots last updated: **{_fmt_mtime(SNAP_PATH)}**")
-    report.append(f"- Predictions last updated: **{_fmt_mtime(PRED_PATH)}**")
+    report.append(f"- Model last trained: **{_fmt_mtime(MODEL_PATH)}**")
+    pred_mtime = _fmt_mtime(PRED_PATH)
+    pred_note = " _(predictions not yet generated for current season)_" if pred_mtime == "missing" else ""
+    report.append(f"- Predictions last updated: **{pred_mtime}**{pred_note}")
     report.append("- Postseason games are **excluded** from model + GUI (for now).")
     report.append("")
 
