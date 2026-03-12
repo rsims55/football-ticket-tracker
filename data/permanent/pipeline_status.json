@@ -1,16 +1,9 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (2932 new rows). Total now: 13040",
-    "extra": {
-      "events_total": 2985,
-      "rows_new": 2932,
-      "rows_total": 13040,
-      "scraped_fail": 0,
-      "scraped_ok": 269,
-      "started_at": "2026-03-12 10:16:52"
-    },
-    "status": "success",
-    "updated_at": "2026-03-12 11:31:19"
+    "detail": "Unhandled exception: 'date_local'",
+    "extra": {},
+    "status": "failed",
+    "updated_at": "2026-03-12 12:04:14"
   },
   "health_check": {
     "detail": "Health check passed",
