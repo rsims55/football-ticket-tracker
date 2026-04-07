@@ -48,12 +48,12 @@
     "updated_at": "2026-04-07 06:48:05"
   },
   "weekly_report": {
-    "detail": "Weekly report generated: reports\\weekly\\2026-04-06\\weekly_report_2026-04-06.md",
+    "detail": "Weekly report generated: reports\\weekly\\2026-04-07\\weekly_report_2026-04-07.md",
     "extra": {
-      "path": "reports\\weekly\\2026-04-06\\weekly_report_2026-04-06.md"
+      "path": "reports\\weekly\\2026-04-07\\weekly_report_2026-04-07.md"
     },
     "status": "success",
-    "updated_at": "2026-04-06 08:15:08"
+    "updated_at": "2026-04-07 08:15:08"
   },
   "weekly_update": {
     "detail": "Weekly update complete for 2026",
