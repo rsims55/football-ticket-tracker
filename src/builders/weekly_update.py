@@ -628,15 +628,23 @@ def _fetch_rankings(year: int) -> None:
 
 def _fetch_rankings_history_api(year: int) -> None:
     log.info("Fetching historical rankings (CFBD /rankings)…")
-    try:
-        rf = RankingsApiFetcher(year=year, season_type="both")
-        df = rf.fetch()
-        if df is None or df.empty:
-            log.warning("No historical rankings returned; will fall back to latest rankings file.")
-            return
-        rf.write_artifact(df)
-    except Exception as e:
-        log.warning("Historical rankings fetch failed: %s — proceeding without history.", e)
+    parts: list[pd.DataFrame] = []
+    for stype in ("preseason", "both"):
+        try:
+            rf = RankingsApiFetcher(year=year, season_type=stype)
+            df = rf.fetch()
+            if df is not None and not df.empty:
+                parts.append(df)
+        except Exception as e:
+            log.warning("Rankings fetch (%s) failed: %s", stype, e)
+    if not parts:
+        log.warning("No historical rankings returned; will fall back to latest rankings file.")
+        return
+    combined = pd.concat(parts, ignore_index=True).drop_duplicates(
+        subset=["season", "week", "poll", "rank"], keep="first"
+    )
+    rf = RankingsApiFetcher(year=year)
+    rf.write_artifact(combined)
 
 
 def _apply_rankings(

@@ -48,9 +48,22 @@ def _resolve_file(env_name: str, default_rel: Path) -> Path:
         return p
     return PROJ_DIR / default_rel
 
-# Combined all-years snapshot is the primary source; year-specific file is the fallback
+# Year-specific file is preferred (faster); all-years combined is the fallback
 SNAPSHOT_PATH = _resolve_file("SNAPSHOT_PATH", Path("data/daily/price_snapshots.csv"))
 SNAPSHOT_FALLBACK = _resolve_file("SNAPSHOT_PATH_FALLBACK", Path("data/daily") / f"price_snapshots_{SEASON_YEAR}.csv")
+
+# Columns actually used by the GUI and model — loading only these cuts read time significantly.
+_SNAPSHOT_COLS_NEEDED = {
+    "event_id", "title", "week", "homeTeam", "awayTeam",
+    "homeConference", "awayConference", "date_local", "time_local",
+    "lowest_price", "stadium", "capacity", "neutralSite", "conferenceGame",
+    "isRivalry", "isRankedMatchup", "homeTeamRank", "awayTeamRank",
+    "date_collected", "time_collected",
+    "home_last_point_diff_at_snapshot", "away_last_point_diff_at_snapshot",
+    "startDateEastern", "is_postseason",
+    "home_wins_at_snapshot", "home_losses_at_snapshot",
+    "away_wins_at_snapshot", "away_losses_at_snapshot",
+}
 PRED_PATH     = _resolve_file("OUTPUT_PATH",  Path("data/predicted/predicted_prices_optimal.csv"))
 MERGED_PATH   = _resolve_file("MERGED_OUT",   Path("data/predicted/predicted_with_context.csv"))
 
@@ -134,6 +147,7 @@ class TicketApp(QMainWindow):
             raise
 
         self.init_ui()
+        self._show_favorites_panel()
 
         # timers
         self.timer = QTimer(self)
@@ -211,10 +225,23 @@ class TicketApp(QMainWindow):
         return f"{start.strftime('%a, %b %d %I:%M %p')} → {end.strftime('%a, %b %d %I:%M %p')}"
 
     def load_snapshot_data(self) -> pd.DataFrame:
-        path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else SNAPSHOT_FALLBACK
-        if not path.exists():
+        # Prefer the year-specific file — it's already filtered and smaller.
+        # Fall back to the combined all-years file only if the year file is missing.
+        if SNAPSHOT_FALLBACK.exists():
+            path = SNAPSHOT_FALLBACK
+            needs_date_filter = False
+        elif SNAPSHOT_PATH.exists():
+            path = SNAPSHOT_PATH
+            needs_date_filter = True
+        else:
             raise FileNotFoundError(f"Could not find snapshot CSV at '{SNAPSHOT_PATH}' or '{SNAPSHOT_FALLBACK}'")
-        snaps = pd.read_csv(path, low_memory=False)
+
+        # Only load columns we actually use — skips ~8 unused columns (team_slug,
+        # team_name, team_url, offer_url, highest_price, average_price,
+        # listing_count, days_until_game).
+        header_cols = pd.read_csv(path, nrows=0).columns.tolist()
+        use_cols = [c for c in header_cols if c in _SNAPSHOT_COLS_NEEDED]
+        snaps = pd.read_csv(path, usecols=use_cols, low_memory=False)
         snaps["lowest_price"] = pd.to_numeric(snaps.get("lowest_price"), errors="coerce")
         snaps["collected_dt"] = self._infer_collected_dt(snaps)
         if "startDateEastern" not in snaps.columns:
@@ -230,9 +257,9 @@ class TicketApp(QMainWindow):
         if "awayTeam" not in snaps.columns and "away_team_guess" in snaps.columns:
             snaps = snaps.rename(columns={"away_team_guess": "awayTeam"})
         snaps = snaps[~self._is_postseason_row(snaps)].copy()
-        # Filter to current season year using date_local (reliably populated for all rows)
-        # Window: Mar 1 -> Feb 1 next year to cover pre-season scouting through bowl season
-        if "date_local" in snaps.columns:
+        # Date filter only needed when loading the all-years combined file.
+        # The year-specific file is already scoped to this season.
+        if needs_date_filter and "date_local" in snaps.columns:
             game_date = pd.to_datetime(snaps["date_local"], errors="coerce")
             start = pd.Timestamp(f"{SEASON_YEAR}-03-01")
             end = pd.Timestamp(f"{SEASON_YEAR+1}-02-01")
@@ -442,10 +469,22 @@ class TicketApp(QMainWindow):
         )
         self.fav_button.clicked.connect(self.toggle_favorite)
 
+        self.show_favs_button = QPushButton("⭐ My Games")
+        self.show_favs_button.setFixedHeight(50)
+        self.show_favs_button.setMinimumWidth(120)
+        self.show_favs_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.show_favs_button.setStyleSheet(
+            "QPushButton { background-color: #fff8e1; color: #6d4c00; font-size: 14px; font-weight: 700; "
+            "border: 1px solid #f9a825; border-radius: 8px; padding: 8px 14px; }"
+            "QPushButton:hover { background-color: #ffe082; }"
+        )
+        self.show_favs_button.clicked.connect(self._show_favorites_panel)
+
         controls_row.addWidget(self.home_combo, 1)
         controls_row.addWidget(self.away_combo, 1)
         controls_row.addWidget(self.predict_button, 1)
         controls_row.addWidget(self.fav_button, 0)
+        controls_row.addWidget(self.show_favs_button, 0)
         top_layout.addLayout(controls_row)
 
         # Details (scrollable; at least as tall as chart)
@@ -457,6 +496,8 @@ class TicketApp(QMainWindow):
             "QLabel { background-color: #fafafa; border: 1px solid #e4e7eb; padding: 12px; font-size: 14px; border-radius: 8px; }"
         )
         self.details_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.details_label.setOpenLinks(False)
+        self.details_label.linkActivated.connect(self._load_favorite_by_event_id)
 
         self.details_scroll = QScrollArea()
         self.details_scroll.setWidget(self.details_label)
@@ -588,7 +629,7 @@ class TicketApp(QMainWindow):
                         dt = self._to_eastern(v)
                         if pd.notna(dt):
                             t = pd.to_datetime(dt).time()
-                            if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
+                            if t and not (t.minute == 0 and t.hour in (0, 3, 4, 5)):
                                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
 
         # Fallback: match by teams/date in schedule file
@@ -604,7 +645,7 @@ class TicketApp(QMainWindow):
                     dt = self._to_eastern(sched[dt_key])
                     if pd.notna(dt):
                         t = pd.to_datetime(dt).time()
-                        if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
+                        if t and not (t.minute == 0 and t.hour in (0, 3, 4, 5)):
                             return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
 
         # Prefer explicit time fields first (avoid placeholder midnight/3am)
@@ -624,7 +665,7 @@ class TicketApp(QMainWindow):
 
         if base_dt is not None and pd.notna(base_dt):
             t = pd.to_datetime(base_dt).time()
-            if t and not ((t.hour == 0 and t.minute == 0) or (t.hour == 3 and t.minute == 0)):
+            if t and not (t.minute == 0 and t.hour in (0, 3, 4, 5)):
                 return datetime.strptime(f"{t.hour:02d}:{t.minute:02d}", "%H:%M").strftime("%I:%M %p").lstrip("0")
         return "TBD"
 
@@ -691,6 +732,93 @@ class TicketApp(QMainWindow):
         self._save_favorites(favs)
         self._update_fav_button()
 
+    def _show_favorites_panel(self):
+        favs = self._load_favorites()
+        if not favs:
+            self.details_label.setText(
+                "<div style='padding:12px; color:#555;'>"
+                "No favorites yet. Run a prediction and click ☆ to save a game.</div>"
+            )
+            return
+
+        rows_html = ""
+        now = pd.Timestamp.now()
+        upcoming, past = [], []
+        for fav in favs:
+            eid = str(fav.get("event_id", ""))
+            home = fav.get("homeTeam", "?")
+            away = fav.get("awayTeam", "?")
+            date_str = "—"
+            kickoff_str = "TBD"
+            game_dt = pd.NaT
+            if eid and "event_id" in self.df.columns:
+                match = self.df[self.df["event_id"].astype(str) == eid]
+                if not match.empty:
+                    r = match.sort_values("startDateEastern").iloc[0].to_dict()
+                    game_dt = pd.to_datetime(self._to_eastern(r.get("startDateEastern")), errors="coerce")
+                    if pd.notna(game_dt):
+                        date_str = game_dt.strftime("%a, %b %d, %Y")
+                    kickoff_str = self._format_kickoff(r)
+            else:
+                raw = fav.get("startDateEastern", "")
+                if raw and raw not in ("NaT", ""):
+                    try:
+                        game_dt = pd.to_datetime(raw, errors="coerce")
+                        if pd.notna(game_dt):
+                            date_str = game_dt.strftime("%a, %b %d, %Y")
+                    except Exception:
+                        pass
+            entry = (game_dt, eid, home, away, date_str, kickoff_str)
+            if pd.isna(game_dt) or game_dt >= now:
+                upcoming.append(entry)
+            else:
+                past.append(entry)
+
+        upcoming.sort(key=lambda x: x[0] if pd.notna(x[0]) else pd.Timestamp.max)
+        past.sort(key=lambda x: x[0] if pd.notna(x[0]) else pd.Timestamp.min, reverse=True)
+
+        def _render_section(title, entries):
+            if not entries:
+                return ""
+            items = ""
+            for _, eid, home, away, date_str, kickoff_str in entries:
+                kick_part = f"&nbsp;·&nbsp; {kickoff_str}" if kickoff_str and kickoff_str != "TBD" else ""
+                items += (
+                    f"<div style='padding:7px 0; border-bottom:1px solid #eee;'>"
+                    f"<a href='{eid}' style='font-size:15px; font-weight:700; color:#1a73e8; text-decoration:none;'>"
+                    f"{home} vs {away}</a><br>"
+                    f"<span style='font-size:12px; color:#666;'>{date_str}{kick_part}</span>"
+                    f"</div>"
+                )
+            return f"<div style='margin-top:10px;'><b style='font-size:13px; color:#555;'>{title}</b>{items}</div>"
+
+        html = (
+            "<div style='font-size:15px; line-height:1.5;'>"
+            "<h2 style='margin-bottom:4px;'>⭐ My Favorites</h2>"
+            "<p style='color:#888; font-size:12px; margin:0 0 6px 0;'>Click a game to load its price chart.</p>"
+            + _render_section("Upcoming", upcoming)
+            + _render_section("Past Games", past)
+            + "</div>"
+        )
+        self.details_label.setText(html)
+
+    def _load_favorite_by_event_id(self, event_id: str):
+        if "event_id" not in self.df.columns:
+            return
+        match = self.df[self.df["event_id"].astype(str) == event_id]
+        if match.empty:
+            return
+        r = match.sort_values("startDateEastern").iloc[0]
+        home = str(r.get("homeTeam", ""))
+        away = str(r.get("awayTeam", ""))
+        idx = self.home_combo.findText(home)
+        if idx >= 0:
+            self.home_combo.setCurrentIndex(idx)
+        idx2 = self.away_combo.findText(away)
+        if idx2 >= 0:
+            self.away_combo.setCurrentIndex(idx2)
+        self.get_prediction()
+
     def _fmt_money(self, x) -> str:
         try:
             return f"${float(x):,.2f}"
@@ -723,6 +851,23 @@ class TicketApp(QMainWindow):
             row = (upcoming.iloc[0] if not upcoming.empty else match.iloc[0]).to_dict()
 
             self.current_row = row; self.current_event_id = row.get("event_id")
+
+            # Refresh prediction-relevant fields from the most recent snapshot for
+            # this event so current_price and win/loss stats are up to date.
+            event_id_str = str(row.get("event_id")) if row.get("event_id") is not None else None
+            if event_id_str and "event_id" in match.columns and "date_collected" in match.columns:
+                event_snaps = match[match["event_id"].astype(str) == event_id_str]
+                if not event_snaps.empty:
+                    latest = event_snaps.sort_values("date_collected", ascending=False).iloc[0].to_dict()
+                    for k in ("lowest_price", "home_last_point_diff_at_snapshot",
+                              "away_last_point_diff_at_snapshot", "home_wins_at_snapshot",
+                              "home_losses_at_snapshot", "away_wins_at_snapshot",
+                              "away_losses_at_snapshot", "homeTeamRank", "awayTeamRank",
+                              "isRankedMatchup"):
+                        if k in latest and pd.notna(latest.get(k)):
+                            row[k] = latest[k]
+                    self.current_row = row
+
             self.update_countdown_live()
             self._update_fav_button()
 

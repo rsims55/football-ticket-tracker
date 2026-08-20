@@ -93,7 +93,7 @@ USE_CONFERENCE_GAME = os.getenv("USE_CONFERENCE_GAME", "0") == "1"
 USE_RIVALRY = os.getenv("USE_RIVALRY", "1") == "1"
 USE_RANKED_MATCHUP = os.getenv("USE_RANKED_MATCHUP", "1") == "1"
 USE_HOME_RANK = os.getenv("USE_HOME_RANK", "1") == "1"
-USE_AWAY_RANK = os.getenv("USE_AWAY_RANK", "0") == "1"
+USE_AWAY_RANK = os.getenv("USE_AWAY_RANK", "1") == "1"
 USE_KICKOFF_DAY = os.getenv("USE_KICKOFF_DAY", "1") == "1"
 USE_AWAY_TEAM = os.getenv("USE_AWAY_TEAM", "1") == "1"
 USE_STADIUM = os.getenv("USE_STADIUM", "0") == "1"
@@ -142,7 +142,7 @@ if USE_STADIUM:
 #   often missing, but its _missing indicator proves the column matters.
 # awayTeam / awayConference: matchup identity is critical for marquee games
 #   and gets pruned unfairly when overall distribution is home-dominated.
-PINNED_NUMERIC: set = {"hours_until_game", "homeTeamRank", "season_year"}
+PINNED_NUMERIC: set = {"hours_until_game", "homeTeamRank", "awayTeamRank", "season_year"}
 PINNED_CATEGORICAL: set = {"homeTeam", "awayTeam", "homeConference"}
 
 FUTURE_MIN_PRICE = "future_min_price"
@@ -179,8 +179,11 @@ def _prune_by_importance(
         if len(keep) < len(feats):
             keep.append(feats.loc[len(keep), "feature"])
         keep_set = set(keep)
-        num_kept = [c for c in numeric_features if c in keep_set or c in PINNED_NUMERIC]
-        cat_kept = [c for c in categorical_features if c in keep_set or c in PINNED_CATEGORICAL]
+        # Features not in the old CSV are "new" — keep them unconditionally
+        # so newly added features aren't silently dropped on the first retrain.
+        known_features = set(feats["feature"].tolist())
+        num_kept = [c for c in numeric_features if c in keep_set or c in PINNED_NUMERIC or c not in known_features]
+        cat_kept = [c for c in categorical_features if c in keep_set or c in PINNED_CATEGORICAL or c not in known_features]
         return num_kept, cat_kept
     except Exception:
         return numeric_features, categorical_features
@@ -560,14 +563,10 @@ def train():
 
     df = _build_training_dataset(df)
 
-    # Only use completed events — games where kickoff is in the past and the true
-    # minimum price is known across the full snapshot series. Upcoming games have
-    # incomplete targets (suffix min from a partial series) that would mislead the model.
     if "event_complete" in df.columns:
-        n_events_before = df["event_id"].nunique()
-        df = df[df["event_complete"].fillna(False)].copy()
-        n_events_after = df["event_id"].nunique()
-        print(f"  ✅ Completed events only: {n_events_after:,} events ({n_events_before - n_events_after:,} future events excluded from train/test)")
+        n_complete = df.loc[df["event_complete"].fillna(False), "event_id"].nunique()
+        n_total = df["event_id"].nunique()
+        print(f"  📊 Events: {n_complete:,} completed, {n_total - n_complete:,} upcoming (all included in training)")
 
     counts = df["event_id"].value_counts()
     df = df[df["event_id"].map(counts) > 1].copy()

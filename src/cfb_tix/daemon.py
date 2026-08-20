@@ -98,17 +98,55 @@ def setup_logging(log_file: Path) -> None:
 _LOCKFILE_PATH: Path | None = None
 
 
+def _pid_is_alive(pid: int) -> bool:
+    """Return True if a process with this PID is currently running (Windows-safe)."""
+    import ctypes
+    SYNCHRONIZE = 0x00100000
+    handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+    if handle == 0:
+        return False
+    # WaitForSingleObject with timeout 0: WAIT_OBJECT_0 (0) means process exited
+    result = ctypes.windll.kernel32.WaitForSingleObject(handle, 0)
+    ctypes.windll.kernel32.CloseHandle(handle)
+    return result != 0  # non-zero (WAIT_TIMEOUT=258) means still running
+
+
 def _acquire_lock(paths: Paths) -> bool:
-    """Prevent multiple daemon instances: create an exclusive lock file."""
+    """Prevent multiple daemon instances: create an exclusive lock file.
+
+    If a stale lock exists (PID no longer running), it is removed and the
+    lock is re-acquired so restarts after a crash don't block startup.
+    """
     global _LOCKFILE_PATH
     lock_path = paths.logs_dir / "daemon.lock"
+
+    # Staleness check: if lock exists, verify the stored PID is still alive
+    if lock_path.exists():
+        try:
+            stored_pid = int(lock_path.read_text(encoding="utf-8").strip())
+            if _pid_is_alive(stored_pid):
+                logging.info(
+                    "Another daemon instance is running (PID %d, lock present). Exiting.",
+                    stored_pid,
+                )
+                return False
+            else:
+                logging.warning(
+                    "Stale lock file found (PID %d is dead); removing and taking over.",
+                    stored_pid,
+                )
+                lock_path.unlink(missing_ok=True)
+        except Exception as e:
+            logging.warning("Could not read stale lock file (%s); removing it.", e)
+            lock_path.unlink(missing_ok=True)
+
     try:
-        # O_EXCL ensures failure if file already exists
+        # O_EXCL ensures failure if file already exists (race-safe)
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(f"{os.getpid()}\n")
         _LOCKFILE_PATH = lock_path
-        logging.info("Acquired daemon lock: %s", lock_path)
+        logging.info("Acquired daemon lock: %s (PID %d)", lock_path, os.getpid())
         return True
     except FileExistsError:
         logging.info(
@@ -367,6 +405,8 @@ def job_train_model(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/modeling/train_catboost_min.py", paths.app_root, env=env)
+        # Run predictions immediately after training so they always use the fresh model.
+        run_py_script("src/modeling/predict_price.py", paths.app_root, env=env)
     finally:
         if _sync_mode() == "perjob":
             do_sync(paths, "train_model")
@@ -398,6 +438,8 @@ def job_weekly_update(paths: Paths) -> None:
             run_py_script(
                 "src/reports/generate_weekly_report.py", paths.app_root, env=env
             )
+        # Note: weekly_update.py already calls save_completed_fbs_games and
+        # RankingsApiFetcher internally — no separate results_fetcher call needed here.
     finally:
         if _sync_mode() == "perjob":
             do_sync(paths, "weekly_update")
@@ -477,24 +519,60 @@ def job_send_report(paths: Paths) -> None:
 import random as _random
 
 
-def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None) -> list:
-    """Pick 4 random snapshot start times for today, one per 6-hour bucket.
+def _hours_to_nearest_game(paths: Paths, tz) -> float:
+    """Return hours until the nearest upcoming game kickoff, or inf if none found."""
+    import glob as _glob
+    import re as _re
+    pattern = str(paths.repo_root / "data" / "weekly" / "full_*_schedule.csv")
+    files = sorted(_glob.glob(pattern), key=lambda p: Path(p).stat().st_mtime, reverse=True)
+    if not files:
+        return float("inf")
+    try:
+        import pandas as _pd
+        df = _pd.read_csv(files[0], usecols=lambda c: c in ("startDateEastern", "startTimeTBD"), low_memory=False)
+        if "startDateEastern" not in df.columns:
+            return float("inf")
+        now = datetime.datetime.now(tz)
+        kickoffs = _pd.to_datetime(df["startDateEastern"], errors="coerce", utc=True)
+        kickoffs = kickoffs.dropna()
+        upcoming = kickoffs[kickoffs > _pd.Timestamp(now)]
+        if upcoming.empty:
+            return float("inf")
+        nearest = upcoming.min()
+        return (nearest.to_pydatetime() - now).total_seconds() / 3600.0
+    except Exception:
+        return float("inf")
 
-    Each run is constrained to start at least 2.5 hours after the previous
-    run's start (90min scrape + 60min buffer), but the window covers the full
-    bucket whenever the prior run finishes early enough.
 
-    prior_day_run3: the start time of the previous day's last run (Run 3),
-    used to prevent the new day's Run 0 from overlapping if Run 3 ran late.
+def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None,
+                         hours_to_game: float = float("inf")) -> list:
+    """Pick snapshot start times for today based on proximity to the nearest game.
+
+    Normal (>7 days to kickoff): 4 runs in 6-hour buckets [0,6,12,18].
+    Game week (≤7 days):        8 runs in 3-hour buckets [0,3,6,9,12,15,18,21].
+
+    Each run is constrained to start at least (bucket_width - 0.5h) after the
+    previous run's start so scrapes don't overlap.
+
+    prior_day_run3: the start time of the previous day's last run, used to
+    prevent the new day's first run from overlapping if it ran late.
     """
     today = datetime.datetime.now(tz).date()
-    bucket_hours = [0, 6, 12, 18]
-    scrape_plus_gap = 2.5  # hours
+
+    if hours_to_game <= 7 * 24:
+        bucket_hours = list(range(0, 24, 3))   # 8 runs × 3-hour buckets
+        scrape_plus_gap = 2.0
+        bucket_width = 3
+    else:
+        bucket_hours = [0, 6, 12, 18]          # 4 runs × 6-hour buckets
+        scrape_plus_gap = 2.5
+        bucket_width = 6
+
     times = []
     prev_start = prior_day_run3
     for h in bucket_hours:
         bucket_start = datetime.datetime.combine(today, datetime.time(h, 0), tzinfo=tz)
-        bucket_end   = bucket_start + datetime.timedelta(hours=6) - datetime.timedelta(seconds=1)
+        bucket_end   = bucket_start + datetime.timedelta(hours=bucket_width) - datetime.timedelta(seconds=1)
         if prev_start is not None:
             min_dt = max(bucket_start, prev_start + datetime.timedelta(hours=scrape_plus_gap))
         else:
@@ -513,26 +591,33 @@ def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None
     """Pick random snapshot times for today and schedule them as DateTrigger jobs."""
     from apscheduler.triggers.date import DateTrigger
 
-    # Capture the previous day's Run 3 start time before removing jobs,
-    # so the new day's Run 0 respects the gap if Run 3 ran late.
+    hours_to_game = _hours_to_nearest_game(paths, tz)
+    n_runs = 8 if hours_to_game <= 7 * 24 else 4
+
+    # Capture the previous day's last run time before removing jobs,
+    # so the new day's first run respects the gap if it ran late.
     prior_day_run3 = None
     try:
-        job3 = sched.get_job("job_daily_snapshot_3")
-        if job3 and job3.next_run_time:
-            prior_day_run3 = job3.next_run_time
+        last_job_id = f"job_daily_snapshot_{n_runs - 1}"
+        job_last = sched.get_job(last_job_id)
+        if job_last and job_last.next_run_time:
+            prior_day_run3 = job_last.next_run_time
     except Exception:
         pass
 
     # Remove any existing daily snapshot jobs from a previous scheduling
-    for i in range(4):
+    for i in range(8):
         try:
             sched.remove_job(f"job_daily_snapshot_{i}")
         except Exception:
             pass
 
-    times = _pick_snapshot_times(tz, prior_day_run3=prior_day_run3)
+    times = _pick_snapshot_times(tz, prior_day_run3=prior_day_run3, hours_to_game=hours_to_game)
     fmt = ", ".join(t.strftime("%H:%M") for t in times)
-    logging.info("[snapshot_scheduler] Today's 4 runs scheduled: %s", fmt)
+    logging.info(
+        "[snapshot_scheduler] Today's %d runs scheduled (%.0fh to nearest game): %s",
+        len(times), hours_to_game if hours_to_game < float("inf") else 9999, fmt,
+    )
 
     for i, run_time in enumerate(times):
         # Only schedule if the time is still in the future
@@ -575,14 +660,6 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
         replace_existing=True,
     )
 
-    sched.add_job(
-        lambda: job_predict_price(paths),
-        CronTrigger(hour="6,18", minute="45", timezone=TZ),
-        id="job_predict_price",
-        name="job_predict_price",
-        replace_existing=True,
-    )
-
     # Weekly: Sunday at 08:00
     sched.add_job(
         lambda: job_evaluate_predictions(paths),
@@ -594,7 +671,7 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
 
     sched.add_job(
         lambda: job_weekly_report(paths),
-        CronTrigger(hour="8", minute="15", timezone=TZ),
+        CronTrigger(day_of_week="mon", hour="8", minute="15", timezone=TZ),
         id="job_weekly_report",
         name="job_weekly_report",
         replace_existing=True,
@@ -602,16 +679,17 @@ def schedule_all(sched: BackgroundScheduler, paths: Paths) -> None:
 
     sched.add_job(
         lambda: job_send_report(paths),
-        CronTrigger(hour="8", minute="20", timezone=TZ),
+        CronTrigger(day_of_week="mon", hour="8", minute="20", timezone=TZ),
         id="job_send_report",
         name="job_send_report",
         replace_existing=True,
     )
 
-    # Weekly: Wednesday 05:30
+    # Mon 05:30 — captures the AP poll released Sunday night after game weekends.
+    # Wed 05:30 — mid-week refresh for schedule changes, rankings, completed results.
     sched.add_job(
         lambda: job_weekly_update(paths),
-        CronTrigger(day_of_week="wed", hour=5, minute=30, timezone=TZ),
+        CronTrigger(day_of_week="mon,wed", hour=5, minute=30, timezone=TZ),
         id="job_weekly_update",
         name="job_weekly_update",
         replace_existing=True,
