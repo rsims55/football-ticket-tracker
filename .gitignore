@@ -75,6 +75,17 @@ data/models/data/models/ticket_price_model.pkl
 *.h5
 *.pt
 
+# ---- Large data files (exceed GitHub's 100 MB limit) ----
+# All price snapshot CSVs (combined ~310 MB, year-specific ~260 MB by mid-season)
+data/daily/price_snapshots*.csv
+# Snapshot backup rotation files
+data/daily/backups/
+# Training dataset built at model-train time (~150 MB)
+data/modeling/train_rows_combined.csv
+# Scratch/temp files written by the scraper
+data/daily/_tmp_*.csv
+data/daily/_tmp_*.jsonl
+
 # --- Insync/OneDrive temp files ---
 *.insyncdl
 .~b!*
