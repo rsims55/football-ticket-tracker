@@ -423,18 +423,10 @@ id,name,capacity,grass,dome,city,state,zip,countryCode,timezone,latitude,longitu
 3710,Ernest W. Spangler Stadium,9000.0,False,False,Boiling Springs,NC,28152,US,America/New_York,35.2457593,-81.6739887,253.207016,1969.0
 3711,Estes Stadium,10000.0,False,False,Conway,AR,72035,US,America/Chicago,35.0802599,-92.460045,94.25577545,1939.0
 3706,Eccles Coliseum,10000.0,False,False,Cedar City,UT,84720,US,America/Denver,37.6757919,-113.0773938,1763.97644,1967.0
-12022,Oakland Athletic Complex Perham Field,,,False,Glendive,MT,,US,,,,,
 3774,Jayne Stadium,10000.0,False,False,Morehead,KY,40351,US,America/New_York,38.1916481,-83.4253315,228.1033936,1964.0
 5799,Daly Field at Frank R. Campbell Stadium,1200.0,,False,Danville,VA,25130,US,,36.5859718,-79.3950228,,
-10464,Walter Butler Stadium,,,False,Mckenzie,TN,,US,,,,,
-11472,The Stadium at Memorial Field,,,False,Mount Vernon,NY,,US,,,,,
-12023,Stallings Field,,,False,Rocky Mount,NC,,US,,,,,
 3777,Joe Walton Stadium,3000.0,False,False,Moon Township,PA,15108,US,America/New_York,40.521046,-80.2159227,351.4482422,2005.0
 3778,John F. Kennedy Stadium,5200.0,False,False,Springfield,MO,19148,US,America/Chicago,37.191041,-93.301713,385.9,1957.0
-11955,PENFED Field at Scranton Memorial Stadium,,,False,Scranton,PA,,US,,,,,
-10459,Jerome Berg Field,,,False,Mayville,ND,,US,,,,,
-11956,Antler Stadium,,,False,Kerrville,TX,,US,,,,,
-7364,Pride Field,,,False,Greensboro,NC,,US,,,,,
 4900,Kermit Tipton Stadium,6600.0,False,False,Johnson City,TN,37604,US,America/New_York,36.3269334,-82.3710142,544.1551514,2010.0
 3790,Kessler Field,4000.0,False,False,West Long Branch,NJ,7764 ,US,America/New_York,40.279379,-74.0092635,9.979202271,1993.0
 5389,Kessler Stadium,4200.0,False,False,West Long Branch,NJ,7764 ,US,America/New_York,40.278953,-74.009451,9.9,1993.0
