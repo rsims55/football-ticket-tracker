@@ -26,9 +26,10 @@ try:
 except Exception:
     pass
 
-FAVORITES_PATH = ROOT / "data" / "permanent" / "favorites.json"
-SNAPSHOT_PATH  = ROOT / "data" / "daily" / "price_snapshots.csv"
-SEASON_YEAR    = int(os.getenv("SEASON_YEAR", str(datetime.now().year)))
+FAVORITES_PATH  = ROOT / "data" / "permanent" / "favorites.json"
+SNAPSHOT_PATH   = ROOT / "data" / "daily" / "price_snapshots.csv"
+SENT_DATE_PATH  = ROOT / "data" / "daily" / ".favorites_report_last_sent"
+SEASON_YEAR     = int(os.getenv("SEASON_YEAR", str(datetime.now().year)))
 
 
 def _load_favorites() -> list[dict]:
@@ -69,7 +70,13 @@ def build_report(favorites: list[dict], snaps: pd.DataFrame) -> str:
         "",
     ]
 
-    for fav in favorites:
+    def _sort_key(f):
+        try:
+            return pd.to_datetime(f.get("startDateEastern", "")).timestamp()
+        except Exception:
+            return float("inf")
+
+    for fav in sorted(favorites, key=_sort_key):
         event_id = str(fav.get("event_id", ""))
         home = fav.get("homeTeam", "?")
         away = fav.get("awayTeam", "?")
@@ -123,7 +130,26 @@ def build_report(favorites: list[dict], snaps: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def _already_sent_today() -> bool:
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        return SENT_DATE_PATH.exists() and SENT_DATE_PATH.read_text(encoding="utf-8").strip() == today
+    except Exception:
+        return False
+
+
+def _mark_sent_today() -> None:
+    try:
+        SENT_DATE_PATH.write_text(datetime.now().strftime("%Y-%m-%d"), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def send_favorites_report() -> None:
+    if _already_sent_today():
+        print("[favorites_report] Already sent today — skipping.")
+        return
+
     favorites = _load_favorites()
     if not favorites:
         print("[favorites_report] No favorites — skipping.")
@@ -148,6 +174,7 @@ def send_favorites_report() -> None:
         from reports.send_email import send_markdown_report
         subject = f"⭐ Favorites Price Report — {datetime.now().strftime('%Y-%m-%d')}"
         send_markdown_report(md_text, subject)
+        _mark_sent_today()
         print(f"[favorites_report] Sent to {to_email}")
     except Exception as e:
         print(f"[favorites_report] Send failed: {e}")

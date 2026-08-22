@@ -710,12 +710,12 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
         feats = feats.sort_values("importance", ascending=False)
         total = feats["importance"].sum() or 1.0
         lines = [f"- {r['feature']}: {r['importance']:.4f} (~{r['importance'] / total * 100.0:.1f}%)"
-                 for _, r in feats.head(top_k).iterrows()]
+                 for _, r in feats.iterrows()]
         weak = feats[feats["importance"] <= 0.0001]["feature"].tolist()
         md = []
         md.extend(lines if lines else ["(none)"])
         if weak:
-            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak[:20]))
+            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak))
         return "\n".join(md), weak
 
     try:
@@ -734,12 +734,12 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
         feats = feats.sort_values("importance", ascending=False)
         total = feats["importance"].sum() or 1.0
         lines = [f"- {r['feature']}: {r['importance']:.4f} (~{r['importance'] / total * 100.0:.1f}%)"
-                 for _, r in feats.head(top_k).iterrows()]
+                 for _, r in feats.iterrows()]
         weak = feats[feats["importance"] <= 0.0001]["feature"].tolist()
         md = []
         md.extend(lines if lines else ["(none)"])
         if weak:
-            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak[:20]))
+            md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak))
         return "\n".join(md), weak
 
     feature_names_expanded = _expanded_feature_names(preprocessor, estimator, importances_len=len(importances))
@@ -751,10 +751,9 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
     importances = importances[:n]
 
     order = np.argsort(importances)[::-1]
-    top_idx = order[:top_k]
     lines_expanded = [
         _humanize_feature(feature_names_expanded[i], importances[i])
-        for i in top_idx
+        for i in order
     ]
 
     base_map = {}
@@ -765,17 +764,17 @@ def get_feature_importance(top_k: int = 20) -> tuple[str, list[str]]:
         base_map[base] = base_map.get(base, 0.0) + float(imp)
 
     agg_items = sorted(base_map.items(), key=lambda x: x[1], reverse=True)
-    lines_agg = [f"- {k}: {v:.4f}" for k, v in agg_items[:top_k]]
+    lines_agg = [f"- {k}: {v:.4f}" for k, v in agg_items]
 
     weak_features = [k for k, v in agg_items if v < 0.01]
 
     md = []
-    md.append("### Top Transformed Features (expanded)")
+    md.append("### All Transformed Features (expanded)")
     md.extend(lines_expanded if lines_expanded else ["(none)"])
     md.append("\n### Aggregated by Original Column")
     md.extend(lines_agg if lines_agg else ["(none)"])
     if weak_features:
-        md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak_features[:20]))
+        md.append("\n**Possibly unrelated (near-zero importance):** " + ", ".join(weak_features))
 
     return "\n".join(md), weak_features
 
@@ -1066,7 +1065,12 @@ def build_report() -> str:
     report.append(f"- Snapshots last updated: **{_fmt_mtime(SNAP_PATH)}**")
     report.append(f"- Model last trained: **{_fmt_mtime(MODEL_PATH)}**")
     pred_mtime = _fmt_mtime(PRED_PATH)
-    pred_note = " _(predictions not yet generated for current season)_" if pred_mtime == "missing" else ""
+    if pred_mtime == "missing":
+        pred_note = " _(predictions not yet generated for current season)_"
+    elif os.path.exists(MODEL_PATH) and os.path.exists(PRED_PATH) and os.path.getmtime(PRED_PATH) < os.path.getmtime(MODEL_PATH):
+        pred_note = " _(stale — model retrained since last prediction run; regenerate predictions)_"
+    else:
+        pred_note = ""
     report.append(f"- Predictions last updated: **{pred_mtime}**{pred_note}")
     report.append("- Postseason games are **excluded** from model + GUI (for now).")
     report.append("")

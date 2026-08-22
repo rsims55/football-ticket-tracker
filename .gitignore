@@ -25,6 +25,7 @@ pip-wheel-metadata/
 .vscode/
 .idea/
 *.code-workspace
+.claude/settings.local.json
 
 # --- OS cruft ---
 .DS_Store

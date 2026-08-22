@@ -107,6 +107,7 @@ def _build_feature_frame(
     hours_until = np.clip(hours_until, 0, 2500.0)
 
     base = {
+        "season_year": float(kickoff.year) if pd.notna(kickoff) else np.nan,
         "capacity": _to_float(row.get("capacity")),
         "neutralSite": row.get("neutralSite"),
         "conferenceGame": row.get("conferenceGame"),
@@ -117,6 +118,8 @@ def _build_feature_frame(
         "week": _to_float(row.get("week")),
         "home_last_point_diff_at_snapshot": _to_float(row.get("home_last_point_diff_at_snapshot")),
         "away_last_point_diff_at_snapshot": _to_float(row.get("away_last_point_diff_at_snapshot")),
+        "home_losses_at_snapshot": _to_float(row.get("home_losses_at_snapshot")),
+        "away_losses_at_snapshot": _to_float(row.get("away_losses_at_snapshot")),
         "kickoff_hour": kickoff.hour if pd.notna(kickoff) else np.nan,
         "kickoff_dayofweek": kickoff.dayofweek if pd.notna(kickoff) else np.nan,
         "homeTeam": row.get("homeTeam"),
