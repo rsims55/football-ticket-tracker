@@ -1,9 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Unhandled exception: Unable to allocate 3.69 GiB for an array with shape (19, 26031668) and data type object",
-    "extra": {},
-    "status": "failed",
-    "updated_at": "2026-08-23 01:36:00"
+    "detail": "Snapshot appended (3217 new rows). Total now: 515150",
+    "extra": {
+      "events_total": 3235,
+      "rows_new": 3217,
+      "rows_total": 515150,
+      "scraped_fail": 0,
+      "scraped_ok": 269,
+      "started_at": "2026-08-23 04:34:56"
+    },
+    "status": "success",
+    "updated_at": "2026-08-23 06:10:55"
   },
   "health_check": {
     "detail": "Health check passed",
