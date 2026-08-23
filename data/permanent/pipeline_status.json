@@ -1,16 +1,9 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (3217 new rows). Total now: 514268",
-    "extra": {
-      "events_total": 3235,
-      "rows_new": 3217,
-      "rows_total": 514268,
-      "scraped_fail": 0,
-      "scraped_ok": 269,
-      "started_at": "2026-08-22 21:57:59"
-    },
-    "status": "success",
-    "updated_at": "2026-08-22 23:35:55"
+    "detail": "Unhandled exception: Unable to allocate 4.07 GiB for an array with shape (21, 26031668) and data type object",
+    "extra": {},
+    "status": "failed",
+    "updated_at": "2026-08-23 01:05:03"
   },
   "health_check": {
     "detail": "Health check passed",
