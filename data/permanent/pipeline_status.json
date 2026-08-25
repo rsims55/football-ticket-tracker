@@ -3,7 +3,7 @@
     "detail": "Unhandled exception: Unable to allocate 4.16 GiB for an array with shape (21, 26563397) and data type object",
     "extra": {},
     "status": "failed",
-    "updated_at": "2026-08-25 17:29:31"
+    "updated_at": "2026-08-25 19:03:47"
   },
   "health_check": {
     "detail": "Health check passed",
