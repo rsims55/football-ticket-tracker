@@ -1,9 +1,9 @@
 {
   "daily_snapshot": {
-    "detail": "Unhandled exception: Unable to allocate 4.16 GiB for an array with shape (21, 26563397) and data type object",
+    "detail": "Unhandled exception: Unable to allocate 4.16 GiB for an array with shape (21, 26563249) and data type object",
     "extra": {},
     "status": "failed",
-    "updated_at": "2026-08-26 08:53:58"
+    "updated_at": "2026-08-26 10:28:38"
   },
   "health_check": {
     "detail": "Health check passed",
