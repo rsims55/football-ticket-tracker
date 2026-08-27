@@ -413,13 +413,14 @@ def _cleanup_pricer_exports(paths: Dict[str, str]) -> None:
 def _backup_file(path: str, keep: int = 7) -> None:
     if not os.path.exists(path):
         return
+    import shutil
     backup_dir = os.path.join(DAILY_DIR, "backups")
     os.makedirs(backup_dir, exist_ok=True)
     ts = datetime.now(TIMEZONE).strftime("%Y%m%d_%H%M%S")
     base = os.path.basename(path)
     backup_path = os.path.join(backup_dir, f"{base}.{ts}.bak")
     try:
-        _write_csv_atomic(pd.read_csv(path), backup_path)
+        shutil.copy2(path, backup_path)
     except Exception as e:
         _out(f"⚠️ Backup failed for {path}: {e}")
         return
@@ -2271,9 +2272,10 @@ def log_price_snapshot():
         combined = normalize_local_datetime(combined, overwrite=True)
         combined = canonicalize_snapshot_team_names(combined)
         combined = drop_tbd_rows(combined)
-        combined = backfill_kickoff_times_from_schedule(combined, WEEKLY_SCHEDULE_PATH)
-        combined = normalize_local_datetime(combined, overwrite=True)
-        combined = validate_and_fix_conferences(combined, WEEKLY_SCHEDULE_PATH)
+        # backfill_kickoff_times_from_schedule and validate_and_fix_conferences are NOT
+        # applied to `combined` here — they were already applied to snap_all above.
+        # Applying them to the full historical combined dataset causes an OOM via
+        # cartesian-product merge explosion (528k rows × N games per date).
         _write_csv_atomic(combined, SNAPSHOT_PATH)
         msg = f"Snapshot appended ({len(snap_all)} new rows). Total now: {len(combined)}"
         _out(f"✅ {msg}")
