@@ -94,6 +94,10 @@ if TEST_MODE and TEAMS_LIMIT <= 0:
 COLLECTION_TIMES = ["06:00", "12:00", "18:00", "00:00"]
 ALWAYS_RUN_DAILY = os.getenv("ALWAYS_RUN_DAILY", "1") == "1"
 
+# When True, only scrape teams whose next game is within 7 days (set by daemon for near-term runs)
+NEAR_TERM_ONLY = os.getenv("NEAR_TERM_ONLY", "0") == "1"
+NEAR_TERM_DAYS = int(os.getenv("NEAR_TERM_DAYS", "7"))
+
 # Politeness and caching for TickPickPricer
 TP_POLITE_LOW = int(os.getenv("TP_POLITE_LOW", "10"))
 TP_POLITE_HIGH = int(os.getenv("TP_POLITE_HIGH", "18"))
@@ -281,6 +285,61 @@ def _load_teams_list() -> List[Dict[str, str]]:
     ]
     _out("🚨 Falling back to built-in 3-team list (teams file missing or invalid JSON).")
     return fallback[:TEAMS_LIMIT] if TEAMS_LIMIT > 0 else fallback
+
+
+def _filter_near_term_teams(teams: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Return only teams with a game kicking off within NEAR_TERM_DAYS days."""
+    try:
+        import pandas as _pd
+        from datetime import datetime as _dt, timezone as _tz_module, timedelta as _td
+        from zoneinfo import ZoneInfo as _ZI
+
+        if not os.path.exists(WEEKLY_SCHEDULE_PATH):
+            _out("⚠️  NEAR_TERM_ONLY: schedule file missing, scraping all teams.")
+            return teams
+
+        sched = _pd.read_csv(WEEKLY_SCHEDULE_PATH, usecols=["homeTeam", "awayTeam", "startDateEastern"])
+        tz_et = _ZI("America/New_York")
+        now = _dt.now(tz_et)
+        cutoff = now + _td(days=NEAR_TERM_DAYS)
+
+        kickoffs = _pd.to_datetime(sched["startDateEastern"], errors="coerce", utc=True).dt.tz_convert(tz_et)
+        mask = (kickoffs > _pd.Timestamp(now)) & (kickoffs <= _pd.Timestamp(cutoff))
+        near = sched.loc[mask, ["homeTeam", "awayTeam"]].dropna()
+
+        if near.empty:
+            _out(f"ℹ️  NEAR_TERM_ONLY: no games within {NEAR_TERM_DAYS} days.")
+            return []
+
+        # Build a set of slug fragments from near-term team names for substring matching
+        def _to_slug_fragment(name: str) -> str:
+            return (str(name).lower()
+                    .replace("'", "").replace(".", "").replace("&", "and")
+                    .replace(" ", "-"))
+
+        near_fragments = set()
+        for col in ("homeTeam", "awayTeam"):
+            for name in near[col]:
+                near_fragments.add(_to_slug_fragment(name))
+
+        # A team matches if its slug contains any near-term fragment (or vice versa)
+        filtered = []
+        for t in teams:
+            slug = t.get("slug", "")
+            slug_base = slug.replace("-football", "").replace("-tickets", "")
+            if any(frag in slug_base or slug_base in frag for frag in near_fragments):
+                filtered.append(t)
+
+        game_list = ", ".join(
+            f"{r.homeTeam} vs {r.awayTeam}" for _, r in near.iterrows()
+        )
+        _out(f"🎯 NEAR_TERM_ONLY: {len(near)} games within {NEAR_TERM_DAYS}d → scraping {len(filtered)} teams")
+        _out(f"   Games: {game_list}")
+        return filtered
+
+    except Exception as e:
+        _out(f"⚠️  NEAR_TERM_ONLY filter failed ({e}), falling back to all teams.")
+        return teams
 
 
 def _titleize_from_url(url: str) -> str:
@@ -2099,10 +2158,15 @@ def log_price_snapshot():
         return
 
     teams = _load_teams_list()
+    if NEAR_TERM_ONLY:
+        teams = _filter_near_term_teams(teams)
     if not teams:
-        msg = "No team URLs available."
-        _out(f"❌ {msg}")
-        write_status("daily_snapshot", "failed", msg, status_extra)
+        msg = (
+            f"No games within {NEAR_TERM_DAYS} days — near-term scrape skipped."
+            if NEAR_TERM_ONLY else "No team URLs available."
+        )
+        _out(f"⏭️  {msg}" if NEAR_TERM_ONLY else f"❌ {msg}")
+        write_status("daily_snapshot", "skipped" if NEAR_TERM_ONLY else "failed", msg, status_extra)
         return
 
     _out(f"🔧 TEAMS file: {TEAMS_JSON_PATH}")

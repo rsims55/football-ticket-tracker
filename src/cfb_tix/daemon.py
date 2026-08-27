@@ -401,6 +401,20 @@ def job_daily_snapshot(paths: Paths) -> None:
             logging.info("[daily_snapshot] per-job sync skipped (twice_daily mode)")
 
 
+def job_near_term_snapshot(paths: Paths) -> None:
+    """Scrape only teams with a game kicking off within 7 days (fast, runs every 2 hours)."""
+    env = _child_env_for_repo(paths)
+    env["NEAR_TERM_ONLY"] = "1"
+    try:
+        run_py_script("src/builders/daily_snapshot.py", paths.app_root, env=env)
+        run_py_script("src/reports/favorites_report.py", paths.app_root, env=env)
+    finally:
+        if _sync_mode() == "perjob":
+            do_sync(paths, "daily_snapshot")
+        else:
+            logging.info("[near_term_snapshot] per-job sync skipped (twice_daily mode)")
+
+
 def job_train_model(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
@@ -544,29 +558,12 @@ def _hours_to_nearest_game(paths: Paths, tz) -> float:
         return float("inf")
 
 
-def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None,
-                         hours_to_game: float = float("inf")) -> list:
-    """Pick snapshot start times for today based on proximity to the nearest game.
-
-    Normal (>7 days to kickoff): 4 runs in 6-hour buckets [0,6,12,18].
-    Game week (≤7 days):        8 runs in 3-hour buckets [0,3,6,9,12,15,18,21].
-
-    Each run is constrained to start at least (bucket_width - 0.5h) after the
-    previous run's start so scrapes don't overlap.
-
-    prior_day_run3: the start time of the previous day's last run, used to
-    prevent the new day's first run from overlapping if it ran late.
-    """
+def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None) -> list:
+    """Pick 4 full-scrape times randomized within 6-hour buckets [0,6,12,18]."""
     today = datetime.datetime.now(tz).date()
-
-    if hours_to_game <= 7 * 24:
-        bucket_hours = list(range(0, 24, 3))   # 8 runs × 3-hour buckets
-        scrape_plus_gap = 2.0
-        bucket_width = 3
-    else:
-        bucket_hours = [0, 6, 12, 18]          # 4 runs × 6-hour buckets
-        scrape_plus_gap = 2.5
-        bucket_width = 6
+    bucket_hours = [0, 6, 12, 18]
+    scrape_plus_gap = 2.5
+    bucket_width = 6
 
     times = []
     prev_start = prior_day_run3
@@ -587,45 +584,68 @@ def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None,
     return times
 
 
+def _pick_near_term_times(tz) -> list:
+    """Pick 12 near-term-only scrape times in 2-hour buckets (every 2 hours, ~1.5h min gap)."""
+    today = datetime.datetime.now(tz).date()
+    times = []
+    prev_start = None
+    for h in range(0, 24, 2):
+        bucket_start = datetime.datetime.combine(today, datetime.time(h, 0), tzinfo=tz)
+        bucket_end   = bucket_start + datetime.timedelta(hours=2) - datetime.timedelta(seconds=1)
+        if prev_start is not None:
+            min_dt = max(bucket_start, prev_start + datetime.timedelta(hours=1.5))
+        else:
+            min_dt = bucket_start
+        if min_dt >= bucket_end:
+            chosen = min_dt
+        else:
+            span_s = (bucket_end - min_dt).total_seconds()
+            chosen = min_dt + datetime.timedelta(seconds=_random.uniform(0, span_s))
+        times.append(chosen)
+        prev_start = chosen
+    return times
+
+
 def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None:
-    """Pick random snapshot times for today and schedule them as DateTrigger jobs."""
+    """Schedule snapshot jobs for today.
+
+    Always: 4 full scrapes (all teams) in randomized 6-hour buckets.
+    When a game is ≤7 days away: also 12 near-term scrapes (≤7-day games only)
+    in randomized 2-hour buckets, giving those games ~2-hourly coverage.
+    """
     from apscheduler.triggers.date import DateTrigger
 
     hours_to_game = _hours_to_nearest_game(paths, tz)
-    n_runs = 8 if hours_to_game <= 7 * 24 else 4
+    now = datetime.datetime.now(tz)
 
-    # Capture the previous day's last run time before removing jobs,
-    # so the new day's first run respects the gap if it ran late.
+    # Capture prior day's last full-scrape time for gap enforcement
     prior_day_run3 = None
     try:
-        last_job_id = f"job_daily_snapshot_{n_runs - 1}"
-        job_last = sched.get_job(last_job_id)
+        job_last = sched.get_job("job_daily_snapshot_3")
         if job_last and job_last.next_run_time:
             prior_day_run3 = job_last.next_run_time
     except Exception:
         pass
 
-    # Remove any existing daily snapshot jobs from a previous scheduling
-    for i in range(8):
+    # Clear old jobs of both types
+    for i in range(4):
         try:
             sched.remove_job(f"job_daily_snapshot_{i}")
         except Exception:
             pass
+    for i in range(12):
+        try:
+            sched.remove_job(f"job_near_term_snapshot_{i}")
+        except Exception:
+            pass
 
-    times = _pick_snapshot_times(tz, prior_day_run3=prior_day_run3, hours_to_game=hours_to_game)
-    fmt = ", ".join(t.strftime("%H:%M") for t in times)
-    logging.info(
-        "[snapshot_scheduler] Today's %d runs scheduled (%.0fh to nearest game): %s",
-        len(times), hours_to_game if hours_to_game < float("inf") else 9999, fmt,
-    )
-
-    for i, run_time in enumerate(times):
-        # Only schedule if the time is still in the future
-        now = datetime.datetime.now(tz)
+    # --- Full scrapes: always 4x/day ---
+    full_times = _pick_snapshot_times(tz, prior_day_run3=prior_day_run3)
+    full_fmt = ", ".join(t.strftime("%H:%M") for t in full_times)
+    logging.info("[snapshot_scheduler] Full scrapes (4): %s", full_fmt)
+    for i, run_time in enumerate(full_times):
         if run_time <= now:
-            logging.info(
-                "[snapshot_scheduler] Skipping past time for run %d: %s", i, run_time.strftime("%H:%M")
-            )
+            logging.info("[snapshot_scheduler] Skipping past full-scrape slot %d: %s", i, run_time.strftime("%H:%M"))
             continue
         sched.add_job(
             lambda p=paths: job_daily_snapshot(p),
@@ -634,6 +654,28 @@ def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None
             name=f"job_daily_snapshot_{i}",
             replace_existing=True,
         )
+
+    # --- Near-term scrapes: only when a game is within 7 days ---
+    if hours_to_game <= 7 * 24:
+        near_times = _pick_near_term_times(tz)
+        near_fmt = ", ".join(t.strftime("%H:%M") for t in near_times)
+        logging.info(
+            "[snapshot_scheduler] Near-term scrapes (12, %.0fh to game): %s",
+            hours_to_game, near_fmt,
+        )
+        for i, run_time in enumerate(near_times):
+            if run_time <= now:
+                logging.info("[snapshot_scheduler] Skipping past near-term slot %d: %s", i, run_time.strftime("%H:%M"))
+                continue
+            sched.add_job(
+                lambda p=paths: job_near_term_snapshot(p),
+                DateTrigger(run_date=run_time),
+                id=f"job_near_term_snapshot_{i}",
+                name=f"job_near_term_snapshot_{i}",
+                replace_existing=True,
+            )
+    else:
+        logging.info("[snapshot_scheduler] No near-term games (%.0fh away) — skipping near-term schedule.", hours_to_game)
 
 
 # Main
