@@ -783,11 +783,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     def _kickoff_sequence(p: Paths) -> None:
         logging.info(
             "[kickoff] Starting first-run sequence:"
-            " annual -> weekly -> results -> snapshot -> train -> report -> email"
+            " annual -> weekly -> snapshot -> train -> report -> email"
         )
         job_annual_setup(p)
         job_weekly_update(p)
-        run_py_script("src/fetchers/results_fetcher.py", p.app_root, env=_child_env_for_repo(p))
         job_daily_snapshot(p)
         job_train_model(p)
         job_weekly_report(p)

@@ -227,6 +227,17 @@ def main() -> None:
     out = pd.DataFrame(results)
     out = out.merge(obs, on="event_id", how="left")
 
+    # When TickPick lists the same game under two event_ids (primary + resale),
+    # keep the entry with more snapshot rows (richer price history).
+    event_row_counts = df.groupby("event_id").size().rename("_row_count")
+    out = out.merge(event_row_counts, on="event_id", how="left")
+    out = (
+        out.sort_values("_row_count", ascending=False)
+           .drop_duplicates(subset=["homeTeam", "awayTeam"], keep="first")
+           .drop(columns=["_row_count"])
+           .reset_index(drop=True)
+    )
+
     _write_atomic(out, OUTPUT_PATH)
     n = len(out)
     print(f"[predict_price] ✅ {n} predictions → {OUTPUT_PATH}")
