@@ -2352,4 +2352,11 @@ if __name__ == "__main__":
         log_price_snapshot()
     except Exception as e:
         write_status("daily_snapshot", "failed", f"Unhandled exception: {e}")
+        if not KEEP_COMBINED_EXPORTS:
+            import glob as _glob
+            for _p in _glob.glob(os.path.join(DAILY_DIR, "_tmp_*.csv")) + _glob.glob(os.path.join(DAILY_DIR, "_tmp_*.jsonl")):
+                try:
+                    os.remove(_p)
+                except Exception:
+                    pass
         raise
