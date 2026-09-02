@@ -13,12 +13,6 @@
       "startDateEastern": "2026-08-29 04:00:00"
     },
     {
-      "event_id": "7622637",
-      "homeTeam": "Georgia Bulldogs",
-      "awayTeam": "Western Kentucky Hilltoppers",
-      "startDateEastern": "2026-09-12 04:00:00"
-    },
-    {
       "event_id": "7704554",
       "homeTeam": "Syracuse Orange",
       "awayTeam": "Clemson Tigers",
@@ -31,22 +25,10 @@
       "startDateEastern": "2026-11-27 05:00:00"
     },
     {
-      "event_id": "7648208",
-      "homeTeam": "South Florida Bulls",
-      "awayTeam": "Florida International Panthers",
-      "startDateEastern": "2026-09-05 04:00:00"
-    },
-    {
       "event_id": "7601531",
       "homeTeam": "Coastal Carolina Chanticleers",
       "awayTeam": "Fordham Rams",
       "startDateEastern": "NaT"
-    },
-    {
-      "event_id": "7704571",
-      "homeTeam": "Clemson Tigers",
-      "awayTeam": "North Carolina Tar Heels",
-      "startDateEastern": "2026-09-19 04:00:00"
     },
     {
       "event_id": "7528954",
@@ -167,6 +149,18 @@
       "homeTeam": "Clemson Tigers",
       "awayTeam": "Virginia Tech Hokies",
       "startDateEastern": "2026-10-24 04:00:00"
+    },
+    {
+      "event_id": "7622637",
+      "homeTeam": "Georgia Bulldogs",
+      "awayTeam": "Western Kentucky Hilltoppers",
+      "startDateEastern": "2026-09-12 04:00:00"
+    },
+    {
+      "event_id": "7622666",
+      "homeTeam": "Florida Gators",
+      "awayTeam": "Florida Atlantic Owls",
+      "startDateEastern": "2026-09-05 04:00:00"
     }
   ]
 }
