@@ -1,16 +1,9 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (1467 new rows). Total now: 588489",
-    "extra": {
-      "events_total": 1474,
-      "rows_new": 1467,
-      "rows_total": 588489,
-      "scraped_fail": 0,
-      "scraped_ok": 123,
-      "started_at": "2026-09-02 21:37:04"
-    },
-    "status": "success",
-    "updated_at": "2026-09-02 22:18:29"
+    "detail": "Unhandled exception: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\\\Users\\\\randi\\\\OneDrive - Clemson University\\\\Desktop\\\\Randi Folders\\\\Personal\\\\Football Ticket Tracker\\\\cfb-ticket-tracker\\\\data\\\\daily\\\\price_snapshots_2026.csv.__tmp__' -> 'C:\\\\Users\\\\randi\\\\OneDrive - Clemson University\\\\Desktop\\\\Randi Folders\\\\Personal\\\\Football Ticket Tracker\\\\cfb-ticket-tracker\\\\data\\\\daily\\\\price_snapshots_2026.csv'",
+    "extra": {},
+    "status": "failed",
+    "updated_at": "2026-09-03 00:43:56"
   },
   "health_check": {
     "detail": "Health check passed",
