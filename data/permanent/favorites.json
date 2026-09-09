@@ -1,18 +1,6 @@
 {
   "favorites": [
     {
-      "event_id": "7647963",
-      "homeTeam": "UCF Knights",
-      "awayTeam": "Bethune-Cookman Wildcats",
-      "startDateEastern": "2026-09-03 04:00:00"
-    },
-    {
-      "event_id": "7647985",
-      "homeTeam": "Florida State Seminoles",
-      "awayTeam": "New Mexico State Aggies",
-      "startDateEastern": "2026-08-29 04:00:00"
-    },
-    {
       "event_id": "7704554",
       "homeTeam": "Syracuse Orange",
       "awayTeam": "Clemson Tigers",
@@ -91,18 +79,6 @@
       "startDateEastern": "2026-11-28 05:00:00"
     },
     {
-      "event_id": "8118967",
-      "homeTeam": "Virginia Cavaliers",
-      "awayTeam": "North Carolina State Wolfpack",
-      "startDateEastern": "2026-08-29 19:30:00"
-    },
-    {
-      "event_id": "7704589",
-      "homeTeam": "Florida State Seminoles",
-      "awayTeam": "Southern Methodist (SMU) Mustangs",
-      "startDateEastern": "2026-09-07 04:00:00"
-    },
-    {
       "event_id": "7648002",
       "homeTeam": "North Carolina State Wolfpack",
       "awayTeam": "Richmond Spiders",
@@ -155,12 +131,6 @@
       "homeTeam": "Georgia Bulldogs",
       "awayTeam": "Western Kentucky Hilltoppers",
       "startDateEastern": "2026-09-12 04:00:00"
-    },
-    {
-      "event_id": "7622666",
-      "homeTeam": "Florida Gators",
-      "awayTeam": "Florida Atlantic Owls",
-      "startDateEastern": "2026-09-05 04:00:00"
     }
   ]
 }
