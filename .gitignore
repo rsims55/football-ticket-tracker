@@ -86,6 +86,11 @@ data/modeling/train_rows_combined.csv
 # Scratch/temp files written by the scraper
 data/daily/_tmp_*.csv
 data/daily/_tmp_*.jsonl
+# Atomic-write temp files (written then renamed) — must never be committed;
+# a 114 MB price_snapshots.csv.__tmp__ once slipped in and GitHub rejected the push
+*.__tmp__
+# Local runtime state for the favorites price-alert dedupe
+data/daily/.favorites_alert_state.json
 
 # --- Insync/OneDrive temp files ---
 *.insyncdl

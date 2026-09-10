@@ -282,6 +282,32 @@ def send_report(filepath: str):
         _fail(f"Unexpected error sending email: {e}")
 
 
+def send_plain(to_addrs, subject: str, body: str) -> None:
+    """Send a plain-text email to one or more addresses.
+
+    Used for carrier email-to-SMS gateways (e.g. 8035551234@txt.att.net), which want
+    a short plain body and no HTML. Accepts a string or a list of addresses.
+    """
+    if isinstance(to_addrs, str):
+        to_addrs = [to_addrs]
+    to_addrs = [a.strip() for a in to_addrs if a and a.strip()]
+    if not to_addrs:
+        print("send_plain: no recipients — nothing sent.")
+        return
+    if not (GMAIL_ADDRESS and APP_PASSWORD):
+        raise RuntimeError("GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set")
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = GMAIL_ADDRESS
+    msg["To"] = ", ".join(to_addrs)
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(GMAIL_ADDRESS, APP_PASSWORD)
+        server.sendmail(GMAIL_ADDRESS, to_addrs, msg.as_string())
+    print(f"📨 Plain message sent to {', '.join(to_addrs)}")
+
+
 def send_markdown_report(md_text: str, subject: str) -> None:
     # Convert Markdown to HTML
     html_core = md_to_html(md_text)

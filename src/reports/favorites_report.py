@@ -51,6 +51,24 @@ def _load_snapshots() -> pd.DataFrame | None:
         return None
 
 
+def _norm_event_id(value) -> str:
+    """Canonical event_id string.
+
+    Snapshots store event_id as a float ("7647963.0") while favorites.json
+    stores the plain int form ("7647963"); normalize both to the int form so
+    they compare equal.
+    """
+    num = pd.to_numeric(value, errors="coerce")
+    if pd.notna(num):
+        return str(int(num))
+    return str(value).strip()
+
+
+def _norm_event_id_series(s: pd.Series) -> pd.Series:
+    num = pd.to_numeric(s, errors="coerce")
+    return num.astype("Int64").astype(str).where(num.notna(), s.astype(str).str.strip())
+
+
 def _predicted_floor(row_dict: dict) -> float:
     """Get predicted floor price for a game row using the CatBoost model."""
     try:
@@ -70,14 +88,32 @@ def build_report(favorites: list[dict], snaps: pd.DataFrame) -> str:
         "",
     ]
 
+    now = datetime.now()
+
     def _sort_key(f):
         try:
             return pd.to_datetime(f.get("startDateEastern", "")).timestamp()
         except Exception:
             return float("inf")
 
-    for fav in sorted(favorites, key=_sort_key):
-        event_id = str(fav.get("event_id", ""))
+    upcoming = [
+        f for f in favorites
+        if pd.to_datetime(f.get("startDateEastern", pd.NaT), errors="coerce") >= now
+    ]
+    if not upcoming:
+        return "# ⭐ Daily Favorites Price Report\n\n_No upcoming favorited games._\n"
+
+    # Index snapshots by event once rather than rescanning the full file per favorite.
+    if "event_id" in snaps.columns:
+        snaps_by_event = {
+            eid: grp.reset_index(drop=True)
+            for eid, grp in snaps.groupby(_norm_event_id_series(snaps["event_id"]))
+        }
+    else:
+        snaps_by_event = {}
+
+    for fav in sorted(upcoming, key=_sort_key):
+        event_id = _norm_event_id(fav.get("event_id", ""))
         home = fav.get("homeTeam", "?")
         away = fav.get("awayTeam", "?")
         game_date = fav.get("startDateEastern", "")
@@ -90,7 +126,7 @@ def build_report(favorites: list[dict], snaps: pd.DataFrame) -> str:
         lines.append(f"**Game Date:** {game_date_fmt}")
         lines.append("")
 
-        ev = snaps[snaps["event_id"].astype(str) == event_id].copy()
+        ev = snaps_by_event.get(event_id, pd.DataFrame()).copy()
         if ev.empty:
             lines.append("_No price data collected yet._")
             lines.append("")
@@ -145,17 +181,19 @@ def _mark_sent_today() -> None:
         pass
 
 
-def send_favorites_report() -> None:
+def send_favorites_report(favorites: list[dict] | None = None,
+                          snaps: pd.DataFrame | None = None) -> None:
     if _already_sent_today():
         print("[favorites_report] Already sent today — skipping.")
         return
 
-    favorites = _load_favorites()
+    favorites = _load_favorites() if favorites is None else favorites
     if not favorites:
         print("[favorites_report] No favorites — skipping.")
         return
 
-    snaps = _load_snapshots()
+    if snaps is None:
+        snaps = _load_snapshots()
     if snaps is None:
         print("[favorites_report] Snapshot file missing — skipping.")
         return
@@ -180,5 +218,24 @@ def send_favorites_report() -> None:
         print(f"[favorites_report] Send failed: {e}")
 
 
+def main() -> None:
+    """Load shared inputs once, then: (1) targeted price texts every run,
+    (2) the daily favorites summary (guarded to once per day)."""
+    favorites = _load_favorites()
+    snaps = _load_snapshots()
+
+    # 1. Targeted NEW LOW / PRICE UP alerts for games <= 7 days out.
+    #    Runs on every snapshot and keeps its own dedupe state, so it must not sit
+    #    behind the once-a-day guard in send_favorites_report().
+    try:
+        from reports.favorites_price_alerts import run_alerts
+        run_alerts(favorites=favorites, snaps=snaps)
+    except Exception as e:
+        print(f"[favorites_report] price alerts failed: {e}")
+
+    # 2. Daily summary e-mail.
+    send_favorites_report(favorites=favorites, snaps=snaps)
+
+
 if __name__ == "__main__":
-    send_favorites_report()
+    main()
