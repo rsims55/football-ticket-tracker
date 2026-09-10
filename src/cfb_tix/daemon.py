@@ -585,7 +585,7 @@ def _pick_snapshot_times(tz, prior_day_run3: "datetime.datetime | None" = None) 
 
 
 def _pick_near_term_times(tz) -> list:
-    """Pick 12 near-term-only scrape times in 2-hour buckets (every 2 hours, ~1.5h min gap)."""
+    """Pick 12 candidate near-term times in 2-hour buckets; caller drops slots that overlap a full scrape."""
     today = datetime.datetime.now(tz).date()
     times = []
     prev_start = None
@@ -657,11 +657,17 @@ def _schedule_snapshot_day(sched: BackgroundScheduler, paths: Paths, tz) -> None
 
     # --- Near-term scrapes: only when a game is within 7 days ---
     if hours_to_game <= 7 * 24:
-        near_times = _pick_near_term_times(tz)
+        near_times_all = _pick_near_term_times(tz)
+        # Drop any near-term slot within 45 min of a full scrape — full scrape covers it
+        merge_window = datetime.timedelta(minutes=45)
+        near_times = [
+            t for t in near_times_all
+            if not any(abs((t - ft).total_seconds()) < merge_window.total_seconds() for ft in full_times)
+        ]
         near_fmt = ", ".join(t.strftime("%H:%M") for t in near_times)
         logging.info(
-            "[snapshot_scheduler] Near-term scrapes (12, %.0fh to game): %s",
-            hours_to_game, near_fmt,
+            "[snapshot_scheduler] Near-term scrapes (%d, %.0fh to game): %s",
+            len(near_times), hours_to_game, near_fmt,
         )
         for i, run_time in enumerate(near_times):
             if run_time <= now:
