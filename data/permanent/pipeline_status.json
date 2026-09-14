@@ -68,10 +68,10 @@
     "detail": "Weekly update complete for 2026",
     "extra": {
       "output": "C:\\Users\\randi\\OneDrive - Clemson University\\Desktop\\Randi Folders\\Personal\\Football Ticket Tracker\\cfb-ticket-tracker\\data\\weekly\\full_2026_schedule.csv",
-      "rows": 789,
+      "rows": 703,
       "year": 2026
     },
     "status": "success",
-    "updated_at": "2026-09-09 05:30:24"
+    "updated_at": "2026-09-14 05:30:21"
   }
 }
