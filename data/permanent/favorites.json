@@ -13,18 +13,6 @@
       "startDateEastern": "2026-11-27 05:00:00"
     },
     {
-      "event_id": "7601531",
-      "homeTeam": "Coastal Carolina Chanticleers",
-      "awayTeam": "Fordham Rams",
-      "startDateEastern": "NaT"
-    },
-    {
-      "event_id": "7528954",
-      "homeTeam": "Virginia Cavaliers",
-      "awayTeam": "Delaware Blue Hens",
-      "startDateEastern": "2026-09-26 04:00:00"
-    },
-    {
       "event_id": "7808131",
       "homeTeam": "James Madison Dukes",
       "awayTeam": "Marshall Thundering Herd",
@@ -35,12 +23,6 @@
       "homeTeam": "Arkansas Razorbacks",
       "awayTeam": "Tennessee Volunteers",
       "startDateEastern": "2026-10-10 04:00:00"
-    },
-    {
-      "event_id": "7707581",
-      "homeTeam": "Maryland Terrapins",
-      "awayTeam": "Rutgers Scarlet Knights",
-      "startDateEastern": "2026-10-17 04:00:00"
     },
     {
       "event_id": "7803351",
@@ -79,24 +61,6 @@
       "startDateEastern": "2026-11-28 05:00:00"
     },
     {
-      "event_id": "7648002",
-      "homeTeam": "North Carolina State Wolfpack",
-      "awayTeam": "Richmond Spiders",
-      "startDateEastern": "2026-09-11 04:00:00"
-    },
-    {
-      "event_id": "7648163",
-      "homeTeam": "East Carolina Pirates",
-      "awayTeam": "Appalachian State Mountaineers",
-      "startDateEastern": "2026-09-12 04:00:00"
-    },
-    {
-      "event_id": "7803540",
-      "homeTeam": "Temple Owls",
-      "awayTeam": "Army West Point Black Knights",
-      "startDateEastern": "2026-09-25 20:00:00"
-    },
-    {
       "event_id": "7707575",
       "homeTeam": "Maryland Terrapins",
       "awayTeam": "UCLA Bruins",
@@ -107,12 +71,6 @@
       "homeTeam": "Delaware Blue Hens",
       "awayTeam": "Liberty Flames",
       "startDateEastern": "2026-10-02 04:00:00"
-    },
-    {
-      "event_id": "7808177",
-      "homeTeam": "Arkansas State Red Wolves",
-      "awayTeam": "South Alabama Jaguars",
-      "startDateEastern": "2026-10-08 04:00:00"
     },
     {
       "event_id": "7620876",
@@ -127,10 +85,22 @@
       "startDateEastern": "2026-10-24 04:00:00"
     },
     {
-      "event_id": "7622637",
-      "homeTeam": "Georgia Bulldogs",
-      "awayTeam": "Western Kentucky Hilltoppers",
-      "startDateEastern": "2026-09-12 04:00:00"
+      "event_id": "7808177",
+      "homeTeam": "Arkansas State Red Wolves",
+      "awayTeam": "South Alabama Jaguars",
+      "startDateEastern": "2026-10-08 23:30:00"
+    },
+    {
+      "event_id": "7707605",
+      "homeTeam": "Michigan State Spartans",
+      "awayTeam": "Oregon Ducks",
+      "startDateEastern": "2026-11-21 01:00:00"
+    },
+    {
+      "event_id": "7707342",
+      "homeTeam": "Michigan Wolverines",
+      "awayTeam": "UCLA Bruins",
+      "startDateEastern": "2026-11-21 05:00:00"
     }
   ]
 }
