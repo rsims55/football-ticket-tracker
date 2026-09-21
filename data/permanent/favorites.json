@@ -13,12 +13,6 @@
       "startDateEastern": "2026-11-27 05:00:00"
     },
     {
-      "event_id": "7808131",
-      "homeTeam": "James Madison Dukes",
-      "awayTeam": "Marshall Thundering Herd",
-      "startDateEastern": "NaT"
-    },
-    {
       "event_id": "7620855",
       "homeTeam": "Arkansas Razorbacks",
       "awayTeam": "Tennessee Volunteers",
@@ -67,12 +61,6 @@
       "startDateEastern": "2026-09-26 04:00:00"
     },
     {
-      "event_id": "7803307",
-      "homeTeam": "Delaware Blue Hens",
-      "awayTeam": "Liberty Flames",
-      "startDateEastern": "2026-10-02 04:00:00"
-    },
-    {
       "event_id": "7620876",
       "homeTeam": "Georgia Bulldogs",
       "awayTeam": "Auburn Tigers",
@@ -101,6 +89,12 @@
       "homeTeam": "Michigan Wolverines",
       "awayTeam": "UCLA Bruins",
       "startDateEastern": "2026-11-21 05:00:00"
+    },
+    {
+      "event_id": "7620878",
+      "homeTeam": "Georgia Bulldogs",
+      "awayTeam": "Vanderbilt Commodores",
+      "startDateEastern": "2026-10-03 04:00:00"
     }
   ]
 }
