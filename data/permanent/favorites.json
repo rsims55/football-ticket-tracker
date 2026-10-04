@@ -55,12 +55,6 @@
       "startDateEastern": "2026-11-28 05:00:00"
     },
     {
-      "event_id": "7707575",
-      "homeTeam": "Maryland Terrapins",
-      "awayTeam": "UCLA Bruins",
-      "startDateEastern": "2026-09-26 04:00:00"
-    },
-    {
       "event_id": "7620876",
       "homeTeam": "Georgia Bulldogs",
       "awayTeam": "Auburn Tigers",
@@ -89,12 +83,6 @@
       "homeTeam": "Michigan Wolverines",
       "awayTeam": "UCLA Bruins",
       "startDateEastern": "2026-11-21 05:00:00"
-    },
-    {
-      "event_id": "7620878",
-      "homeTeam": "Georgia Bulldogs",
-      "awayTeam": "Vanderbilt Commodores",
-      "startDateEastern": "2026-10-03 04:00:00"
     }
   ]
 }
