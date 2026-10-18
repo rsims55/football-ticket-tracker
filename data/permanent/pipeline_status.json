@@ -1,16 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (567 new rows). Total now: 889866",
+    "detail": "Snapshot appended (721 new rows). Total now: 890244",
     "extra": {
-      "events_total": 573,
-      "rows_new": 567,
-      "rows_total": 889866,
+      "events_total": 730,
+      "rows_new": 721,
+      "rows_total": 890244,
       "scraped_fail": 0,
-      "scraped_ok": 101,
-      "started_at": "2026-10-18 11:26:02"
+      "scraped_ok": 132,
+      "started_at": "2026-10-18 12:20:11"
     },
     "status": "success",
-    "updated_at": "2026-10-18 12:05:51"
+    "updated_at": "2026-10-18 13:06:24"
   },
   "health_check": {
     "detail": "Health check passed",
