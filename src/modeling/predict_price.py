@@ -150,13 +150,20 @@ def _latest_row_per_event(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     from gui.predict_trajectory import predict_trajectory
+    # The online model (now the default -- see gui/predict_trajectory.py) needs
+    # price_prev/price_roll3_mean/etc. computed, or every game's price_*_missing
+    # flags fire and swamp the fitted team/game signal entirely (learned this
+    # wiring this up: predictions collapsed to ~the same price/timing for every
+    # game regardless of matchup). Use the same enriched loader + outlier-aware
+    # anchor selection online_price_update.py and backtest_predictions.py use.
+    from modeling.online_price_model import load_enriched_snapshots, robust_latest_row_per_event
 
-    print(f"[predict_price] Loading {YEAR} snapshots …")
-    df = _load_snapshots()
+    print(f"[predict_price] Loading {YEAR} snapshots (enriched) …")
+    df = load_enriched_snapshots(restrict_to_season=YEAR)
     print(f"[predict_price]   {len(df):,} rows, {df['event_id'].nunique():,} events")
 
     obs = _observed_min_per_event(df)
-    games = _latest_row_per_event(df)
+    games = robust_latest_row_per_event(df)
 
     now = pd.Timestamp.now()
     results = []

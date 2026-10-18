@@ -1,0 +1,396 @@
+team,role,avg_impact_usd
+Mississippi Rebels,away,69.90828043265608
+Ohio State Buckeyes,away,61.613783633031886
+LSU Tigers,away,59.437242329159155
+Texas Longhorns,home,57.7333366744378
+Alabama Crimson Tide,away,56.340748542970296
+Notre Dame Fighting Irish,away,54.10782028699506
+Florida Gators,away,53.61530774636577
+Northwestern Wildcats,home,50.98712078011425
+BYU Cougars,home,49.29388961603168
+Texas Longhorns,away,46.42226699609023
+Arkansas Razorbacks,away,42.74256456123143
+Tennessee Volunteers,home,42.17433981419966
+Colorado Buffaloes,away,41.71541898975267
+Notre Dame Fighting Irish,home,41.36249621737931
+Auburn Tigers,away,38.91602063149538
+San Jose Spartans,home,38.90736012318755
+Texas A&M Aggies,away,38.58718966061039
+Ohio State Buckeyes,home,38.0545939003031
+Georgia Bulldogs,home,37.77757338739549
+Utah Utes,home,37.58089980730818
+Indiana Hoosiers,home,37.1700220090356
+Bowling Green Falcons,home,36.89933630067249
+Georgia Bulldogs,away,36.75848625882925
+Texas A&M Aggies,home,35.633452997778136
+Kentucky Wildcats,away,35.25924511607388
+Tennessee Volunteers,away,34.92730641577341
+Utah Tech Trailblazers,away,34.60923183755436
+Appalachian State Mountaineers,home,34.32132401751524
+Penn State Nittany Lions,away,34.08823293716307
+Oklahoma Sooners,away,34.00855993318202
+Virginia Military Keydets,away,33.83835218457877
+North Dakota State Bison,home,33.33442127259041
+West Virginia Mountaineers,home,32.976426732809415
+South Carolina Gamecocks,away,32.92418872153146
+Oregon Ducks,away,32.42865374776154
+USC Trojans,away,32.03353489318062
+Michigan Wolverines,away,31.833423616393365
+Clemson Tigers,away,31.45162570129495
+Iowa Hawkeyes,away,31.183035986223313
+Wisconsin Badgers,away,31.08000734362119
+Arizona State Sun Devils,away,30.53724234235773
+Texas Tech Red Raiders,home,23.29187811757293
+Northern Iowa Panthers,away,23.205973990665072
+North Carolina State Wolfpack,home,22.838650798659746
+Colorado Buffaloes,home,22.793486393849065
+Arizona Wildcats,away,22.75948013586068
+Washington State Cougars,home,21.765512939643482
+James Madison Dukes,home,21.709650383967826
+Illinois State Redbirds,away,21.493653492082984
+North Carolina Tar Heels,home,20.8643961547405
+Kansas State Wildcats,home,20.586429415042787
+Florida State Seminoles,away,19.994988765202883
+Michigan State Spartans,away,18.653425041646237
+Indiana Hoosiers,away,17.451063316976864
+Oklahoma Sooners,home,17.393102120981965
+Kansas Jayhawks,away,16.77552345217816
+Mississippi Rebels,home,14.838315968409818
+Navy Midshipmen,home,14.569660643650156
+Kansas Jayhawks,home,13.03318549114576
+Virginia Tech Hokies,home,12.914268976902378
+Auburn Tigers,home,12.420435218042101
+Michigan Wolverines,home,12.044738296377934
+Missouri Tigers,home,11.950493257381183
+BYU Cougars,away,11.692079715891655
+Iowa Hawkeyes,home,11.45808580783914
+Oklahoma State Cowboys,away,10.456661369335066
+Texas Tech Red Raiders,away,10.441237333069417
+Vanderbilt Commodores,away,9.950387965480042
+North Carolina Tar Heels,away,9.892762552418619
+Tennessee State Tigers,away,9.839302355901188
+Nebraska Cornhuskers,away,9.659362853480987
+Kansas State Wildcats,away,8.993720466560248
+Montana State Bobcats,away,8.617755756820898
+Holy Cross Crusaders,away,7.456880453155792
+Army West Point Black Knights,home,7.192397098824302
+Mississippi State Bulldogs,away,7.08385586764026
+Boise State Broncos,home,6.853438384347847
+Oklahoma State Cowboys,home,6.8393937518789825
+Boise State Broncos,away,6.748208828380972
+UCLA Bruins,away,6.544682537739124
+Appalachian State Mountaineers,away,6.474572375493249
+Sam Houston Bearkats,away,6.396307981171021
+South Carolina Gamecocks,home,6.116399583029229
+Florida Gators,home,6.05929511320829
+Alabama Crimson Tide,home,5.116605895823918
+West Virginia Mountaineers,away,4.852171476360786
+North Dakota Fighting Hawks,away,4.492007415670766
+North Dakota State Bison,away,4.361722157110267
+UNLV Rebels,home,2.7367564326543175
+Nebraska Cornhuskers,home,2.5383084431273146
+Northern Illinois Huskies,home,2.1571521930222057
+Iowa State Cyclones,away,2.151910505849865
+Hawaii Rainbow Warriors,home,1.5480909897865067
+Colorado State Rams,home,1.19686589594493
+USC Trojans,home,1.090744016178132
+Virginia Tech Hokies,away,0.5740396236244957
+Iowa State Cyclones,home,0.11466977563729752
+South Dakota State Jackrabbits,away,-0.09161659866793337
+Miami Hurricanes,away,-0.16644379712624655
+TCU Horned Frogs,home,-0.16891642064795107
+Washington Huskies,away,-0.7734690306200848
+Clemson Tigers,home,-0.8439599407931808
+Wisconsin Badgers,home,-1.1288356887092288
+Utah Utes,away,-1.1317064558534462
+Richmond Spiders,away,-1.14944639845984
+UCLA Bruins,home,-1.4702440717242677
+Vanderbilt Commodores,home,-1.5404646105361464
+Oregon Ducks,home,-1.5437597500979474
+Cincinnati Bearcats,home,-1.5787906168077195
+Chattanooga Mocs,away,-1.6352657605330325
+Michigan State Spartans,home,-1.654045197910922
+Houston Cougars,away,-1.9253734825442823
+Georgia Tech Yellow Jackets,away,-1.9788102341327265
+New Mexico Lobos,away,-2.0297453604073397
+Cincinnati Bearcats,away,-2.117180262151486
+Washington State Cougars,away,-2.1625466317259945
+Oregon State Beavers,away,-2.3051739908988336
+Jackson State Tigers,away,-2.408702358903209
+Wyoming Cowboys,home,-2.8894998468259607
+Central Arkansas Bears,away,-3.212416179068175
+New Mexico State Aggies,home,-3.486084634129238
+Miami (OH) RedHawks,home,-4.147070421230156
+UT Martin Skyhawks,away,-4.233121916626308
+Rutgers Scarlet Knights,home,-4.487986241114305
+Charlotte 49ers,home,-4.672744412989171
+Air Force Falcons,away,-4.775256519194795
+Wyoming Cowboys,away,-4.957369453263205
+Hawaii Rainbow Warriors,away,-5.018049738487059
+James Madison Dukes,away,-5.110067919100348
+Florida State Seminoles,home,-5.180511331049222
+Old Dominion Monarchs,home,-5.346773177915474
+Fordham Rams,away,-5.539773502805208
+Florida Atlantic Owls,away,-6.083469392341434
+Old Dominion Monarchs,away,-6.2838185650718215
+Coastal Carolina Chanticleers,home,-6.29235099551824
+Baylor Bears,away,-6.323568661994452
+Towson Tigers,away,-6.641557253492017
+Tulane Green Wave,away,-6.914440233931059
+Utah State Aggies,away,-6.916952814522438
+North Carolina State Wolfpack,away,-6.928794965684204
+Louisiana-Lafayette Ragin' Cajuns,home,-7.034167291499357
+UCF Knights,away,-7.049061428790172
+Coastal Carolina Chanticleers,away,-7.208459585724216
+Texas State Bobcats,away,-7.27199161473663
+Sam Houston State Bearkats,away,-7.280821560401944
+Kennesaw State Owls,away,-7.29383610236321
+Minnesota Golden Gophers,home,-7.301061021439524
+Middle Tennessee Blue Raiders,away,-7.321743525770785
+Cal Poly Mustangs,away,-7.395658919227997
+California Golden Bears,away,-7.439091531622726
+North Carolina A&T Aggies,away,-7.5002555604024295
+Jacksonville State Gamecocks,away,-7.7370406482317104
+UTSA Roadrunners,away,-7.754714714653569
+Western Kentucky Hilltoppers,away,-7.772392623502323
+Nevada Wolf Pack,away,-7.796166243865334
+Marshall Thundering Herd,away,-7.799025690710447
+TCU Horned Frogs,away,-7.825694949037983
+Syracuse Orange,away,-7.9074348138172175
+Miami (OH) RedHawks,away,-7.98365429413271
+Northern Colorado Bears,away,-8.02340812169739
+Pittsburgh Panthers,away,-8.0410800897691
+Georgia State Panthers,away,-8.081252058651597
+Norfolk State Spartans,away,-8.125833791995705
+Georgia Southern Eagles,away,-8.156457509236605
+East Carolina Pirates,away,-8.262697625833386
+Mercyhurst Lakers,away,-8.285771915070804
+UTEP Miners,away,-8.370803749643718
+Liberty Flames,away,-8.381519039071982
+Virginia Cavaliers,away,-8.38779109662269
+UMass Minutemen,home,-8.3956500712384
+Northwestern Wildcats,away,-8.453891810788019
+Idaho Vandals,away,-8.48872931326635
+Navy Midshipmen,away,-8.821670072710955
+Louisiana Lafayette Ragin Cajuns,home,-8.83401835892144
+Fresno State Bulldogs,home,-8.88580570205608
+South Florida Bulls,away,-8.907039645532583
+Troy Trojans,away,-8.915472393956277
+Fresno State Bulldogs,away,-8.970011456885537
+Arkansas State Red Wolves,home,-8.985593544273113
+San Jose State Spartans,away,-9.055689530126916
+Western Michigan Broncos,away,-9.103248036091644
+Bowling Green Falcons,away,-9.120235944961237
+Colorado State Rams,away,-9.19940914367885
+Samford Bulldogs,away,-9.234513160752513
+New Mexico Lobos,home,-9.283784026250052
+Louisville Cardinals,away,-9.299910195453531
+Charlotte 49ers,away,-9.303289514685611
+Ball State Cardinals,away,-9.415501542835191
+Nevada Wolf Pack,home,-9.419308197519436
+Missouri Tigers,away,-9.4262152497987
+Missouri State Bears,home,-9.435330856934478
+UTEP Miners,home,-9.470363242272402
+Toledo Rockets,home,-9.580392841560219
+Florida International Panthers,home,-9.649338144436443
+Maryland Terrapins,away,-9.655026361940486
+Stanford Cardinal,away,-9.672563233367187
+Monmouth Hawks,away,-9.678623246862063
+University of Texas-Rio Grande Valley,away,-9.711825133210365
+UAlbany Great Danes,away,-9.725619867643967
+Liberty Flames,home,-9.771678785959324
+Mississippi State Bulldogs,home,-9.786647314976177
+San Diego State Aztecs,away,-9.818986253500922
+Memphis Tigers,away,-9.820332424090475
+Bryant Bulldogs,away,-9.917146953712273
+Virginia Cavaliers,home,-9.923584263336847
+Georgia State Panthers,home,-9.925667752268097
+San Diego State Aztecs,home,-9.983899639784259
+Missouri State Bears,away,-9.989315447275535
+The Citadel Bulldogs,away,-9.99003553360507
+Central Michigan Chippewas,home,-10.001528329260884
+Abilene Christian Wildcats,away,-10.091029395451164
+Southern Utah Mustangs,away,-10.099218267388183
+Sacred Heart Pioneers,away,-10.172635328317078
+Central Connecticut State Blue Devils,away,-10.181998376805373
+Army West Point Black Knights,away,-10.203022510488678
+North Carolina Central Eagles,away,-10.23943010822676
+Memphis Tigers,home,-10.249969475003073
+Utah State Aggies,home,-10.291322294812947
+Oregon State Beavers,home,-10.418511345720058
+Minnesota Golden Gophers,away,-10.461302617866842
+North Texas Mean Green,away,-10.513888808944568
+South Dakota Coyotes,away,-10.54183174921105
+Illinois Fighting Illini,away,-10.573022734327907
+Arkansas State Red Wolves,away,-10.596025052310488
+South Carolina State Bulldogs,away,-10.676826571609705
+Kent State Golden Flashes,away,-10.708972107306641
+UNLV Rebels,away,-10.725408413594133
+Texas Southern Tigers,away,-10.73880299487291
+East Carolina Pirates,home,-10.807731161144154
+Central Michigan Chippewas,away,-10.818857307925606
+Western Kentucky Hilltoppers,home,-10.878802922932426
+Rice Owls,away,-11.031489483914166
+Gardner-Webb Runnin' Bulldogs,away,-11.0408552871655
+Air Force Falcons,home,-11.15082132372011
+West Georgia Wolves,away,-11.189042906236097
+Louisiana-Monroe Warhawks,home,-11.247622839516241
+Sacramento State Hornets,home,-11.380041431150268
+Toledo Rockets,away,-11.479552280763095
+Houston Cougars,home,-11.526022540280985
+Delaware Blue Hens,home,-11.583587830493057
+Baylor Bears,home,-11.74274076936014
+Temple Owls,home,-11.834157022026417
+Buffalo Bulls,home,-11.838419626166207
+Tulsa Golden Hurricane,home,-11.952486535729703
+Stanford Cardinal,home,-12.026382946925297
+Merrimack Warriors,away,-12.059645408146457
+Penn State Nittany Lions,home,-12.079153270833784
+Ohio Bobcats,away,-12.191521496364576
+LIU Sharks,away,-12.194882716058562
+Southeast Missouri State Redhawks,away,-12.293368531466637
+Wagner Seahawks,away,-12.299250658595295
+Purdue Boilermakers,away,-12.344200730601937
+Stonehill Skyhawks,away,-12.389722800818792
+Alcorn State Braves,away,-12.519518000311923
+Maine Black Bears,away,-12.58134808033312
+Texas State Bobcats,home,-12.663963587729063
+UAB Blazers,home,-12.689775790271222
+Louisiana Monroe Warhawks,home,-12.705497896901917
+New Mexico State Aggies,away,-12.735354720982267
+UConn Huskies,away,-12.895724644838948
+Weber State Wildcats,away,-12.994647526805197
+Marshall Thundering Herd,home,-13.010672002450312
+Miami Hurricanes,home,-13.020165491159727
+Rutgers Scarlet Knights,away,-13.02427928242712
+Nicholls State Colonels,away,-13.051684289936198
+UTSA Roadrunners,home,-13.060278838637112
+California Golden Bears,home,-13.119576920713476
+Sacramento State Hornets,away,-13.228318720532748
+Eastern Michigan Eagles,away,-13.276748282839279
+Florida International Panthers,away,-13.328114925495194
+Jacksonville State Gamecocks,home,-13.363674309381754
+Furman Paladins,away,-13.403259053295853
+Unlv Rebels,home,-13.45638746500018
+Lindenwood Lions,away,-13.481149881832375
+Akron Zips,away,-13.550659604736786
+Buffalo Bulls,away,-13.57901278080205
+Kentucky Wildcats,home,-13.770857486743276
+Incarnate Word Cardinals,away,-13.81764570297864
+Tulsa Golden Hurricane,away,-14.013099646817889
+Robert Morris Colonials,away,-14.02490110853577
+Duke Blue Devils,home,-14.05758765416429
+Georgia Tech Yellow Jackets,home,-14.11686422238673
+Alabama State Hornets,away,-14.127923987650401
+Duke Blue Devils,away,-14.214083316646654
+Bowling Green State Falcons,away,-14.238421993000424
+Temple Owls,away,-14.31617074250013
+Idaho State Bengals,away,-14.321792917162087
+Sam Houston State University,away,-14.556378930352752
+Southern Miss Golden Eagles,home,-14.560774462352748
+Wake Forest Demon Deacons,away,-14.724853757051395
+Rice Owls,home,-14.775122231635747
+Stony Brook Seawolves,away,-14.794637622725144
+Lamar Cardinals,away,-14.806162646940097
+Ball State Cardinals,home,-14.831372833826249
+Ohio Bobcats,home,-14.870632593806109
+Houston Christian Huskies,away,-14.979313158695513
+Tulane Green Wave,home,-15.194968080771638
+Sam Houston State Bearkats,home,-15.278794429889775
+Louisiana-Lafayette Ragin' Cajuns,away,-15.342733963004564
+Kent State Golden Flashes,home,-15.369594601892949
+Western Illinois Leathernecks,away,-15.377833525568771
+UAB Blazers,away,-15.381351126148044
+Southeastern Louisiana Lions,away,-15.397177245509543
+South Alabama Jaguars,away,-15.466086883614894
+Pittsburgh Panthers,home,-15.544861084720937
+Colgate Raiders,away,-15.556467352667383
+Louisiana Lafayette Ragin Cajuns,away,-15.666651674333176
+Boston College Eagles,away,-15.679891325333752
+Middle Tennessee State Blue Raiders,away,-15.915827729362377
+UMass Minutemen,away,-15.921446187545486
+Northern Illinois Huskies,away,-15.94180454571344
+East Tennessee State Buccaneers,away,-15.94647169439597
+Eastern Kentucky Colonels,away,-16.048537645659774
+Saint Francis (PA) Red Flash,away,-16.051887566789325
+Stephen F. Austin Lumberjacks,away,-16.155189446062277
+Louisiana Tech Bulldogs,away,-16.18600635034587
+Uconn Huskies,away,-16.33611079871232
+Lafayette Leopards,away,-16.363997248221665
+Arizona State Sun Devils,home,-16.372123311945472
+Southern Miss Golden Eagles,away,-16.43167958826008
+Tarleton State Texans,away,-16.4489440024151
+Akron Zips,home,-16.465150673414634
+Middle Tennessee State Blue Raiders,home,-16.58041896874079
+Southern Methodist (SMU) Mustangs,home,-16.622874684992517
+Louisiana Monroe Warhawks,away,-16.688351283686995
+Tennessee Tech Golden Eagles,away,-16.72658486424842
+North Texas Mean Green,home,-16.82993582180897
+Delaware State Hornets,away,-16.90043089710637
+Bowling Green State Falcons,home,-16.91671157272984
+Troy Trojans,home,-16.94261296870799
+Wofford Terriers,away,-16.943187661774697
+Duquesne Dukes,away,-17.012640717313303
+Eastern Michigan Eagles,home,-17.175317649648086
+Howard Bison,away,-17.30637388353256
+Delaware Blue Hens,away,-17.371101955445784
+William & Mary Tribe,away,-17.628168722223247
+Northern Arizona Lumberjacks,away,-17.754544964727682
+South Alabama Jaguars,home,-17.776109219166315
+Middle Tennessee Blue Raiders,home,-17.79385415208692
+Bethune-Cookman Wildcats,away,-17.90730581520747
+New Hampshire Wildcats,away,-17.96707335686223
+Maryland Terrapins,home,-18.066113274616402
+East Texas A&M Lions,away,-18.088893726326994
+Louisiana-Monroe Warhawks,away,-18.098718402923847
+Nicholls Colonels,away,-18.311748119351403
+Kennesaw State Owls,home,-18.317045278537666
+Washington Huskies,home,-18.3347262465396
+Western Michigan Broncos,home,-18.397565860824397
+Rhode Island Rams,away,-18.45524206585427
+Florida Atlantic Owls,home,-18.545487119458173
+Wake Forest Demon Deacons,home,-18.577565894898818
+UC Davis Aggies,away,-18.59523203221669
+Georgia Southern Eagles,home,-18.624176792611028
+Northwestern State Demons,away,-18.986632791349177
+Southern Methodist (SMU) Mustangs,away,-18.989012658727518
+Louisville Cardinals,home,-19.024324504861656
+Louisiana Tech Bulldogs,home,-19.092535138438667
+Portland State Vikings,away,-19.115507922666904
+Murray State Racers,away,-19.27988683753026
+Southern Utah Thunderbirds,away,-19.424129311735822
+Bucknell Bison,away,-19.50612097547478
+Alabama A&M Bulldogs,away,-19.848905369254716
+Elon Phoenix,away,-20.10262118761497
+San Jose State Spartans,home,-20.14411417158255
+LSU Tigers,home,-20.3167919717615
+Southern Illinois Salukis,away,-20.33076826149518
+Sam Houston Bearkats,home,-20.444136022795515
+South Florida Bulls,home,-20.444922270053212
+UConn Huskies,home,-20.64773629180141
+Arkansas Razorbacks,home,-20.653247299644498
+Villanova Wildcats,away,-20.777487748399786
+Eastern Washington Eagles,away,-20.79420128317348
+Youngstown State Penguins,away,-20.804366311521683
+Florida A&M Rattlers,away,-20.941931841017013
+Mercer Bears,away,-20.95595971596203
+Prairie View A&M Panthers,away,-21.1169952853186
+Charleston Southern Buccaneers,away,-21.242187171438516
+Southern Jaguars,away,-21.47135051542208
+Arkansas-Pine Bluff Golden Lions,away,-21.674516221382103
+Indiana State Sycamores,away,-21.913611941232464
+North Alabama Lions,away,-22.1421514553766
+McNeese State Cowboys,away,-22.226348193124007
+Purdue Boilermakers,home,-22.316295334106623
+Illinois Fighting Illini,home,-22.34775509874242
+Morgan State Bears,away,-22.782283145475684
+Boston College Eagles,home,-23.146944734306082
+Arizona Wildcats,home,-23.87132158516777
+Western Carolina Catamounts,away,-23.999780101739383
+Campbell Fighting Camels,away,-24.139138403167046
+Eastern Illinois Panthers,away,-24.445347091344587
+Syracuse Orange,home,-24.52815411528234
+Austin Peay Governors,away,-24.591723186594532
+UCF Knights,home,-24.765590671784302
+Grambling State Tigers,away,-26.382083946957202
+Hampton Pirates,away,-26.5980580465909

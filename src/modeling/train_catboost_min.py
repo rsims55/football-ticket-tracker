@@ -444,8 +444,11 @@ def _add_price_history_features(df: pd.DataFrame) -> pd.DataFrame:
         g["price_prev"] = g["lowest_price"].shift(1)
         g["price_delta"] = g["lowest_price"] - g["price_prev"]
         g["price_delta_pct"] = g["price_delta"] / g["price_prev"].replace(0, np.nan)
-        g["price_roll3_mean"] = g["lowest_price"].rolling(3, min_periods=1).mean()
-        g["price_roll3_std"] = g["lowest_price"].rolling(3, min_periods=2).std()
+        # Rolling stats must exclude the current row (shift(1) first) or they leak
+        # the target into its own feature -- rolling(3) alone includes row i itself.
+        _prior = g["lowest_price"].shift(1)
+        g["price_roll3_mean"] = _prior.rolling(3, min_periods=1).mean()
+        g["price_roll3_std"] = _prior.rolling(3, min_periods=2).std()
         g["snapshots_so_far"] = np.arange(1, len(g) + 1)
         # time since last snapshot
         prev_ts = g["_snapshot_ts"].shift(1)
@@ -527,6 +530,11 @@ def _load_all_snapshots() -> pd.DataFrame:
         if not d.exists():
             continue
         for f in d.iterdir():
+            if f.name.endswith(".__tmp__"):
+                # Atomic-write in-progress file (see .gitignore) -- a snapshot job can
+                # be mid-write when this runs; matching it would silently train on a
+                # partial/incomplete file instead of the real, complete CSV.
+                continue
             m = re.search(r"price_snapshots_(\d{4})", f.name)
             if not m:
                 continue
