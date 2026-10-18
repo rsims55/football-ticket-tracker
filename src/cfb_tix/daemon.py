@@ -392,6 +392,14 @@ def job_daily_snapshot(paths: Paths) -> None:
     env = _child_env_for_repo(paths)
     try:
         run_py_script("src/builders/daily_snapshot.py", paths.app_root, env=env)
+        # Update the online price model (Stage 2 of the pricing redesign) BEFORE the
+        # favorites report/alerts, so they read the freshest state. NOT wired into
+        # job_near_term_snapshot below (every ~2h) -- online_price_update.py currently
+        # reloads + re-enriches the full multi-season snapshot history every run
+        # (~10-20 min), which is fine at this job's ~4x/day cadence but too heavy to
+        # run every 2 hours until that load path is narrowed to just recently-touched
+        # events. See [[pricing-redesign]] in project memory.
+        run_py_script("src/modeling/online_price_update.py", paths.app_root, env=env)
         # Send favorites report after each snapshot (silently skips if no favorites)
         run_py_script("src/reports/favorites_report.py", paths.app_root, env=env)
     finally:

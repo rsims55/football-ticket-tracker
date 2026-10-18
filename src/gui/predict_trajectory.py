@@ -24,6 +24,42 @@ _THIS = Path(__file__).resolve()
 PROJ_DIR = _THIS.parents[2]
 DEFAULT_MODEL_PATH = PROJ_DIR / "models" / "catboost_price_min.cbm"
 
+# ---------- Online model (Stage 2 of the pricing redesign, see project memory
+# pricing-redesign.md) ----------
+# The CatBoost model above predicts a % gap off a single anchor price, with a
+# monotonic constraint on hours_until_game that made it always recommend "buy now"
+# regardless of the game (validated via backtest_predictions.py: 0/176 completed
+# games had a predicted floor within 24h of the real one). The online model predicts
+# absolute price directly with no anchor and no monotonic constraint; backtested at
+# 34% within 24h / median timing error 52.6h vs the real median of 58h. It's the
+# default now; set USE_ONLINE_PRICE_MODEL=0 to fall back to the CatBoost path below
+# (e.g. if the online model's state file is missing or something looks wrong).
+_ONLINE_STATE_PATH = PROJ_DIR / "models" / "online_price_state.npz"
+_USE_ONLINE_PRICE_MODEL = os.getenv("USE_ONLINE_PRICE_MODEL", "1") == "1"
+
+
+@lru_cache(maxsize=1)
+def _online_state():
+    if not _USE_ONLINE_PRICE_MODEL:
+        return None
+    try:
+        from modeling.online_price_model import BucketedRLSState
+        if BucketedRLSState.exists(_ONLINE_STATE_PATH):
+            return BucketedRLSState.load(_ONLINE_STATE_PATH)
+        print(f"[predict_trajectory] no online model state at {_ONLINE_STATE_PATH} "
+              f"-- falling back to CatBoost. Run online_price_update.py to create it.")
+    except Exception as e:
+        print(f"[predict_trajectory] online model unavailable ({e}) -- falling back to CatBoost.")
+    return None
+
+
+def get_online_state():
+    """Public accessor for the cached online model state (None if unavailable/
+    disabled). Lets callers -- the GUI, for the price/timing RANGE display -- reuse
+    the already-loaded ~25MB state via online_price_model.predict_price_range_online
+    without loading it a second time."""
+    return _online_state()
+
 
 def _to_dt(x):
     try:
@@ -169,8 +205,23 @@ def predict_for_times(
 ) -> List[float]:
     """
     Predict minimum price at each time in `times`.
-    Uses the CatBoost gap_pct model and converts using current snapshot price.
+    Uses the online model (default) or the CatBoost gap_pct model as a fallback --
+    see the online model section above.
     """
+    state = _online_state()
+    if state is not None:
+        from modeling.online_price_model import predict_price_online
+        return predict_price_online(row, state, times)
+    return predict_for_times_catboost(row, times, model_path=model_path)
+
+
+def predict_for_times_catboost(
+    row: Dict, times: Iterable[pd.Timestamp], model_path: str | Path | None = None
+) -> List[float]:
+    """The original CatBoost gap_pct implementation, callable directly regardless of
+    whether the online model's state exists -- backtest_predictions.py needs this to
+    score CatBoost specifically; predict_for_times above is the auto-delegating
+    version everything else should use."""
     model = _load_model(model_path)
     df = _build_feature_frame(row, times, model)
     preds = model.predict(df)
@@ -194,13 +245,28 @@ def predict_trajectory(
     step_hours: int = 6,
     model_path: str | Path | None = None,
 ) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    state = _online_state()
+    if state is not None:
+        from modeling.online_price_model import predict_trajectory_online
+        return predict_trajectory_online(row, state, hours_back=hours_back, step_hours=step_hours)
+    return predict_trajectory_catboost(row, hours_back=hours_back, step_hours=step_hours, model_path=model_path)
+
+
+def predict_trajectory_catboost(
+    row: Dict,
+    hours_back: int = 24 * 30,
+    step_hours: int = 6,
+    model_path: str | Path | None = None,
+) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """The original CatBoost trajectory scan, callable directly regardless of
+    whether the online model's state exists -- see predict_for_times_catboost."""
     kickoff = _kickoff_ts(row)
     if pd.isna(kickoff):
         raise ValueError("Missing/invalid kickoff timestamp for trajectory simulation.")
 
     hours = np.arange(1, int(hours_back) + 1, int(step_hours), dtype=int)
     ts_grid = [kickoff - pd.Timedelta(int(h), "h") for h in hours]
-    prices = predict_for_times(row, ts_grid, model_path=model_path)
+    prices = predict_for_times_catboost(row, ts_grid, model_path=model_path)
 
     df = pd.DataFrame({"when": ts_grid, "yhat": prices})
     summary = {

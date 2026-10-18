@@ -187,6 +187,9 @@ class TicketApp(QMainWindow):
         self.traj_times = []
         self.traj_prices = []
         self.traj_obs_min = np.nan
+        self.traj_range = {}   # {"all_buckets": DataFrame, "best": dict} from the
+                                # online model's per-game price/timing range, or {}
+                                # if unavailable (e.g. CatBoost fallback mode)
         self.playhead_line = None
         self.playhead_marker = None
         self.hover_annot = None
@@ -1020,7 +1023,15 @@ class TicketApp(QMainWindow):
                               "isRankedMatchup"):
                         if k in latest and pd.notna(latest.get(k)):
                             row[k] = latest[k]
-                    self.current_row = row
+
+            # price_prev/price_roll3_mean/price_delta_pct for the online model --
+            # without these EVERY _missing flag fires and the prediction collapses
+            # toward the (very large) coefficient the model learned for "no price
+            # history at all" -- meant to fire only for an event's literal
+            # first-ever snapshot. predict_price.py hit this exact bug earlier
+            # (see [[pricing-redesign]]); this call site was missed at the time.
+            row.update(self._price_history_features(self.current_event_id))
+            self.current_row = row
 
             self.update_countdown_live()
             self._update_fav_button()
@@ -1033,6 +1044,7 @@ class TicketApp(QMainWindow):
 
             # Build trajectory via model (natural timestamps; no snapping)
             self.traj_times, self.traj_prices, self.traj_obs_min, warn = self.build_trajectory(row)
+            self.traj_range = self._predicted_range(row)
             if warn: self._set_details_with_warning(row, warn)
             else:    self.render_details(row)
 
@@ -1040,6 +1052,51 @@ class TicketApp(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not fetch prediction.\n{e}")
+
+    def _price_history_features(self, event_id) -> dict:
+        """price_prev/price_roll3_mean/price_delta_pct for the online model,
+        computed from the full per-event snapshot history already cached in
+        self._snaps_by_event -- cheap (no reload), and matches the leak-fixed
+        definition in train_catboost_min._add_price_history_features (rolling
+        stats computed on prices STRICTLY BEFORE the latest snapshot)."""
+        out = {"price_prev": np.nan, "price_roll3_mean": np.nan, "price_delta_pct": np.nan}
+        if not event_id:
+            return out
+        ev = self._snaps_by_event.get(str(event_id), pd.DataFrame())
+        if ev.empty or "lowest_price" not in ev.columns or "collected_dt" not in ev.columns:
+            return out
+        s = ev.copy()
+        s["lowest_price"] = pd.to_numeric(s["lowest_price"], errors="coerce")
+        s["collected_dt"] = pd.to_datetime(s["collected_dt"], errors="coerce")
+        s = s.dropna(subset=["lowest_price", "collected_dt"]).sort_values("collected_dt")
+        prices = s["lowest_price"].to_numpy()
+        if len(prices) < 2:
+            return out  # first-ever snapshot -- genuinely no history, leave as NaN
+        prev = float(prices[-2])
+        out["price_prev"] = prev
+        out["price_delta_pct"] = (float(prices[-1]) - prev) / prev if prev else np.nan
+        window = prices[max(0, len(prices) - 4):-1]   # up to 3 prices strictly before the latest
+        if len(window):
+            out["price_roll3_mean"] = float(np.mean(window))
+        return out
+
+    def _predicted_range(self, row: dict) -> dict:
+        """Price + timing range from the online model (see [[pricing-redesign]]):
+        every time-bucket's own model is evaluated for this game and whichever
+        bucket predicts the lowest price is "best" -- its own span is a genuinely
+        per-game buy-by-when window, its RLS prediction interval is the price range.
+        Returns {} if the online model isn't active (CatBoost fallback mode) or the
+        game's kickoff can't be resolved -- callers should treat that as "no range
+        available" and fall back to the single point estimate, not an error."""
+        try:
+            from gui.predict_trajectory import get_online_state
+            from modeling.online_price_model import predict_price_range_online
+            state = get_online_state()
+            if state is None:
+                return {}
+            return predict_price_range_online(row, state, z=1.0)
+        except Exception:
+            return {}
 
     def _set_details_with_warning(self, row, warn: str):
         base = self._details_html(row, forecast_min_text="—")
@@ -1057,7 +1114,8 @@ class TicketApp(QMainWindow):
             predicted_min_price = np.nan
         self.details_label.setHtml(self._details_html(row, "—", predicted_min_price, pd.NaT))
 
-    def _details_html(self, row, forecast_min_text: str, predicted_min_price=np.nan, predicted_min_time=pd.NaT) -> str:
+    def _details_html(self, row, forecast_min_text: str, predicted_min_price=np.nan,
+                       predicted_min_time=pd.NaT, concluded: bool = False) -> str:
         game_dt = self._to_eastern(row["startDateEastern"])
         stadium = row.get("stadium", "Unknown Venue")
         kickoff = self._format_kickoff(row)
@@ -1093,19 +1151,57 @@ class TicketApp(QMainWindow):
         confidence = self._confidence_label(row)
         rec_window = "Post-Kickoff" if forecast_min_text == "Post-Kickoff" else self._recommended_window(predicted_min_time)
 
-        # Banner if observed < predicted
+        # --- Predicted floor: range (online model) if available, else a single point ---
+        best_bucket = (self.traj_range or {}).get("best")
+
+        # Banner if observed < predicted (compare against the low end of the range,
+        # when there is one, so the warning matches what's actually displayed).
+        # Doesn't apply to a concluded game -- there's no "prediction" to have beaten.
         warn_html = ""
-        try:
-            if float(observed_price) < float(predicted_price):
-                warn_html = (
-                    "<div style='margin:0 0 8px 0; padding:6px 10px; "
-                    "background:#fdecea; color:#b00020; border:1px solid #f5c6cb; "
-                    "border-radius:6px; font-weight:700;'>"
-                    "⚠️ Cheaper price already observed than the model’s predicted minimum."
-                    "</div>"
-                )
-        except Exception:
-            pass
+        if not concluded:
+            try:
+                floor_for_warning = best_bucket["price_low"] if best_bucket else predicted_price
+                if float(observed_price) < float(floor_for_warning):
+                    warn_html = (
+                        "<div style='margin:0 0 8px 0; padding:6px 10px; "
+                        "background:#fdecea; color:#b00020; border:1px solid #f5c6cb; "
+                        "border-radius:6px; font-weight:700;'>"
+                        "⚠️ Cheaper price already observed than the model’s predicted minimum."
+                        "</div>"
+                    )
+            except Exception:
+                pass
+
+        # A handful of games (~1%) have never had a single valid price snapshot --
+        # the model still returns a technically-valid near-$0 range for these (it
+        # has nothing else to anchor to), which reads as broken rather than "no
+        # data yet". Say that plainly instead.
+        no_price_data = pd.isna(current_price) and pd.isna(observed_price)
+
+        if concluded:
+            floor_color = "#2e7d32"
+            floor_html = f"🏁 Game Concluded &mdash; Final Lowest Price: {self._fmt_money(observed_price)}"
+            buy_window_html = ""
+        elif best_bucket and no_price_data:
+            floor_color = "#888"
+            floor_html = "Predicted Floor: no price data yet"
+            buy_window_html = ""
+        elif best_bucket:
+            floor_color = "#6a1b9a"
+            floor_html = (
+                f"Predicted Floor: {self._fmt_money(best_bucket['price_low'])} "
+                f"&ndash; {self._fmt_money(best_bucket['price_high'])}"
+            )
+            ws, we = best_bucket.get("window_start"), best_bucket.get("window_end")
+            buy_window_html = (
+                "<div style='margin-top:4px; font-size:13px; color:#444;'>"
+                f"<b>Best time to buy:</b> {self._fmt_dt(ws)} &rarr; {self._fmt_dt(we)}"
+                "</div>"
+            ) if pd.notna(ws) and pd.notna(we) else ""
+        else:
+            floor_color = "#6a1b9a"
+            floor_html = f"Predicted Floor: {self._fmt_money(predicted_price)}"
+            buy_window_html = ""
 
         return f"""
             <div style="font-size: 15px; line-height: 1.6;">
@@ -1113,11 +1209,12 @@ class TicketApp(QMainWindow):
 
                 {warn_html}
 
-                <div style="font-size: 16px; font-weight: 700; color: #6a1b9a; margin: 4px 0 8px 0;">
-                    Predicted Floor: {self._fmt_money(predicted_price)}
+                <div style="font-size: 16px; font-weight: 700; color: {floor_color}; margin: 4px 0 4px 0;">
+                    {floor_html}
                 </div>
+                {buy_window_html}
 
-                <div style="margin-top:4px;">
+                <div style="margin-top:8px;">
                     <b>Most Recent Price:</b> {self._fmt_money(current_price)}<br>
                     &nbsp;&nbsp;As of:&nbsp;{self._fmt_dt(current_price_ts)}
                 </div>
@@ -1231,11 +1328,18 @@ class TicketApp(QMainWindow):
         ax.plot(hist_tt, hist_yy, linewidth=2.0, color="#1565c0", label="Avg observed price (daily)")
         ax.scatter(hist_tt, hist_yy, s=36, color="#1565c0", alpha=0.9, zorder=5)
 
-        # Observed minimum reference line
+        # Observed minimum: a subtle reference line for reading the exact value off
+        # the y-axis, PLUS a star right on the point where it actually happened.
         obs_min = getattr(self, "traj_obs_min", np.nan)
         if obs_min is not None and not pd.isna(obs_min) and np.isfinite(float(obs_min)):
-            ax.axhline(float(obs_min), linestyle=":", color="#e65100", linewidth=1.5,
-                       label=f"Lowest observed: ${float(obs_min):,.0f}", alpha=0.9)
+            ax.axhline(float(obs_min), linestyle=":", color="#e65100", linewidth=1.2, alpha=0.6)
+        if len(hist_yy):
+            idx_min = int(np.nanargmin(hist_yy))
+            ax.scatter(
+                [hist_tt[idx_min]], [hist_yy[idx_min]],
+                marker="*", s=420, color="#ffca28", edgecolor="#e65100", linewidth=1.3,
+                zorder=6, label=f"Lowest observed: ${hist_yy[idx_min]:,.0f} on {hist_tt[idx_min].strftime('%b %d')}",
+            )
 
         # Predicted floor reference line (min of model trajectory)
         if self.traj_prices:
@@ -1275,10 +1379,13 @@ class TicketApp(QMainWindow):
                 zorder=5
             )
 
-        # Title
+        # Title -- flag concluded games plainly rather than calling stale data a "forecast"
         row_ref = getattr(self, "current_row", {})
         home = row_ref.get("homeTeam", "?"); away = row_ref.get("awayTeam", "?")
-        ax.set_title(f"{home} vs {away} — Price Forecast", fontsize=12, fontweight="bold")
+        kickoff_dt = pd.to_datetime(row_ref.get("startDateEastern"), errors="coerce")
+        concluded = pd.notna(kickoff_dt) and kickoff_dt < pd.Timestamp.now()
+        subtitle = "🏁 Game Concluded" if concluded else "Price Forecast"
+        ax.set_title(f"{home} vs {away} — {subtitle}", fontsize=12, fontweight="bold")
 
         # Keep series for hover
         self._tt_series = pd.Series(hist_tt).reset_index(drop=True)
@@ -1333,22 +1440,19 @@ class TicketApp(QMainWindow):
 
     # ---------------- Past game text-only summary ----------------
     def render_past_lowest(self, event_id, kickoff: pd.Timestamp, row: dict):
-        ax = self.ax or self.chart_canvas.figure.add_subplot(111)
-        ax.clear(); ax.axis("off")
-
+        """Concluded game: show the real price-history chart (not a live model
+        prediction -- there's nothing left to forecast) with the lowest point
+        starred, plus the final lowest price in place of "Predicted Floor"."""
         observed_price, _obs_ts = self._observed_lowest(event_id, row=row, cutoff_dt=None)
-        min_price_txt = self._fmt_money(observed_price)
 
-        matchup = f"{row.get('homeTeam','?')} vs {row.get('awayTeam','?')}"
-        date_str = pd.to_datetime(row.get("startDateEastern")).strftime("%A, %B %d, %Y") if pd.notna(row.get("startDateEastern")) else "Game date unknown"
+        # Clear any prediction state left over from a previously-selected (future)
+        # game -- render_chart/_details_html read these directly, and a concluded
+        # game has no live prediction of its own to show.
+        self.traj_times, self.traj_prices, self.traj_range = [], [], {}
+        self.traj_obs_min = observed_price
 
-        ax.text(0.5, 0.68, f"{matchup}", ha="center", va="center", fontsize=16, fontweight="bold", transform=ax.transAxes)
-        ax.text(0.5, 0.54, f"Game Date: {date_str}", ha="center", va="center", fontsize=12, transform=ax.transAxes)
-        ax.text(0.5, 0.40, "Observed Lowest Price", ha="center", va="center", fontsize=13, color="#555", transform=ax.transAxes)
-        ax.text(0.5, 0.30, min_price_txt, ha="center", va="center", fontsize=20, fontweight="bold", transform=ax.transAxes, color="#2e7d32")
-
-        self.details_label.setHtml(self._details_html(row, forecast_min_text="—") + "<div style='margin-top:8px;color:#444;'>Game has concluded.</div>")
-        self.chart_canvas.draw_idle()
+        self.render_chart(event_id, reuse_axes=False)
+        self.details_label.setHtml(self._details_html(row, forecast_min_text="—", concluded=True))
 
     def _observed_from_snapshots(self, event_id, cutoff_dt=None):
         try:
