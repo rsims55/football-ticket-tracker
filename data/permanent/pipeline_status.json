@@ -1,16 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (552 new rows). Total now: 902755",
+    "detail": "Snapshot appended (717 new rows). Total now: 903130",
     "extra": {
-      "events_total": 558,
-      "rows_new": 552,
-      "rows_total": 902755,
+      "events_total": 726,
+      "rows_new": 717,
+      "rows_total": 903130,
       "scraped_fail": 0,
-      "scraped_ok": 99,
-      "started_at": "2026-10-21 03:30:50"
+      "scraped_ok": 132,
+      "started_at": "2026-10-21 04:37:25"
     },
     "status": "success",
-    "updated_at": "2026-10-21 04:08:15"
+    "updated_at": "2026-10-21 05:25:48"
   },
   "health_check": {
     "detail": "Health check passed",
@@ -68,10 +68,10 @@
     "detail": "Weekly update complete for 2026",
     "extra": {
       "output": "C:\\Users\\randi\\OneDrive - Clemson University\\Desktop\\Randi Folders\\Personal\\Football Ticket Tracker\\cfb-ticket-tracker\\data\\weekly\\full_2026_schedule.csv",
-      "rows": 378,
+      "rows": 375,
       "year": 2026
     },
     "status": "success",
-    "updated_at": "2026-10-19 05:30:30"
+    "updated_at": "2026-10-21 05:30:27"
   }
 }
