@@ -48,13 +48,13 @@
     "updated_at": "2026-10-23 07:04:37"
   },
   "predict_price": {
-    "detail": "377 predictions generated for 2026",
+    "detail": "376 predictions generated for 2026",
     "extra": {
-      "n_predicted": 377,
-      "n_skipped": 522
+      "n_predicted": 376,
+      "n_skipped": 523
     },
     "status": "success",
-    "updated_at": "2026-10-22 19:13:20"
+    "updated_at": "2026-10-23 07:18:54"
   },
   "weekly_report": {
     "detail": "Weekly report generated: reports\\weekly\\2026-10-19\\weekly_report_2026-10-19.md",
