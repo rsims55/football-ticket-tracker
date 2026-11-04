@@ -23,6 +23,7 @@ Alcorn State Braves,Jackson State
 Amherst,Williams
 Anderson,Manchester
 Anna Maria,Castleton
+Appalachian State Mountaineers,Coastal Carolina Chanticleers
 Appalachian State Mountaineers,Georgia Southern Eagles
 Appalachian State Mountaineers,Marshall Thundering Herd
 Arizona State Sun Devils,Arizona Wildcats
@@ -44,7 +45,6 @@ Auburn Tigers,Georgia Bulldogs
 Auburn Tigers,Georgia Tech Yellow Jackets
 Auburn Tigers,LSU Tigers
 Auburn Tigers,Mississippi Rebels
-Auburn Tigers,Mississippi State Bulldogs
 Auburn Tigers,Tennessee Volunteers
 Auburn Tigers,Tulane Green Wave
 Augsburg,Hamline
@@ -74,7 +74,6 @@ Bowling Green State Falcons,Kent State Golden Flashes
 Bowling Green State Falcons,Toledo Rockets
 Bridgewater State,Mass Maritime
 Brown,Rhode Island Rams
-Buffalo Bulls,UMass Minutemen
 Butler,Valparaiso
 Cal Poly Mustangs,UC Davis Aggies
 California Golden Bears,Indiana Hoosiers
@@ -123,7 +122,6 @@ Colorado Mesa,Colorado Mines
 Colorado State Rams,Wyoming Cowboys
 Columbia,Cornell
 Columbia,Fordham Rams
-Columbia,Northern Iowa Panthers
 Concordia,St. Olaf
 Cornell,Dartmouth
 Cornell,Penn
@@ -136,6 +134,7 @@ Delta State,Mississippi College
 Denison,Wooster
 Dickinson,Franklin & Marshall
 Dickinson,Gettysburg
+Drake,Northern Iowa Panthers
 Duke Blue Devils,Georgia Tech Yellow Jackets
 Duke Blue Devils,North Carolina State Wolfpack
 Duke Blue Devils,North Carolina Tar Heels
@@ -165,7 +164,7 @@ Florida Gators,Miami Hurricanes
 Florida Gators,Tennessee Volunteers
 Florida State Seminoles,Miami Hurricanes
 Florida State Seminoles,Virginia Cavaliers
-Florida Tech,West Florida
+Florida Tech,West FloridaFCS
 Fordham Rams,Holy Cross Crusaders
 Franklin,Hanover
 Franklin & Marshall,Gettysburg
@@ -175,7 +174,7 @@ Fresno State Bulldogs,San Jose State Spartans
 Frostburg StateD-II,Salisbury
 Furman Paladins,The Citadel Bulldogs
 Furman Paladins,Wofford Terriers
-Gannon,Mercyhurst
+Gannon,MercyhurstFCS
 Georgia Bulldogs,Georgia Tech Yellow Jackets
 Georgia Bulldogs,South Carolina Gamecocks
 Georgia Bulldogs,Tennessee Volunteers
@@ -240,7 +239,6 @@ Kansas Jayhawks,Missouri Tigers
 Kansas Jayhawks,Nebraska Cornhuskers
 Kansas State Wildcats,Missouri Tigers
 Kansas State Wildcats,Nebraska Cornhuskers
-Kansas State Wildcats,Oklahoma Sooners
 Kentucky Wildcats,Louisville Cardinals
 Kentucky Wildcats,Tennessee Volunteers
 Kentucky Wildcats,Vanderbilt Commodores
@@ -300,13 +298,11 @@ Minnesota Golden Gophers,Penn State Nittany Lions
 Minnesota Golden Gophers,Wisconsin Badgers
 Minnesota–Duluth,St. Cloud State
 Mississippi Rebels,Mississippi State Bulldogs
-Mississippi Rebels,Tennessee Volunteers
 Mississippi Rebels,Tulane Green Wave
 Mississippi Rebels,Vanderbilt Commodores
 Missouri Southern,Pittsburg State
 Missouri Tigers,Nebraska Cornhuskers
 Missouri Tigers,Oklahoma Sooners
-Missouri Tigers,South Carolina Gamecocks
 Missouri Western,Northwest Missouri State
 Montana,Montana State Bobcats
 Morgan State,Towson Tigers
@@ -317,7 +313,7 @@ Navy Midshipmen,Southern Methodist (SMU) Mustangs
 Nebraska Cornhuskers,Oklahoma Sooners
 Nebraska Cornhuskers,Wisconsin Badgers
 Nevada Wolf Pack,UNLV Rebels
-New Haven,Southern Connecticut
+New HavenFCS,Southern Connecticut
 New Mexico Lobos,New Mexico State Aggies
 New Mexico State Aggies,UTEP Miners
 Newberry,PresbyterianFCS
@@ -335,6 +331,7 @@ North Carolina Tar Heels,Virginia Cavaliers
 North Carolina Tar Heels,Wake Forest Demon Deacons
 North Central,Wheaton
 North Dakota,South Dakota Coyotes
+North Dakota State,Wyoming Cowboys
 North Texas Mean Green,Southern Methodist (SMU) Mustangs
 Northern Arizona Lumberjacks,Southern Utah
 Northwest Missouri State,Pittsburg State
@@ -358,6 +355,7 @@ Oregon Ducks,Saint Mary's
 Oregon Ducks,Stanford Cardinal
 Oregon Ducks,USC Trojans
 Oregon Ducks,Washington Huskies
+Oregon State Beavers,Washington State Cougars
 Pacific,San Jose State Spartans
 Pacific Lutheran,Puget Sound
 Penn,Princeton
