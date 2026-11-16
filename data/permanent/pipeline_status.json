@@ -2,10 +2,10 @@
   "daily_snapshot": {
     "detail": "No snapshot CSV produced.",
     "extra": {
-      "started_at": "2026-11-15 15:47:00"
+      "started_at": "2026-11-15 17:46:07"
     },
     "status": "failed",
-    "updated_at": "2026-11-15 18:23:48"
+    "updated_at": "2026-11-15 20:36:49"
   },
   "health_check": {
     "detail": "Health check passed",
