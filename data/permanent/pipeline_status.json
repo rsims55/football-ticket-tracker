@@ -63,6 +63,6 @@
     "detail": "HTTPSConnectionPool(host='api.collegefootballdata.com', port=443): Max retries exceeded with url: /games?year=2026&seasonType=regular&classification=fbs (Caused by NameResolutionError(\"HTTPSConnection(host='api.collegefootballdata.com', port=443): Failed to resolve 'api.collegefootballdata.com' ([Errno 11001] getaddrinfo failed)\"))",
     "extra": {},
     "status": "failed",
-    "updated_at": "2026-11-16 05:30:23"
+    "updated_at": "2026-11-18 05:30:27"
   }
 }
