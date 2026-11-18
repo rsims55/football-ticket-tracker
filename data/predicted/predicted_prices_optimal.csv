@@ -91,7 +91,7 @@ event_id,homeTeam,awayTeam,startDateEastern,week,homeConference,awayConference,p
 7704657.0,Miami Hurricanes,Boston College Eagles,2026-11-28 05:00:00,13.0,ACC,ACC,21.05,2026-11-28,04:00,catboost,15.0,2026-09-12T13:51:11
 7803526.0,Western Kentucky Hilltoppers,Kennesaw State Owls,2026-11-28 18:00:00,13.0,Conference USA,Conference USA,7.11,2026-11-28,17:00,catboost,8.0,2026-11-10T14:04:18
 7829089.0,Western Michigan Broncos,Miami (OH) RedHawks,2026-11-24 05:00:00,13.0,Mid-American,Mid-American,10.79,2026-11-24,04:00,catboost,12.0,2026-10-27T17:50:36
-7828999.0,Kent State Golden Flashes,Miami (OH) RedHawks,2026-11-18 00:00:00,12.0,Mid-American,Mid-American,10.73,2026-11-17,11:00,catboost,9.0,2026-11-04T15:29:41
+7828999.0,Kent State Golden Flashes,Miami (OH) RedHawks,2026-11-18 00:00:00,12.0,Mid-American,Mid-American,10.99,2026-11-17,23:00,catboost,9.0,2026-11-04T15:29:41
 7528939.0,Florida State Seminoles,Florida Gators,2026-11-27 20:30:00,13.0,ACC,SEC,150.25,2026-11-27,19:30,catboost,135.0,2026-08-21T11:48:02
 7828958.0,Buffalo Bulls,Central Michigan Chippewas,2026-11-19 00:30:00,12.0,Mid-American,Mid-American,20.54,2026-11-18,05:30,catboost,23.0,2026-11-10T16:56:38
 7693437.0,West Virginia Mountaineers,Houston Cougars,2026-11-21 05:00:00,12.0,Big 12,Big 12,30.55,2026-11-21,04:00,catboost,34.0,2026-11-09T07:33:14
@@ -114,7 +114,7 @@ event_id,homeTeam,awayTeam,startDateEastern,week,homeConference,awayConference,p
 7829016.0,UMass Minutemen,Akron Zips,2026-11-19 00:00:00,12.0,Mid-American,Mid-American,15.72,2026-11-18,23:00,catboost,10.0,2026-11-04T15:29:41
 7828930.0,Akron Zips,Buffalo Bulls,2026-11-27 17:00:00,13.0,Mid-American,Mid-American,13.26,2026-11-27,16:00,catboost,14.0,2026-10-30T23:44:16
 7620989.0,Texas A&M Aggies,Texas Longhorns,2026-11-28 00:30:00,13.0,SEC,SEC,228.5,2026-11-27,23:30,catboost,254.0,2026-11-11T21:26:12
-7827920.0,Ohio Bobcats,Ball State Cardinals,2026-11-18 00:00:00,12.0,Mid-American,Mid-American,5.44,2026-11-17,11:00,catboost,6.0,2026-11-04T15:29:41
+7827920.0,Ohio Bobcats,Ball State Cardinals,2026-11-18 00:00:00,12.0,Mid-American,Mid-American,5.48,2026-11-17,23:00,catboost,6.0,2026-11-04T15:29:41
 7624563.0,Mississippi Rebels,Wofford Terriers,2026-11-21 17:00:00,12.0,SEC,Southern,13.7,2026-11-21,16:00,catboost,16.0,2026-11-10T09:30:51
 7808183.0,Arkansas State Red Wolves,Troy Trojans,2026-11-28 20:00:00,13.0,Sun Belt,Sun Belt,18.46,2026-11-28,19:00,catboost,17.0,2026-08-23T14:09:37
 7734880.0,Oregon State Beavers,Utah State Aggies,2026-11-22 03:30:00,12.0,Pac-12,Pac-12,22.95,2026-11-21,08:30,catboost,6.0,2026-09-21T07:55:43
