@@ -93,7 +93,7 @@ event_id,homeTeam,awayTeam,startDateEastern,week,homeConference,awayConference,p
 7829089.0,Western Michigan Broncos,Miami (OH) RedHawks,2026-11-24 05:00:00,13.0,Mid-American,Mid-American,10.79,2026-11-24,04:00,catboost,12.0,2026-10-27T17:50:36
 7828999.0,Kent State Golden Flashes,Miami (OH) RedHawks,2026-11-18 00:00:00,12.0,Mid-American,Mid-American,10.99,2026-11-17,23:00,catboost,9.0,2026-11-04T15:29:41
 7528939.0,Florida State Seminoles,Florida Gators,2026-11-27 20:30:00,13.0,ACC,SEC,150.25,2026-11-27,19:30,catboost,135.0,2026-08-21T11:48:02
-7828958.0,Buffalo Bulls,Central Michigan Chippewas,2026-11-19 00:30:00,12.0,Mid-American,Mid-American,20.55,2026-11-18,11:30,catboost,23.0,2026-11-10T16:56:38
+7828958.0,Buffalo Bulls,Central Michigan Chippewas,2026-11-19 00:30:00,12.0,Mid-American,Mid-American,21.36,2026-11-18,23:30,catboost,23.0,2026-11-10T16:56:38
 7693437.0,West Virginia Mountaineers,Houston Cougars,2026-11-21 05:00:00,12.0,Big 12,Big 12,30.55,2026-11-21,04:00,catboost,34.0,2026-11-09T07:33:14
 7704595.0,Stanford Cardinal,Southern Methodist (SMU) Mustangs,2026-11-28 05:00:00,13.0,ACC,ACC,6.94,2026-11-28,04:00,catboost,6.0,2026-10-23T22:42:12
 7693402.0,Baylor Bears,Texas Tech Red Raiders,2026-11-21 05:00:00,12.0,Big 12,Big 12,39.05,2026-11-21,04:00,catboost,37.0,2026-11-11T11:26:29
