@@ -1,3 +1,2 @@
 event_id,startDateEastern,week,homeConference,awayConference,predicted_lowest_price,predicted_lowest_price_num,optimal_source,optimal_purchase_date,optimal_purchase_time,predicted_optimal_dt,actual_lowest_price,actual_lowest_dt,abs_error,percent_error,timing_abs_error_hours,timing_signed_error_hours
-7828958.0,2026-11-19 00:30:00,12.0,Mid-American,Mid-American,21.36,21.36,catboost,2026-11-18,23:30,2026-11-18 23:30:00,23.0,2026-11-12 00:51:56,1.6400000000000006,0.07130434782608698,166.63444444444445,166.63444444444445
-7829016.0,2026-11-19 00:00:00,12.0,Mid-American,Mid-American,15.72,15.72,catboost,2026-11-18,23:00,2026-11-18 23:00:00,10.0,2026-11-08 07:52:11,5.720000000000001,0.5720000000000001,255.1302777777778,255.1302777777778
+7764953.0,2026-11-20 00:30:00,12.0,American Athletic,American Athletic,3.45,3.45,catboost,2026-11-19,23:30,2026-11-19 23:30:00,3.0,2026-11-04 23:55:42,0.4500000000000002,0.15000000000000005,359.57166666666666,359.57166666666666
