@@ -1,11 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "No snapshot CSV produced.",
+    "detail": "Snapshot appended (4 new rows). Total now: 971238",
     "extra": {
-      "started_at": "2026-11-20 09:39:35"
+      "events_total": 4,
+      "rows_new": 4,
+      "rows_total": 971238,
+      "scraped_fail": 0,
+      "scraped_ok": 132,
+      "started_at": "2026-11-20 11:20:54"
     },
-    "status": "failed",
-    "updated_at": "2026-11-20 12:08:09"
+    "status": "success",
+    "updated_at": "2026-11-20 14:18:38"
   },
   "health_check": {
     "detail": "Health check passed",
