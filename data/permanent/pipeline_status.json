@@ -65,9 +65,13 @@
     "updated_at": "2026-11-16 08:15:15"
   },
   "weekly_update": {
-    "detail": "HTTPSConnectionPool(host='api.collegefootballdata.com', port=443): Max retries exceeded with url: /games?year=2026&seasonType=regular&classification=fbs (Caused by NameResolutionError(\"HTTPSConnection(host='api.collegefootballdata.com', port=443): Failed to resolve 'api.collegefootballdata.com' ([Errno 11001] getaddrinfo failed)\"))",
-    "extra": {},
-    "status": "failed",
-    "updated_at": "2026-11-18 05:30:27"
+    "detail": "Weekly update complete for 2026",
+    "extra": {
+      "output": "C:\\Users\\randi\\OneDrive - Clemson University\\Desktop\\Randi Folders\\Personal\\Football Ticket Tracker\\cfb-ticket-tracker\\data\\weekly\\full_2026_schedule.csv",
+      "rows": 73,
+      "year": 2026
+    },
+    "status": "success",
+    "updated_at": "2026-11-23 05:30:45"
   }
 }
