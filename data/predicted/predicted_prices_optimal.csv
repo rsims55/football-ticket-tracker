@@ -1,100 +1,73 @@
 event_id,homeTeam,awayTeam,startDateEastern,week,homeConference,awayConference,predicted_lowest_price,optimal_purchase_date,optimal_purchase_time,optimal_source,observed_lowest_price_num,observed_lowest_dt
-7707557.0,UCLA Bruins,USC Trojans,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,212.76,2026-11-27,10:00,catboost,93.0,2026-05-21T23:15:29
-7707580.0,Rutgers Scarlet Knights,Michigan State Spartans,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,14.36,2026-11-27,10:00,catboost,16.0,2026-10-14T15:57:48
-7707527.0,Northwestern Wildcats,Illinois Fighting Illini,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,92.21,2026-11-27,10:00,catboost,95.0,2026-11-22T13:04:16
-7624701.0,Georgia Bulldogs,Georgia Tech Yellow Jackets,2026-11-28 05:00:00,13.0,SEC,ACC,100.96,2026-11-27,10:00,catboost,59.0,2026-11-05T13:34:36
-7692978.0,Utah Utes,West Virginia Mountaineers,2026-11-28 02:00:00,13.0,Big 12,Big 12,85.56,2026-11-27,07:00,catboost,57.0,2026-10-31T05:10:21
-7648040.0,Virginia Tech Hokies,Virginia Cavaliers,2026-11-28 05:00:00,13.0,ACC,ACC,92.32,2026-11-27,10:00,catboost,64.0,2026-08-28T22:49:28
-7707547.0,Wisconsin Badgers,Minnesota Golden Gophers,2026-11-28 00:30:00,13.0,Big Ten,Big Ten,31.88,2026-11-27,05:30,catboost,25.0,2026-09-05T11:59:45
-7620963.0,Missouri Tigers,Oklahoma Sooners,2026-11-28 05:00:00,13.0,SEC,SEC,42.51,2026-11-27,10:00,catboost,43.0,2026-11-20T13:59:43
-7707320.0,Indiana Hoosiers,Purdue Boilermakers,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,93.06,2026-11-27,10:00,catboost,80.0,2026-09-25T21:28:18
-7704536.0,Wake Forest Demon Deacons,Duke Blue Devils,2026-11-28 05:00:00,13.0,ACC,ACC,129.79,2026-11-27,10:00,catboost,11.0,2026-09-08T20:28:41
-7693188.0,Oklahoma State Cowboys,Kansas Jayhawks,2026-11-28 05:00:00,13.0,Big 12,Big 12,46.02,2026-11-28,04:00,catboost,39.0,2026-11-06T11:31:31
-7707537.0,Penn State Nittany Lions,Rutgers Scarlet Knights,2026-11-21 20:30:00,12.0,Big Ten,Big Ten,2.79,2026-11-21,19:30,catboost,2.0,2026-11-20T13:59:43
-7704555.0,Syracuse Orange,Notre Dame Fighting Irish,2026-11-28 05:00:00,13.0,ACC,FBS Independents,61.72,2026-11-27,10:00,catboost,56.0,2026-11-04T17:42:54
-7707392.0,USC Trojans,Maryland Terrapins,2026-11-21 23:15:00,12.0,Big Ten,Big Ten,12.94,2026-11-21,22:15,catboost,12.0,2026-11-21T08:22:07
-7792114.0,UNLV Rebels,Nevada Wolf Pack,2026-11-29 02:00:00,13.0,Mountain West,Mountain West,39.38,2026-11-28,07:00,catboost,42.0,2026-10-05T20:55:13
-7601427.0,Clemson Tigers,South Carolina Gamecocks,2026-11-28 05:00:00,13.0,ACC,SEC,77.41,2026-11-27,10:00,catboost,64.0,2026-10-02T05:47:20
-7620965.0,Missouri Tigers,Kentucky Wildcats,2026-11-22 00:30:00,12.0,SEC,SEC,22.16,2026-11-21,23:30,catboost,16.0,2026-11-21T15:25:36
-7707360.0,Iowa Hawkeyes,Nebraska Cornhuskers,2026-11-27 17:00:00,13.0,Big Ten,Big Ten,95.43,2026-11-26,22:00,catboost,30.0,2026-11-09T11:27:49
-7734859.0,Fresno State Bulldogs,Colorado State Rams,2026-11-22 00:30:00,12.0,Pac-12,Pac-12,13.52,2026-11-21,23:30,catboost,12.0,2026-10-30T19:41:03
-7620889.0,Mississippi Rebels,Mississippi State Bulldogs,2026-11-27 17:00:00,13.0,SEC,SEC,69.72,2026-11-26,22:00,catboost,67.0,2026-11-20T23:07:18
-7622690.0,Kentucky Wildcats,Louisville Cardinals,2026-11-28 05:00:00,13.0,SEC,ACC,60.39,2026-11-27,10:00,catboost,57.0,2026-07-03T10:01:32
-7693141.0,Iowa State Cyclones,Kansas State Wildcats,2026-11-28 05:00:00,13.0,Big 12,Big 12,10.4,2026-11-27,10:00,catboost,11.0,2026-11-20T13:59:43
-7620847.0,Alabama Crimson Tide,Auburn Tigers,2026-11-28 05:00:00,13.0,SEC,SEC,163.1,2026-11-27,10:00,catboost,150.0,2026-11-20T21:30:58
-7693172.0,Colorado Buffaloes,UCF Knights,2026-11-28 05:00:00,13.0,Big 12,Big 12,28.01,2026-11-27,10:00,catboost,28.0,2026-11-20T23:07:18
-7693040.0,Arizona Wildcats,Arizona State Sun Devils,2026-11-28 05:00:00,13.0,Big 12,Big 12,53.77,2026-11-27,10:00,catboost,44.0,2026-08-06T07:00:15
-7707331.0,Oregon Ducks,Washington Huskies,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,96.12,2026-11-27,10:00,catboost,35.0,2026-11-04T15:29:41
-7764947.0,South Florida Bulls,Tulane Green Wave,2026-11-28 00:00:00,13.0,American Athletic,American Athletic,6.77,2026-11-27,20:00,catboost,7.0,2026-11-21T09:23:54
-7764877.0,Memphis Tigers,Temple Owls,2026-11-27 05:00:00,13.0,American Athletic,American Athletic,10.0,2026-11-26,10:00,catboost,11.0,2026-11-21T11:33:27
-7792129.0,Northern Illinois Huskies,UTEP Miners,2026-11-28 05:00:00,13.0,Mountain West,Mountain West,21.82,2026-11-27,10:00,catboost,23.0,2026-09-30T19:12:36
-7599143.0,Ohio State Buckeyes,Michigan Wolverines,2026-11-28 17:00:00,13.0,Big Ten,Big Ten,158.74,2026-11-27,16:00,catboost,167.0,2026-11-22T09:30:47
-7620851.0,Arkansas Razorbacks,LSU Tigers,2026-11-28 05:00:00,13.0,SEC,SEC,12.5,2026-11-27,10:00,catboost,10.0,2026-11-05T15:53:50
-7764931.0,North Texas Mean Green,UAB Blazers,2026-11-28 05:00:00,13.0,American Athletic,American Athletic,11.51,2026-11-27,10:00,catboost,6.0,2026-11-09T15:54:21
-7764939.0,Rice Owls,Army West Point Black Knights,2026-11-28 05:00:00,13.0,American Athletic,FBS Independents,21.28,2026-11-27,10:00,catboost,21.0,2026-11-09T21:36:02
-7693029.0,Houston Cougars,Baylor Bears,2026-11-28 05:00:00,13.0,Big 12,Big 12,27.09,2026-11-27,04:00,catboost,26.0,2026-10-01T11:44:36
-7692967.0,BYU Cougars,Cincinnati Bearcats,2026-11-28 05:00:00,13.0,Big 12,Big 12,87.51,2026-11-27,10:00,catboost,65.0,2026-11-21T00:04:41
-7642968.0,Wyoming Cowboys,UConn Huskies,2026-11-28 05:00:00,13.0,Mountain West,FBS Independents,16.01,2026-11-27,10:00,catboost,13.0,2026-11-20T18:25:16
-7764824.0,East Carolina Pirates,Florida Atlantic Owls,2026-11-28 00:00:00,13.0,American Athletic,American Athletic,4.9,2026-11-27,18:00,catboost,5.0,2026-11-06T23:27:16
-7764813.0,Charlotte 49ers,Navy Midshipmen,2026-11-28 05:00:00,13.0,American Athletic,American Athletic,32.66,2026-11-27,10:00,catboost,30.0,2026-08-07T14:13:03
-7620971.0,South Carolina Gamecocks,Georgia Bulldogs,2026-11-22 00:30:00,12.0,SEC,SEC,79.29,2026-11-21,23:30,catboost,68.0,2026-11-21T15:25:36
-7693055.0,Arizona State Sun Devils,Oklahoma State Cowboys,2026-11-22 03:15:00,12.0,Big 12,Big 12,22.64,2026-11-22,02:15,catboost,12.0,2026-11-21T13:33:13
+7707557.0,UCLA Bruins,USC Trojans,2026-11-28 20:30:00,13.0,Big Ten,Big Ten,216.43,2026-11-27,19:30,catboost,93.0,2026-05-21T23:15:29
+7707580.0,Rutgers Scarlet Knights,Michigan State Spartans,2026-11-28 21:15:00,13.0,Big Ten,Big Ten,18.1,2026-11-28,02:15,catboost,16.0,2026-10-14T15:57:48
+7624701.0,Georgia Bulldogs,Georgia Tech Yellow Jackets,2026-11-28 20:30:00,13.0,SEC,ACC,125.5,2026-11-27,19:30,catboost,59.0,2026-11-05T13:34:36
+7707527.0,Northwestern Wildcats,Illinois Fighting Illini,2026-11-28 17:30:00,13.0,Big Ten,Big Ten,98.52,2026-11-27,22:30,catboost,95.0,2026-11-22T13:04:16
+7692978.0,Utah Utes,West Virginia Mountaineers,2026-11-28 02:00:00,13.0,Big 12,Big 12,100.7,2026-11-27,07:00,catboost,57.0,2026-10-31T05:10:21
+7648040.0,Virginia Tech Hokies,Virginia Cavaliers,2026-11-28 20:00:00,13.0,ACC,ACC,119.01,2026-11-28,01:00,catboost,64.0,2026-08-28T22:49:28
+7707547.0,Wisconsin Badgers,Minnesota Golden Gophers,2026-11-28 00:30:00,13.0,Big Ten,Big Ten,32.0,2026-11-27,05:30,catboost,25.0,2026-09-05T11:59:45
+7620963.0,Missouri Tigers,Oklahoma Sooners,2026-11-28 21:15:00,13.0,SEC,SEC,43.25,2026-11-27,20:15,catboost,43.0,2026-11-20T13:59:43
+7704536.0,Wake Forest Demon Deacons,Duke Blue Devils,2026-11-28 20:30:00,13.0,ACC,ACC,149.29,2026-11-28,01:30,catboost,11.0,2026-09-08T20:28:41
+7707320.0,Indiana Hoosiers,Purdue Boilermakers,2026-11-29 00:00:00,13.0,Big Ten,Big Ten,87.39,2026-11-28,05:00,catboost,80.0,2026-09-25T21:28:18
+7693188.0,Oklahoma State Cowboys,Kansas Jayhawks,2026-11-28 23:15:00,13.0,Big 12,Big 12,51.63,2026-11-28,22:15,catboost,39.0,2026-11-06T11:31:31
+7704555.0,Syracuse Orange,Notre Dame Fighting Irish,2026-11-28 17:00:00,13.0,ACC,FBS Independents,59.07,2026-11-27,16:00,catboost,56.0,2026-11-04T17:42:54
+7792114.0,UNLV Rebels,Nevada Wolf Pack,2026-11-29 02:00:00,13.0,Mountain West,Mountain West,39.91,2026-11-28,07:00,catboost,42.0,2026-10-05T20:55:13
+7601427.0,Clemson Tigers,South Carolina Gamecocks,2026-11-28 20:00:00,13.0,ACC,SEC,80.39,2026-11-27,19:00,catboost,64.0,2026-10-02T05:47:20
+7707360.0,Iowa Hawkeyes,Nebraska Cornhuskers,2026-11-27 17:00:00,13.0,Big Ten,Big Ten,100.74,2026-11-26,22:00,catboost,30.0,2026-11-09T11:27:49
+7620889.0,Mississippi Rebels,Mississippi State Bulldogs,2026-11-27 17:00:00,13.0,SEC,SEC,69.04,2026-11-26,22:00,catboost,67.0,2026-11-20T23:07:18
+7620847.0,Alabama Crimson Tide,Auburn Tigers,2026-11-29 00:30:00,13.0,SEC,SEC,159.64,2026-11-28,05:30,catboost,150.0,2026-11-20T21:30:58
+7693141.0,Iowa State Cyclones,Kansas State Wildcats,2026-11-28 19:00:00,13.0,Big 12,Big 12,10.62,2026-11-27,18:00,catboost,11.0,2026-11-20T13:59:43
+7622690.0,Kentucky Wildcats,Louisville Cardinals,2026-11-28 17:00:00,13.0,SEC,ACC,61.36,2026-11-27,22:00,catboost,57.0,2026-07-03T10:01:32
+7693172.0,Colorado Buffaloes,UCF Knights,2026-11-28 19:00:00,13.0,Big 12,Big 12,29.38,2026-11-27,18:00,catboost,28.0,2026-11-20T23:07:18
+7693040.0,Arizona Wildcats,Arizona State Sun Devils,2026-11-29 02:00:00,13.0,Big 12,Big 12,60.97,2026-11-28,07:00,catboost,44.0,2026-08-06T07:00:15
+7764947.0,South Florida Bulls,Tulane Green Wave,2026-11-28 20:30:00,13.0,American Athletic,American Athletic,7.85,2026-11-27,19:30,catboost,7.0,2026-11-21T09:23:54
+7707331.0,Oregon Ducks,Washington Huskies,2026-11-29 00:30:00,13.0,Big Ten,Big Ten,96.17,2026-11-28,05:30,catboost,35.0,2026-11-04T15:29:41
+7620851.0,Arkansas Razorbacks,LSU Tigers,2026-11-28 17:45:00,13.0,SEC,SEC,12.63,2026-11-27,16:45,catboost,10.0,2026-11-05T15:53:50
+7599143.0,Ohio State Buckeyes,Michigan Wolverines,2026-11-28 17:00:00,13.0,Big Ten,Big Ten,133.72,2026-11-27,16:00,catboost,135.0,2026-11-23T05:46:15
+7764877.0,Memphis Tigers,Temple Owls,2026-11-27 20:30:00,13.0,American Athletic,American Athletic,19.06,2026-11-27,01:30,catboost,11.0,2026-11-21T11:33:27
+7792129.0,Northern Illinois Huskies,UTEP Miners,2026-11-28 20:30:00,13.0,Mountain West,Mountain West,23.11,2026-11-28,01:30,catboost,23.0,2026-09-30T19:12:36
+7693029.0,Houston Cougars,Baylor Bears,2026-11-29 02:30:00,13.0,Big 12,Big 12,27.05,2026-11-28,01:30,catboost,26.0,2026-10-01T11:44:36
+7692967.0,BYU Cougars,Cincinnati Bearcats,2026-11-28 20:30:00,13.0,Big 12,Big 12,91.98,2026-11-27,19:30,catboost,65.0,2026-11-21T00:04:41
+7764931.0,North Texas Mean Green,UAB Blazers,2026-11-28 21:00:00,13.0,American Athletic,American Athletic,11.75,2026-11-27,20:00,catboost,6.0,2026-11-09T15:54:21
+7764939.0,Rice Owls,Army West Point Black Knights,2026-11-28 19:00:00,13.0,American Athletic,FBS Independents,22.19,2026-11-27,18:00,catboost,21.0,2026-11-09T21:36:02
+7642968.0,Wyoming Cowboys,UConn Huskies,2026-11-28 17:00:00,13.0,Mountain West,FBS Independents,16.77,2026-11-27,22:00,catboost,13.0,2026-11-20T18:25:16
+7764824.0,East Carolina Pirates,Florida Atlantic Owls,2026-11-28 18:00:00,13.0,American Athletic,American Athletic,4.94,2026-11-27,17:00,catboost,5.0,2026-11-06T23:27:16
+7764813.0,Charlotte 49ers,Navy Midshipmen,2026-11-28 17:00:00,13.0,American Athletic,American Athletic,31.62,2026-11-27,16:00,catboost,30.0,2026-08-07T14:13:03
 7792017.0,New Mexico Lobos,Air Force Falcons,2026-11-27 21:30:00,13.0,Mountain West,Mountain West,18.6,2026-11-26,20:30,catboost,14.0,2026-10-31T11:11:18
-7704559.0,California Golden Bears,Stanford Cardinal,2026-11-22 00:30:00,12.0,ACC,ACC,69.98,2026-11-21,23:30,catboost,60.0,2026-11-21T15:25:36
-7792122.0,San Jose State Spartans,UNLV Rebels,2026-11-22 00:00:00,12.0,Mountain West,Mountain West,5.01,2026-11-21,23:00,catboost,5.0,2026-11-20T23:07:18
-7620984.0,Texas Longhorns,Arkansas Razorbacks,2026-11-21 20:30:00,12.0,SEC,SEC,148.55,2026-11-21,19:30,catboost,104.0,2026-11-20T19:21:59
-7734705.0,Boise State Broncos,San Diego State Aztecs,2026-11-22 02:30:00,12.0,Pac-12,Pac-12,32.06,2026-11-22,01:30,catboost,25.0,2026-09-05T17:32:51
-7704561.0,California Golden Bears,Pittsburgh Panthers,2026-11-28 05:00:00,13.0,ACC,ACC,10.26,2026-11-27,10:00,catboost,10.0,2026-11-08T19:26:24
+7704561.0,California Golden Bears,Pittsburgh Panthers,2026-11-29 00:30:00,13.0,ACC,ACC,10.05,2026-11-28,05:30,catboost,10.0,2026-11-08T19:26:24
 7828989.0,Eastern Michigan Eagles,Kent State Golden Flashes,2026-11-25 00:00:00,13.0,Mid-American,Mid-American,11.97,2026-11-24,05:00,catboost,12.0,2026-11-20T18:25:16
-7696531.0,UConn Huskies,Old Dominion Monarchs,2026-11-21 20:30:00,12.0,FBS Independents,Sun Belt,6.16,2026-11-21,19:30,catboost,5.0,2026-11-20T11:20:54
-7704613.0,Florida State Seminoles,North Carolina State Wolfpack,2026-11-21 20:30:00,12.0,ACC,ACC,21.48,2026-11-21,19:30,catboost,16.0,2026-11-21T08:22:07
-7764844.0,Florida Atlantic Owls,South Florida Bulls,2026-11-21 19:30:00,12.0,American Athletic,American Athletic,15.54,2026-11-21,18:30,catboost,8.0,2026-11-20T15:30:34
-7808064.0,Georgia State Panthers,Louisiana Lafayette Ragin Cajuns,2026-11-28 05:00:00,13.0,Sun Belt,Sun Belt,11.99,2026-11-27,10:00,catboost,13.0,2026-11-06T09:29:59
-7704640.0,North Carolina Tar Heels,North Carolina State Wolfpack,2026-11-28 05:00:00,13.0,ACC,ACC,66.42,2026-11-27,10:00,catboost,61.0,2026-11-21T13:33:13
-7808147.0,James Madison Dukes,Coastal Carolina Chanticleers,2026-11-28 05:00:00,13.0,Sun Belt,Sun Belt,33.18,2026-11-27,10:00,catboost,23.0,2026-10-29T09:44:09
-7808173.0,Old Dominion Monarchs,Southern Miss Golden Eagles,2026-11-28 05:00:00,13.0,Sun Belt,Sun Belt,17.49,2026-11-27,10:00,catboost,6.0,2026-09-17T23:46:23
-7808054.0,Georgia Southern Eagles,Louisiana Tech Bulldogs,2026-11-28 05:00:00,13.0,Sun Belt,Sun Belt,9.59,2026-11-27,10:00,catboost,10.0,2026-11-22T11:29:11
-7808217.0,Louisiana Monroe Warhawks,Marshall Thundering Herd,2026-11-28 05:00:00,13.0,Sun Belt,Sun Belt,23.71,2026-11-27,10:00,catboost,25.0,2026-11-20T13:59:43
-7692942.0,Texas Tech Red Raiders,TCU Horned Frogs,2026-11-27 01:00:00,13.0,Big 12,Big 12,95.41,2026-11-26,06:00,catboost,62.0,2026-11-06T11:31:31
-7829089.0,Western Michigan Broncos,Miami (OH) RedHawks,2026-11-24 05:00:00,13.0,Mid-American,Mid-American,4.36,2026-11-23,04:00,catboost,4.0,2026-11-22T17:18:35
+7808064.0,Georgia State Panthers,Louisiana Lafayette Ragin Cajuns,2026-11-28 19:00:00,13.0,Sun Belt,Sun Belt,11.72,2026-11-28,00:00,catboost,12.0,2026-11-22T21:25:13
+7704640.0,North Carolina Tar Heels,North Carolina State Wolfpack,2026-11-28 17:00:00,13.0,ACC,ACC,70.03,2026-11-27,22:00,catboost,61.0,2026-11-21T13:33:13
+7808147.0,James Madison Dukes,Coastal Carolina Chanticleers,2026-11-28 19:00:00,13.0,Sun Belt,Sun Belt,34.99,2026-11-28,00:00,catboost,23.0,2026-10-29T09:44:09
+7808173.0,Old Dominion Monarchs,Southern Miss Golden Eagles,2026-11-28 18:00:00,13.0,Sun Belt,Sun Belt,18.4,2026-11-27,23:00,catboost,6.0,2026-09-17T23:46:23
+7808217.0,Louisiana Monroe Warhawks,Marshall Thundering Herd,2026-11-28 18:00:00,13.0,Sun Belt,Sun Belt,24.55,2026-11-27,17:00,catboost,25.0,2026-11-20T13:59:43
+7808054.0,Georgia Southern Eagles,Louisiana Tech Bulldogs,2026-11-28 17:00:00,13.0,Sun Belt,Sun Belt,9.74,2026-11-28,16:00,catboost,10.0,2026-11-22T11:29:11
+7692942.0,Texas Tech Red Raiders,TCU Horned Frogs,2026-11-27 01:00:00,13.0,Big 12,Big 12,95.73,2026-11-26,06:00,catboost,62.0,2026-11-06T11:31:31
+7704657.0,Miami Hurricanes,Boston College Eagles,2026-11-28 17:00:00,13.0,ACC,ACC,18.04,2026-11-27,22:00,catboost,15.0,2026-09-12T13:51:11
 7803526.0,Western Kentucky Hilltoppers,Kennesaw State Owls,2026-11-28 18:00:00,13.0,Conference USA,Conference USA,7.54,2026-11-28,17:00,catboost,8.0,2026-11-10T14:04:18
-7704657.0,Miami Hurricanes,Boston College Eagles,2026-11-28 05:00:00,13.0,ACC,ACC,17.28,2026-11-27,10:00,catboost,15.0,2026-09-12T13:51:11
-7808162.0,Marshall Thundering Herd,Georgia State Panthers,2026-11-21 21:00:00,12.0,Sun Belt,Sun Belt,16.73,2026-11-21,20:00,catboost,12.0,2026-10-27T13:00:03
-7528939.0,Florida State Seminoles,Florida Gators,2026-11-27 20:30:00,13.0,ACC,SEC,123.79,2026-11-26,19:30,catboost,115.0,2026-11-22T13:04:16
-7808008.0,Appalachian State Mountaineers,Louisiana Monroe Warhawks,2026-11-21 19:30:00,12.0,Sun Belt,Sun Belt,24.99,2026-11-21,18:30,catboost,19.0,2026-11-20T18:25:16
-7808225.0,Troy Trojans,Georgia Southern Eagles,2026-11-21 21:00:00,12.0,Sun Belt,Sun Belt,5.96,2026-11-21,20:00,catboost,5.0,2026-11-21T11:33:27
-7707385.0,Illinois Fighting Illini,Iowa Hawkeyes,2026-11-21 19:30:00,12.0,Big Ten,Big Ten,24.1,2026-11-21,18:30,catboost,15.0,2026-10-31T13:32:02
-7704595.0,Stanford Cardinal,Southern Methodist (SMU) Mustangs,2026-11-28 05:00:00,13.0,ACC,ACC,4.64,2026-11-27,10:00,catboost,5.0,2026-11-22T03:39:43
-7707587.0,Maryland Terrapins,Penn State Nittany Lions,2026-11-28 05:00:00,13.0,Big Ten,Big Ten,14.44,2026-11-27,10:00,catboost,13.0,2026-11-08T11:34:18
+7829089.0,Western Michigan Broncos,Miami (OH) RedHawks,2026-11-25 00:00:00,13.0,Mid-American,Mid-American,7.66,2026-11-24,05:00,catboost,4.0,2026-11-22T17:18:35
+7528939.0,Florida State Seminoles,Florida Gators,2026-11-27 20:30:00,13.0,ACC,SEC,124.75,2026-11-26,19:30,catboost,115.0,2026-11-22T13:04:16
+7704595.0,Stanford Cardinal,Southern Methodist (SMU) Mustangs,2026-11-28 20:30:00,13.0,ACC,ACC,4.96,2026-11-27,19:30,catboost,5.0,2026-11-22T03:39:43
+7707587.0,Maryland Terrapins,Penn State Nittany Lions,2026-11-28 20:30:00,13.0,Big Ten,Big Ten,18.1,2026-11-28,01:30,catboost,13.0,2026-11-08T11:34:18
 7808255.0,South Alabama Jaguars,Appalachian State Mountaineers,2026-11-27 20:00:00,13.0,Sun Belt,Sun Belt,22.48,2026-11-27,01:00,catboost,16.0,2026-11-06T21:34:50
 7803416.0,Florida International Panthers,Sam Houston State Bearkats,2026-11-28 19:00:00,13.0,Conference USA,UAC,11.71,2026-11-28,18:00,catboost,12.0,2026-10-12T20:31:23
-7792123.0,San Jose State Spartans,North Dakota State Bison,2026-11-27 20:30:00,13.0,Mountain West,Mountain West,13.69,2026-11-23,19:30,catboost,6.0,2026-11-20T13:59:43
-7620994.0,Vanderbilt Commodores,Tennessee Volunteers,2026-11-28 05:00:00,13.0,SEC,SEC,216.35,2026-11-27,10:00,catboost,131.0,2026-04-20T16:07:25
-7827926.0,Ohio Bobcats,Toledo Rockets,2026-11-27 17:00:00,13.0,Mid-American,Mid-American,8.3,2026-11-23,16:00,catboost,7.0,2026-11-22T17:18:35
-7620989.0,Texas A&M Aggies,Texas Longhorns,2026-11-28 00:30:00,13.0,SEC,SEC,207.25,2026-11-27,05:30,catboost,213.0,2026-11-22T14:43:31
-7828930.0,Akron Zips,Buffalo Bulls,2026-11-27 17:00:00,13.0,Mid-American,Mid-American,8.81,2026-11-26,16:00,catboost,9.0,2026-11-22T11:29:11
-7808238.0,Southern Miss Golden Eagles,South Alabama Jaguars,2026-11-21 21:00:00,12.0,Sun Belt,Sun Belt,19.85,2026-11-21,20:00,catboost,8.0,2026-11-20T18:25:16
-7808183.0,Arkansas State Red Wolves,Troy Trojans,2026-11-28 20:00:00,13.0,Sun Belt,Sun Belt,12.13,2026-11-24,19:00,catboost,12.0,2026-11-22T14:43:31
-7734907.0,Texas State Bobcats,Washington State Cougars,2026-11-21 23:00:00,12.0,Pac-12,Pac-12,15.92,2026-11-21,22:00,catboost,11.0,2026-11-21T15:25:36
-7622776.0,Auburn Tigers,Samford Bulldogs,2026-11-21 20:30:00,12.0,SEC,Southern,24.88,2026-11-21,19:30,catboost,13.0,2026-11-10T09:30:51
-7620982.0,Tennessee Volunteers,LSU Tigers,2026-11-21 20:30:00,12.0,SEC,SEC,386.43,2026-11-21,19:30,catboost,152.0,2026-09-02T13:58:34
-7828939.0,Ball State Cardinals,Central Michigan Chippewas,2026-11-28 17:00:00,13.0,Mid-American,Mid-American,14.83,2026-11-27,16:00,catboost,15.0,2026-11-21T19:57:54
-7734880.0,Oregon State Beavers,Utah State Aggies,2026-11-22 03:30:00,12.0,Pac-12,Pac-12,7.01,2026-11-22,02:30,catboost,6.0,2026-09-21T07:55:43
-7697933.0,Notre Dame Fighting Irish,Southern Methodist (SMU) Mustangs,2026-11-22 00:30:00,12.0,FBS Independents,ACC,153.21,2026-11-21,23:30,catboost,52.0,2026-09-10T17:52:57
-7636266.0,Navy Midshipmen,Army West Point Black Knights,2026-12-12 20:00:00,15.0,American Athletic,FBS Independents,42.61,2026-11-23,01:00,catboost,53.0,2026-11-20T13:59:43
-7828947.0,Bowling Green State Falcons,UMass Minutemen,2026-11-28 17:00:00,13.0,Mid-American,Mid-American,10.85,2026-11-27,16:00,catboost,11.0,2026-10-27T23:09:19
-7792036.0,Nevada Wolf Pack,Hawaii Rainbow Warriors,2026-11-22 03:30:00,12.0,Mountain West,Mountain West,5.55,2026-11-22,02:30,catboost,5.0,2026-11-20T15:30:34
-7792037.0,North Dakota State Bison,Northern Illinois Huskies,2026-11-21 21:00:00,12.0,Mountain West,Mountain West,41.41,2026-11-21,20:00,catboost,23.0,2026-11-20T15:30:34
+7792123.0,San Jose State Spartans,North Dakota State Bison,2026-11-27 20:30:00,13.0,Mountain West,Mountain West,13.75,2026-11-23,19:30,catboost,6.0,2026-11-20T13:59:43
+7620994.0,Vanderbilt Commodores,Tennessee Volunteers,2026-11-29 00:00:00,13.0,SEC,SEC,207.83,2026-11-28,05:00,catboost,131.0,2026-04-20T16:07:25
+7827926.0,Ohio Bobcats,Toledo Rockets,2026-11-27 17:00:00,13.0,Mid-American,Mid-American,9.21,2026-11-27,16:00,catboost,7.0,2026-11-22T17:18:35
+7620989.0,Texas A&M Aggies,Texas Longhorns,2026-11-28 00:30:00,13.0,SEC,SEC,192.38,2026-11-27,05:30,catboost,207.0,2026-11-23T05:46:15
+7828930.0,Akron Zips,Buffalo Bulls,2026-11-27 17:00:00,13.0,Mid-American,Mid-American,8.82,2026-11-26,16:00,catboost,9.0,2026-11-22T11:29:11
+7808183.0,Arkansas State Red Wolves,Troy Trojans,2026-11-28 20:00:00,13.0,Sun Belt,Sun Belt,11.8,2026-11-28,01:00,catboost,12.0,2026-11-22T14:43:31
+7828939.0,Ball State Cardinals,Central Michigan Chippewas,2026-11-28 17:00:00,13.0,Mid-American,Mid-American,18.76,2026-11-27,16:00,catboost,15.0,2026-11-21T19:57:54
+7636266.0,Navy Midshipmen,Army West Point Black Knights,2026-12-12 20:00:00,15.0,American Athletic,FBS Independents,47.62,2026-11-29,01:00,catboost,53.0,2026-11-20T13:59:43
+7828947.0,Bowling Green State Falcons,UMass Minutemen,2026-11-28 20:30:00,13.0,Mid-American,Mid-American,5.92,2026-11-24,19:30,catboost,6.0,2026-11-22T21:25:13
 7803489.0,Middle Tennessee Blue Raiders,New Mexico State Aggies,2026-11-28 19:00:00,13.0,Conference USA,Conference USA,2.82,2026-11-28,18:00,catboost,3.0,2026-11-21T15:25:36
 7803326.0,Delaware Blue Hens,Jacksonville State Gamecocks,2026-11-28 20:30:00,13.0,CAA,Conference USA,10.46,2026-11-28,19:30,catboost,8.0,2026-11-20T13:59:43
-7902602.0,Louisiana Lafayette Ragin Cajuns,Coastal Carolina Chanticleers,2026-11-21 20:00:00,12.0,Sun Belt,Sun Belt,25.82,2026-11-21,19:00,catboost,21.0,2026-11-21T11:33:27
-7983614.0,Kennesaw State Owls,Florida International Panthers,2026-11-21 20:00:00,12.0,Conference USA,Conference USA,10.65,2026-11-21,19:00,catboost,8.0,2026-11-20T21:30:58
-7808272.0,Louisiana Tech Bulldogs,Arkansas State Red Wolves,2026-11-22 00:00:00,12.0,Sun Belt,Sun Belt,5.97,2026-11-21,23:00,catboost,6.0,2026-11-21T13:33:13
 7643287.0,Hawaii Rainbow Warriors,Sacramento State Hornets,2026-11-29 04:00:00,13.0,Mountain West,Big Sky,27.76,2026-11-28,09:00,catboost,30.0,2026-09-29T19:24:27
-8293592.0,Missouri State Bears,Liberty Flames,2026-11-28 19:00:00,13.0,MVFC,Conference USA,13.68,2026-11-28,00:00,catboost,14.0,2026-11-20T13:59:43
-7764866.0,UTSA Roadrunners,Tulsa Golden Hurricane,2026-11-27 05:00:00,13.0,American Athletic,American Athletic,15.23,2026-11-26,10:00,catboost,10.0,2026-11-20T18:25:16
-7703872.0,Miami Hurricanes,Wake Forest Demon Deacons,2026-12-05 00:00:00,,ACC,ACC,151.27,2026-12-04,17:00,catboost,161.0,2026-11-22T09:30:47
-7734926.0,Colorado State Rams,Boise State Broncos,2026-11-28 00:00:00,13.0,Pac-12,Pac-12,12.32,2026-11-28,15:00,catboost,12.0,2026-11-22T11:29:11
-7734924.0,Fresno State Bulldogs,Oregon State Beavers,2026-11-28 00:00:00,13.0,Pac-12,Pac-12,13.86,2026-11-28,00:00,catboost,13.0,2026-11-22T11:29:11
-7734922.0,Washington State Cougars,San Diego State Aztecs,2026-11-28 00:00:00,13.0,Pac-12,Pac-12,17.59,2026-11-28,14:00,catboost,16.0,2026-11-22T11:29:11
-7734928.0,Utah State Aggies,Texas State Bobcats,2026-11-28 00:00:00,13.0,Pac-12,Pac-12,12.97,2026-11-28,00:00,catboost,13.0,2026-11-22T11:29:11
+8293592.0,Missouri State Bears,Liberty Flames,2026-11-28 19:00:00,13.0,MVFC,Conference USA,13.57,2026-11-28,00:00,catboost,14.0,2026-11-20T13:59:43
+7764866.0,UTSA Roadrunners,Tulsa Golden Hurricane,2026-11-27 17:00:00,13.0,American Athletic,American Athletic,15.8,2026-11-26,16:00,catboost,10.0,2026-11-20T18:25:16
+7703872.0,Miami Hurricanes,Wake Forest Demon Deacons,2026-12-05 17:00:00,14.0,ACC,ACC,148.12,2026-12-04,22:00,catboost,161.0,2026-11-22T09:30:47
+7734922.0,Washington State Cougars,San Diego State Aztecs,2026-11-28 23:30:00,13.0,Pac-12,Pac-12,18.55,2026-11-28,22:30,catboost,16.0,2026-11-22T11:29:11
+7734926.0,Colorado State Rams,Boise State Broncos,2026-11-28 23:00:00,13.0,Pac-12,Pac-12,12.69,2026-11-24,22:00,catboost,12.0,2026-11-22T11:29:11
+7734924.0,Fresno State Bulldogs,Oregon State Beavers,2026-11-29 03:00:00,13.0,Pac-12,Pac-12,16.49,2026-11-28,08:00,catboost,13.0,2026-11-22T11:29:11
+7734928.0,Utah State Aggies,Texas State Bobcats,2026-11-29 02:30:00,13.0,Pac-12,Pac-12,12.39,2026-11-28,07:30,catboost,13.0,2026-11-22T11:29:11
+8372818.0,Boise State Broncos,San Diego State Aztecs,2026-12-05 01:00:00,,Pac-12,Pac-12,49.5,2026-11-23,12:00,catboost,55.0,2026-11-22T11:29:11
