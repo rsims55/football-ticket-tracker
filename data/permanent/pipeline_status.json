@@ -1,16 +1,16 @@
 {
   "daily_snapshot": {
-    "detail": "Snapshot appended (136 new rows). Total now: 975335",
+    "detail": "Snapshot appended (142 new rows). Total now: 975409",
     "extra": {
-      "events_total": 152,
-      "rows_new": 136,
-      "rows_total": 975335,
+      "events_total": 158,
+      "rows_new": 142,
+      "rows_total": 975409,
       "scraped_fail": 0,
-      "scraped_ok": 126,
-      "started_at": "2026-11-24 05:03:51"
+      "scraped_ok": 132,
+      "started_at": "2026-11-24 06:21:36"
     },
     "status": "success",
-    "updated_at": "2026-11-24 05:46:37"
+    "updated_at": "2026-11-24 07:08:02"
   },
   "health_check": {
     "detail": "Health check passed",
@@ -28,33 +28,33 @@
   "model_train": {
     "detail": "CatBoost training complete for 2026",
     "extra": {
-      "gap_pct_mae": 0.20607937254848713,
-      "gap_pct_rmse": 0.24687231910446508,
-      "gap_pct_within_0p05": 0.13469815939218616,
-      "n_test_price": 471855.0,
-      "n_train_price": 429942.0,
-      "price_mae": 13.998352936427374,
-      "price_mae_$0\u201320": 7.740791139819587,
-      "price_mae_$100\u2013200": 46.23621921880226,
-      "price_mae_$200\u2013inf": 103.45089091231517,
-      "price_mae_$20\u201350": 13.188546623360404,
-      "price_mae_$50\u2013100": 36.882835704520474,
-      "price_rmse": 32.02523904520579,
-      "price_within_5pct": 0.07584321454684172,
-      "rows_total_used": 1057241.0,
+      "gap_pct_mae": 0.2133086646932875,
+      "gap_pct_rmse": 0.25514017203805156,
+      "gap_pct_within_0p05": 0.11822763544729105,
+      "n_test_price": 471438.0,
+      "n_train_price": 430981.0,
+      "price_mae": 14.679327958430983,
+      "price_mae_$0\u201320": 8.370354212198771,
+      "price_mae_$100\u2013200": 44.85423969083013,
+      "price_mae_$200\u2013inf": 80.00502013244879,
+      "price_mae_$20\u201350": 13.802859539618522,
+      "price_mae_$50\u2013100": 38.96517670984026,
+      "price_rmse": 33.5836422057219,
+      "price_within_5pct": 0.06093696307892024,
+      "rows_total_used": 1057826.0,
       "year": 2026.0
     },
     "status": "success",
-    "updated_at": "2026-11-23 18:57:35"
+    "updated_at": "2026-11-24 06:58:17"
   },
   "predict_price": {
-    "detail": "72 predictions generated for 2026",
+    "detail": "73 predictions generated for 2026",
     "extra": {
-      "n_predicted": 72,
-      "n_skipped": 836
+      "n_predicted": 73,
+      "n_skipped": 835
     },
     "status": "success",
-    "updated_at": "2026-11-23 19:07:20"
+    "updated_at": "2026-11-24 07:08:31"
   },
   "weekly_report": {
     "detail": "Weekly report generated: reports\\weekly\\2026-11-23\\weekly_report_2026-11-23.md",
