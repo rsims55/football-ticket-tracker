@@ -3,10 +3,12 @@ id,name,capacity,grass,dome,city,state,zip,countryCode,timezone,latitude,longitu
 218,FIU Stadium,20000.0,False,False,Miami,FL,33199,US,America/New_York,25.7525014,-80.3778912,1.718581796,1995.0
 4779,Thomas A. Robinson National Stadium,15000.0,True,False,Nassau,,,BS,,25.055569,-77.358736,3.182889223,1981.0
 11591,Lokken Stadium,,,False,Valley City,ND,,US,,,,,
+13096,Neenah Rocket Stadium,,,False,Neenah,WI,,USA,,,,,
 3884,RAM Stadium,,,False,East Point,GA,,US,,,,,
 11589,Hinchliffe Stadium,,,True,Paterson,NJ,,US,,,,,
 6043,Bethpage Federal Credit Union Stadium,6000.0,False,False,Brookville,NY,11545,US,America/New_York,40.816284,-73.589546,236,1966.0
 11539,Charlotte & Gordon Hansen Stadium,,,False,Jamestown,ND,,US,,,,,
+13107,Bank Independent Stadium,,False,,Florence,AL,,USA,,,,,
 11712,Bank of Sun Prairie Stadium,,,False,Sun Prairie,WI,,US,,,,,
 11724,Community National Bank and Trust Stadium,,,False,Corsicana,TX,,US,,,,,
 5096,Toyota Stadium,5000.0,,False,Georgetown,KY,40324,US,,38.204444,-84.545556,270.7148743,1997.0
