@@ -28,24 +28,24 @@
   "model_train": {
     "detail": "CatBoost training complete for 2026",
     "extra": {
-      "gap_pct_mae": 0.1951752912201778,
-      "gap_pct_rmse": 0.2408269593007928,
-      "gap_pct_within_0p05": 0.1591597755338688,
-      "n_test_price": 472588.0,
+      "gap_pct_mae": 0.21190527669162157,
+      "gap_pct_rmse": 0.2537983940958133,
+      "gap_pct_within_0p05": 0.11954372527084439,
+      "n_test_price": 472873.0,
       "n_train_price": 430981.0,
-      "price_mae": 13.199327000815009,
-      "price_mae_$0\u201320": 6.332213998541766,
-      "price_mae_$100\u2013200": 54.66593134308377,
-      "price_mae_$200\u2013inf": 61.692416059121015,
-      "price_mae_$20\u201350": 11.24687085123036,
-      "price_mae_$50\u2013100": 37.88644846172061,
-      "price_rmse": 30.528123969601452,
-      "price_within_5pct": 0.06759799233158692,
-      "rows_total_used": 1058976.0,
+      "price_mae": 14.536629427253729,
+      "price_mae_$0\u201320": 8.377502766962763,
+      "price_mae_$100\u2013200": 45.37083553527924,
+      "price_mae_$200\u2013inf": 10.048406376530913,
+      "price_mae_$20\u201350": 13.950010349684952,
+      "price_mae_$50\u2013100": 37.750992281157174,
+      "price_rmse": 33.41799198082516,
+      "price_within_5pct": 0.059992852203445746,
+      "rows_total_used": 1059261.0,
       "year": 2026.0
     },
     "status": "success",
-    "updated_at": "2026-11-25 11:25:25"
+    "updated_at": "2026-11-25 19:01:55"
   },
   "predict_price": {
     "detail": "73 predictions generated for 2026",
